@@ -1,0 +1,8 @@
+# Build output
+build/bin
+
+# The bundled converter and its data. It is downloaded or built, never checked in:
+# NVENCForge.exe, ffmpeg.exe, its INI and the sources it unpacks for itself.
+tools/
+
+node_modules

@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>NVENCForge</title>
+<style>
+/* --------------------------------------------------------------------------
+   Stage 3 — the Convert area.
+   Everything visible here is wired to something real. Parts that are not
+   built yet are shown as disabled with the stage they belong to, so nothing
+   in this window pretends to work.
+   -------------------------------------------------------------------------- */
+:root {
+  --bg: #121214;
+  --panel: #1b1b1f;
+  --panel-2: #212127;
+  --line: #2c2c34;
+  --text: #e9e9ec;
+  --muted: #9a9aa4;
+  --accent: #ff8c1a;
+  --accent-dim: #a85c10;
+  --ok: #4ec97a;
+  --warn: #e8b53c;
+  --bad: #ef6b6b;
+  --radius: 10px;
+}
+* { box-sizing: border-box; }
+html, body {
+  height: 100%;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.5 "Segoe UI", system-ui, sans-serif;
+  /* Wails uses this property to decide where a dropped file is accepted.
+     On <body> the whole window takes files. */
+  --wails-drop-target: drop;
+  user-select: none;
+  overflow: hidden;
+}
+button { font: inherit; color: inherit; cursor: pointer; }
+button:disabled { cursor: not-allowed; opacity: .45; }
+
+/* ---------- frame ---------- */
+#shell { display: flex; flex-direction: column; height: 100%; }
+
+header {
+  display: flex; align-items: center; gap: 16px;
+  padding: 12px 18px; border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.brand { display: flex; align-items: baseline; gap: 8px; }
+.brand b { font-size: 17px; letter-spacing: .2px; }
+.brand span { color: var(--accent); font-weight: 600; }
+.badges { display: flex; gap: 8px; margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
+.badge {
+  display: flex; align-items: center; gap: 7px;
+  background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: 999px; padding: 5px 12px; font-size: 12.5px; color: var(--muted);
+}
+.badge b { color: var(--text); font-weight: 600; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: 0 0 auto; }
+.dot.ok { background: var(--ok); } .dot.bad { background: var(--bad); } .dot.warn { background: var(--warn); }
+.linkish {
+  background: none; border: none; color: var(--accent);
+  padding: 0 0 0 4px; text-decoration: underline; font-size: 12.5px;
+}
+
+#body { display: flex; flex: 1; min-height: 0; }
+
+nav {
+  width: 178px; flex: 0 0 auto; border-right: 1px solid var(--line);
+  background: var(--panel); padding: 12px 10px; display: flex; flex-direction: column; gap: 4px;
+}
+.nav-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 9px 11px; border-radius: 8px; border: 1px solid transparent;
+  background: none; text-align: left; width: 100%;
+}
+.nav-item.active { background: var(--panel-2); border-color: var(--accent-dim); color: var(--accent); }
+.nav-item:disabled { color: var(--muted); }
+.stage-tag {
+  font-size: 10.5px; color: var(--muted); border: 1px solid var(--line);
+  border-radius: 5px; padding: 1px 5px; white-space: nowrap;
+}
+.nav-note { margin-top: auto; font-size: 11.5px; color: var(--muted); padding: 8px 11px; }
+
+main { flex: 1; min-width: 0; overflow-y: auto; padding: 16px 18px 22px; }
+.panel {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 14px 16px; margin-bottom: 14px;
+}
+.panel > h2 {
+  margin: 0 0 10px; font-size: 13px; text-transform: uppercase;
+  letter-spacing: .8px; color: var(--muted); font-weight: 600;
+}
+.row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+/* ---------- buttons ---------- */
+.btn {
+  background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: 8px; padding: 8px 14px;
+}
+.btn:hover:not(:disabled) { border-color: var(--accent-dim); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #17130c; font-weight: 600; }
+.btn.primary:hover:not(:disabled) { filter: brightness(1.08); }
+.btn.danger { border-color: #5a2a2a; color: #ffb3b3; }
+.btn.danger:hover:not(:disabled) { border-color: var(--bad); }
+
+/* ---------- queue ---------- */
+#dropzone {
+  border: 1.5px dashed var(--line); border-radius: var(--radius);
+  padding: 18px; text-align: center; color: var(--muted); margin-bottom: 10px;
+}
+#dropzone.hot { border-color: var(--accent); color: var(--accent); }
+#dropzone b { color: var(--text); display: block; margin-bottom: 3px; }
+
+#queue { max-height: 240px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; }
+#queue:empty { display: none; }
+.item {
+  display: grid; grid-template-columns: 22px 1fr auto auto 26px;
+  align-items: center; gap: 10px; padding: 7px 10px; border-bottom: 1px solid var(--line);
+}
+.item:last-child { border-bottom: none; }
+.item.active { background: rgba(255, 140, 26, .08); }
+.item .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item .sub { color: var(--muted); font-size: 11.5px; }
+.item .size { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12.5px; }
+.item .state { font-size: 12px; font-weight: 600; }
+.state.success { color: var(--ok); } .state.skipped { color: var(--muted); }
+.state.failed { color: var(--bad); } .state.preview { color: var(--warn); }
+.state.running { color: var(--accent); }
+.idx { color: var(--muted); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+.x { background: none; border: none; color: var(--muted); font-size: 15px; line-height: 1; padding: 2px 6px; }
+.x:hover { color: var(--bad); }
+
+/* ---------- options ---------- */
+.options { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 12px; }
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field > label { font-size: 12px; color: var(--muted); }
+select, input[type="number"] {
+  background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+  border-radius: 7px; padding: 7px 9px; font: inherit; width: 100%;
+}
+select:focus, input:focus { outline: 1px solid var(--accent-dim); }
+.checks { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 12px; }
+.check { display: flex; align-items: center; gap: 7px; font-size: 13px; }
+.hint { color: var(--muted); font-size: 11.5px; margin-top: 10px; }
+
+/* ---------- progress ---------- */
+.bar { height: 9px; border-radius: 999px; background: var(--panel-2); overflow: hidden; border: 1px solid var(--line); }
+.bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .18s linear; }
+.bar.overall > i { background: linear-gradient(90deg, var(--accent-dim), var(--accent)); }
+.barline { display: flex; align-items: center; gap: 12px; margin: 8px 0 4px; }
+.barline .label { width: 92px; flex: 0 0 auto; color: var(--muted); font-size: 12px; }
+.barline .pct { width: 54px; text-align: right; font-variant-numeric: tabular-nums; font-size: 12.5px; }
+.barline .bar { flex: 1; }
+.stats { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 12px; }
+.stat { min-width: 78px; }
+.stat .k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+.stat .v { font-size: 15px; font-variant-numeric: tabular-nums; }
+#nowfile { font-size: 13.5px; margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#nowstage { color: var(--accent); font-size: 12px; }
+#summary {
+  margin-top: 12px; padding: 10px 12px; border-radius: 8px;
+  background: var(--panel-2); border: 1px solid var(--line); font-size: 13px; display: none;
+}
+
+/* ---------- log ---------- */
+#logbox {
+  background: #0d0d0f; border: 1px solid var(--line); border-radius: 8px;
+  padding: 8px 10px; height: 190px; overflow-y: auto;
+  font: 12px/1.55 Consolas, "Cascadia Mono", monospace; white-space: pre-wrap;
+  word-break: break-word; user-select: text;
+}
+#logbox div.warn { color: var(--warn); }
+#logbox div.bad { color: var(--bad); }
+#logbox div.gui { color: var(--accent); }
+.spacer { flex: 1; }
+.err { color: var(--bad); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<div id="shell">
+
+  <header>
+    <div class="brand"><b>NVENCForge</b><span>GUI</span></div>
+    <div class="badges">
+      <div class="badge"><i class="dot" id="gpu-dot"></i><span id="gpu-text">checking GPU…</span></div>
+      <div class="badge">
+        <i class="dot" id="exe-dot"></i><span id="exe-text">checking NVENCForge.exe…</span>
+        <button class="linkish" id="btn-download" hidden>download</button>
+      </div>
+    </div>
+  </header>
+
+  <div id="body">
+    <nav>
+      <button class="nav-item active">Convert</button>
+      <button class="nav-item" disabled>Settings <span class="stage-tag">stage 4</span></button>
+      <button class="nav-item" disabled>DaVinci <span class="stage-tag">stage 5</span></button>
+      <button class="nav-item" disabled>Split <span class="stage-tag">stage 5</span></button>
+      <button class="nav-item" disabled>Join <span class="stage-tag">stage 5</span></button>
+      <button class="nav-item" disabled>Watch folder <span class="stage-tag">stage 7</span></button>
+      <div class="nav-note">Greyed-out areas are not built yet.</div>
+    </nav>
+
+    <main>
+      <section class="panel">
+        <h2>Queue</h2>
+        <div id="dropzone">
+          <b>Drop video files or folders here</b>
+          Folders are searched completely.
+        </div>
+        <div id="queue"></div>
+        <div class="row" style="margin-top:10px">
+          <button class="btn" id="btn-files">Add files…</button>
+          <button class="btn" id="btn-folder">Add folder…</button>
+          <button class="btn" id="btn-clear">Clear</button>
+          <div class="spacer"></div>
+          <span class="hint" id="queue-info" style="margin:0"></span>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Options for this run</h2>
+        <div class="options">
+          <div class="field">
+            <label for="opt-codec">Codec</label>
+            <select id="opt-codec">
+              <option value="">H.265 (default)</option>
+              <option value="av1">AV1</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="opt-encoder">Encoder</label>
+            <select id="opt-encoder">
+              <option value="">GPU / NVENC (default)</option>
+              <option value="cpu">CPU (no NVIDIA card needed)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="opt-container">Container</label>
+            <select id="opt-container">
+              <option value="">MKV (default)</option>
+              <option value="mp4">MP4 — keeps all tracks</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="opt-resolution">Resolution</label>
+            <select id="opt-resolution">
+              <option value="">Downscale if needed (default)</option>
+              <option value="original">Keep original resolution</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="opt-audio">Audio</label>
+            <select id="opt-audio">
+              <option value="">Re-encode to AAC (default)</option>
+              <option value="copy">Copy 1:1</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="opt-bitdepth">Bit depth</label>
+            <select id="opt-bitdepth">
+              <option value="">10 bit (default)</option>
+              <option value="8">8 bit (older devices)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="opt-quality">Quality</label>
+            <select id="opt-quality">
+              <option value="">As configured (default)</option>
+              <option value="auto">Auto-CQ on</option>
+              <option value="off">Auto-CQ off</option>
+              <option value="fixed">Fixed CQ…</option>
+            </select>
+          </div>
+          <div class="field" id="field-cq" hidden>
+            <label for="opt-cq">Fixed CQ</label>
+            <input type="number" id="opt-cq" value="28" min="1" max="51" />
+          </div>
+          <div class="field">
+            <label for="opt-bitrate">Max bitrate (kbit/s, 0 = as configured)</label>
+            <input type="number" id="opt-bitrate" value="0" min="0" max="200000" />
+          </div>
+        </div>
+        <div class="checks">
+          <label class="check"><input type="checkbox" id="opt-keep" /> Keep the source file where it is</label>
+          <label class="check"><input type="checkbox" id="opt-shutdown" /> Shut down the PC when finished</label>
+        </div>
+        <div class="hint">
+          Anything left on “default” is not passed on — the value from NVENCForge_Config.ini applies.
+          MP4 keeps every track for now; the track chooser arrives in stage 5.
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Progress</h2>
+        <div id="nowfile">Idle.</div>
+        <div id="nowstage"></div>
+
+        <div class="barline">
+          <span class="label">Current file</span>
+          <div class="bar"><i id="bar-file"></i></div>
+          <span class="pct" id="pct-file">—</span>
+        </div>
+        <div class="barline">
+          <span class="label">All files</span>
+          <div class="bar overall"><i id="bar-all"></i></div>
+          <span class="pct" id="pct-all">—</span>
+        </div>
+
+        <div class="stats">
+          <div class="stat"><div class="k">ETA (file)</div><div class="v" id="st-eta">—</div></div>
+          <div class="stat"><div class="k">Speed</div><div class="v" id="st-speed">—</div></div>
+          <div class="stat"><div class="k">FPS</div><div class="v" id="st-fps">—</div></div>
+          <div class="stat"><div class="k">Bitrate</div><div class="v" id="st-bitrate">—</div></div>
+          <div class="stat"><div class="k">Output so far</div><div class="v" id="st-est">—</div></div>
+        </div>
+
+        <div id="summary"></div>
+
+        <div class="row" style="margin-top:14px">
+          <button class="btn primary" id="btn-start">Start</button>
+          <button class="btn danger" id="btn-stop" disabled>Stop cleanly</button>
+          <span class="hint" style="margin:0" id="stop-hint"></span>
+          <div class="spacer"></div>
+          <span class="err" id="error-text"></span>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Log <span style="text-transform:none;letter-spacing:0">— the converter's own screen output</span></h2>
+        <div id="logbox"></div>
+        <div class="row" style="margin-top:8px">
+          <button class="btn" id="btn-log-clear">Clear log</button>
+          <label class="check"><input type="checkbox" id="opt-autoscroll" checked /> Follow</label>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ---------------------------------------------------------------------------
+   State. queue[] is the single source of truth for the list; every event from
+   the converter is matched onto it by file path.
+   --------------------------------------------------------------------------- */
+const state = {
+  queue: [],          // { path, name, folder, sizeMB, missing, status, savedPct, note }
+  running: false,
+  stopping: false,
+  stopClicks: 0,
+  totalMB: 0,
+  doneMB: 0,          // input MB of files already finished
+  current: null,      // queue entry being worked on
+  byIndex: {},        // converter file number -> queue entry (result events only carry the number)
+  eventChannel: false,
+  converterFound: false
+};
+
+const MAX_LOG_LINES = 400;
+const $ = (id) => document.getElementById(id);
+const api = () => window.go.main.App;
+
+/* ---------- small helpers ---------- */
+function fmtMB(mb) {
+  if (!mb || mb <= 0) return "—";
+  if (mb >= 1024) return (mb / 1024).toFixed(2) + " GB";
+  return mb.toFixed(1) + " MB";
+}
+function pct(value) { return Math.max(0, Math.min(100, value)); }
+function setBar(barId, pctId, value, known) {
+  $(barId).style.width = known ? pct(value) + "%" : "0%";
+  $(pctId).textContent = known ? pct(value).toFixed(1) + " %" : "—";
+}
+function showError(message) { $("error-text").textContent = message || ""; }
+
+/* ---------- log ---------- */
+function log(line, kind) {
+  const box = $("logbox");
+  const row = document.createElement("div");
+  if (kind) row.className = kind;
+  row.textContent = line;
+  box.appendChild(row);
+  while (box.childElementCount > MAX_LOG_LINES) box.removeChild(box.firstChild);
+  if ($("opt-autoscroll").checked) box.scrollTop = box.scrollHeight;
+}
+function classifyLogLine(line) {
+  if (line.startsWith("[gui]")) return "gui";
+  const upper = line.toUpperCase();
+  if (upper.includes("ERROR") || upper.includes("FAILED")) return "bad";
+  if (upper.includes("WARNING") || upper.includes("ABORT")) return "warn";
+  return "";
+}
+
+/* ---------- queue rendering ---------- */
+function renderQueue() {
+  const box = $("queue");
+  box.innerHTML = "";
+  state.queue.forEach((entry, index) => {
+    const row = document.createElement("div");
+    row.className = "item" + (entry === state.current ? " active" : "");
+
+    const idx = document.createElement("div");
+    idx.className = "idx";
+    idx.textContent = index + 1;
+
+    const name = document.createElement("div");
+    name.className = "name";
+    name.textContent = entry.name;
+    name.title = entry.path;
+    const sub = document.createElement("div");
+    sub.className = "sub";
+    sub.textContent = entry.missing ? "file not found" : entry.folder;
+    name.appendChild(sub);
+
+    const size = document.createElement("div");
+    size.className = "size";
+    size.textContent = fmtMB(entry.sizeMB);
+
+    const status = document.createElement("div");
+    status.className = "state " + (entry.status || "");
+    status.textContent = entry.note || "";
+
+    const remove = document.createElement("button");
+    remove.className = "x";
+    remove.textContent = "✕";
+    remove.title = "Remove from queue";
+    remove.disabled = state.running;
+    remove.onclick = () => { state.queue.splice(index, 1); afterQueueChange(); };
+
+    row.append(idx, name, size, status, remove);
+    box.appendChild(row);
+  });
+}
+function afterQueueChange() {
+  state.totalMB = state.queue.reduce((sum, e) => sum + (e.sizeMB || 0), 0);
+  $("queue-info").textContent = state.queue.length
+    ? state.queue.length + " file(s), " + fmtMB(state.totalMB)
+    : "";
+  renderQueue();
+  updateButtons();
+}
+function addItems(items) {
+  if (!items || !items.length) return;
+  const known = new Set(state.queue.map((e) => e.path.toLowerCase()));
+  let added = 0;
+  for (const item of items) {
+    if (known.has(item.path.toLowerCase())) continue;
+    known.add(item.path.toLowerCase());
+    state.queue.push(Object.assign({ status: "", note: "" }, item));
+    added++;
+  }
+  if (added > 0) log("[gui] " + added + " file(s) added to the queue.", "gui");
+  afterQueueChange();
+}
+function findEntry(path) {
+  if (!path) return null;
+  const wanted = path.toLowerCase();
+  return state.queue.find((e) => e.path.toLowerCase() === wanted) || null;
+}
+
+/* ---------- buttons ---------- */
+function updateButtons() {
+  const canStart = !state.running && state.queue.length > 0 && state.converterFound;
+  $("btn-start").disabled = !canStart;
+  $("btn-stop").disabled = !state.running;
+  $("btn-files").disabled = state.running;
+  $("btn-folder").disabled = state.running;
+  $("btn-clear").disabled = state.running || state.queue.length === 0;
+  $("stop-hint").textContent = state.stopping
+    ? "Stopping — click again to quit immediately."
+    : (state.running ? "Keeps what is already encoded as a playable preview." : "");
+}
+
+/* ---------- progress ---------- */
+function resetProgress() {
+  state.doneMB = 0;
+  state.current = null;
+  state.byIndex = {};
+  setBar("bar-file", "pct-file", 0, false);
+  setBar("bar-all", "pct-all", 0, false);
+  ["st-eta", "st-speed", "st-fps", "st-bitrate", "st-est"].forEach((id) => { $(id).textContent = "—"; });
+  $("summary").style.display = "none";
+  $("nowstage").textContent = "";
+}
+function updateOverall(currentFraction) {
+  if (state.totalMB <= 0) { setBar("bar-all", "pct-all", 0, false); return; }
+  const currentMB = state.current ? (state.current.sizeMB || 0) : 0;
+  const value = (state.doneMB + currentMB * currentFraction) / state.totalMB * 100;
+  setBar("bar-all", "pct-all", value, true);
+}
+
+/* ---------- converter events ---------- */
+function onRunStart(event) {
+  resetProgress();
+  state.queue.forEach((entry) => { entry.status = ""; entry.note = "queued"; });
+  log("[gui] Run started: " + event.mode + ", " + event.codec + " on " + event.encoder +
+      ", " + event.files + " file(s), NVENCForge " + event.version, "gui");
+  renderQueue();
+}
+function onFileStart(event) {
+  const entry = findEntry(event.path);
+  if (state.current) state.doneMB += state.current.sizeMB || 0;
+  state.current = entry;
+  state.byIndex[event.index] = entry;
+  if (entry) {
+    entry.status = "running";
+    entry.note = "working…";
+    // The converter knows the real size; trust it over our own reading.
+    if (event.in_mb > 0) entry.sizeMB = event.in_mb;
+  }
+  $("nowfile").textContent = "[" + event.index + "/" + event.total + "] " + event.name;
+  $("nowstage").textContent = "";
+  setBar("bar-file", "pct-file", 0, true);
+  updateOverall(0);
+  afterQueueChange();
+}
+const STAGE_TEXT = {
+  analyze: "Measuring quality to pick the CQ (no progress numbers during this step)",
+  encode: "Encoding",
+  remux: "Repackaging",
+  mp4: "Writing the MP4"
+};
+function onStage(event) {
+  $("nowstage").textContent = STAGE_TEXT[event.stage] || event.stage;
+}
+function onProgress(event) {
+  setBar("bar-file", "pct-file", event.pct, true);
+  updateOverall((event.pct || 0) / 100);
+  $("st-eta").textContent = event.eta || "—";
+  $("st-speed").textContent = event.speed || "—";
+  $("st-fps").textContent = event.fps || "—";
+  $("st-bitrate").textContent = event.bitrate || "—";
+  $("st-est").textContent = event.est_mb > 0 ? fmtMB(event.est_mb) : "—";
+}
+const RESULT_TEXT = {
+  success: (e) => "done, " + e.saved_pct.toFixed(0) + " % smaller",
+  skipped: () => "skipped",
+  failed: () => "failed",
+  preview: () => "stopped — preview kept"
+};
+function onResult(event) {
+  // The result event carries only the file number, not the input path — the
+  // mapping was noted down when the file started.
+  const entry = state.byIndex[event.index] || state.current;
+  if (entry) {
+    entry.status = event.status;
+    entry.note = (RESULT_TEXT[event.status] || (() => event.status))(event);
+    if (event.message) entry.note += " (" + event.message + ")";
+  }
+  if (event.status === "success") {
+    log("[gui] " + event.name + ": " + fmtMB(event.in_mb) + " → " + fmtMB(event.out_mb) +
+        " (" + event.saved_pct.toFixed(1) + " % smaller)", "gui");
+  }
+  renderQueue();
+}
+function onSummary(event) {
+  const box = $("summary");
+  box.style.display = "block";
+  const minutes = Math.floor(event.elapsed_sec / 60);
+  const seconds = Math.round(event.elapsed_sec % 60);
+  box.textContent =
+    event.files + " file(s): " + event.success + " converted, " +
+    event.skipped + " skipped, " + event.failed + " not finished — " +
+    fmtMB(event.saved_mb) + " saved in " + minutes + " min " + seconds + " s.";
+  setBar("bar-all", "pct-all", 100, true);
+  $("nowstage").textContent = "";
+}
+
+function onConverterEvent(event) {
+  switch (event.ev) {
+    case "run": onRunStart(event); break;
+    case "file": onFileStart(event); break;
+    case "stage": onStage(event); break;
+    case "progress": onProgress(event); break;
+    case "result": onResult(event); break;
+    case "summary": onSummary(event); break;
+    default: log("[gui] unknown event: " + JSON.stringify(event), "gui");
+  }
+}
+
+function onRunState(runState) {
+  state.running = runState.running;
+  state.stopping = !!runState.stopping;
+  if (!runState.running) {
+    state.stopClicks = 0;
+    state.current = null;
+    $("nowfile").textContent = "Idle.";
+    $("nowstage").textContent = "";
+    if (runState.error) {
+      showError(runState.error);
+      log("[gui] Could not run NVENCForge: " + runState.error, "bad");
+    } else if (runState.exitCode !== 0) {
+      log("[gui] NVENCForge ended with exit code " + runState.exitCode + ".", "warn");
+    } else {
+      log("[gui] NVENCForge finished.", "gui");
+    }
+    // Anything still marked as running never reported a result.
+    state.queue.forEach((entry) => {
+      if (entry.status === "running") { entry.status = ""; entry.note = "no result reported"; }
+    });
+    renderQueue();
+  }
+  updateButtons();
+}
+
+/* ---------- status badges ---------- */
+function showGPU(gpu) {
+  $("gpu-dot").className = "dot " + (gpu.detected ? "ok" : "warn");
+  $("gpu-text").innerHTML = gpu.detected
+    ? "<b>" + gpu.name + "</b> · driver " + gpu.driver +
+      (gpu.memoryMB ? " · " + (gpu.memoryMB / 1024).toFixed(0) + " GB" : "")
+    : gpu.note;
+}
+function showConverter(status) {
+  state.converterFound = status.found;
+  state.eventChannel = status.eventChannel;
+  const dot = $("exe-dot");
+  const text = $("exe-text");
+  const download = $("btn-download");
+
+  if (!status.found) {
+    dot.className = "dot bad";
+    text.textContent = "NVENCForge.exe missing";
+    download.hidden = false;
+    download.textContent = "download";
+  } else {
+    dot.className = "dot " + (status.eventChannel ? "ok" : "warn");
+    text.innerHTML = "<b>NVENCForge " + status.version + "</b> · " +
+      (status.eventChannel ? "event channel" : "no event channel") +
+      (status.ffmpegPresent ? "" : " · FFmpeg is fetched on first run");
+    download.hidden = false;
+    download.textContent = "update";
+  }
+  if (status.note) log("[gui] " + status.note, "gui");
+  updateButtons();
+}
+
+/* ---------- actions ---------- */
+function collectRequest() {
+  return {
+    files: state.queue.map((entry) => entry.path),
+    codec: $("opt-codec").value,
+    encoder: $("opt-encoder").value,
+    container: $("opt-container").value,
+    resolution: $("opt-resolution").value,
+    audio: $("opt-audio").value,
+    bitDepth: $("opt-bitdepth").value,
+    quality: $("opt-quality").value,
+    fixedCQ: parseInt($("opt-cq").value, 10) || 0,
+    maxBitrate: parseInt($("opt-bitrate").value, 10) || 0,
+    keepSource: $("opt-keep").checked,
+    shutdown: $("opt-shutdown").checked
+  };
+}
+
+async function start() {
+  showError("");
+  resetProgress();
+  try {
+    await api().StartRun(collectRequest());
+  } catch (err) {
+    showError(String(err));
+    log("[gui] Start refused: " + err, "bad");
+  }
+}
+async function stop() {
+  try {
+    await api().StopRun();
+    state.stopClicks++;
+    state.stopping = true;
+    updateButtons();
+  } catch (err) {
+    showError(String(err));
+  }
+}
+async function download() {
+  const button = $("btn-download");
+  button.disabled = true;
+  showError("");
+  log("[gui] Fetching the latest NVENCForge.exe from GitHub…", "gui");
+  try {
+    showConverter(await api().DownloadConverter());
+    log("[gui] Download finished.", "gui");
+  } catch (err) {
+    showError(String(err));
+    log("[gui] Download failed: " + err, "bad");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+/* ---------- wiring ---------- */
+function wire() {
+  $("btn-files").onclick = async () => { try { addItems(await api().PickFiles()); } catch (e) { showError(String(e)); } };
+  $("btn-folder").onclick = async () => { try { addItems(await api().PickFolder()); } catch (e) { showError(String(e)); } };
+  $("btn-clear").onclick = () => { state.queue = []; afterQueueChange(); };
+  $("btn-start").onclick = start;
+  $("btn-stop").onclick = stop;
+  $("btn-download").onclick = download;
+  $("btn-log-clear").onclick = () => { $("logbox").innerHTML = ""; };
+
+  $("opt-quality").onchange = (e) => { $("field-cq").hidden = e.target.value !== "fixed"; };
+  $("opt-codec").onchange = (e) => {
+    const max = e.target.value === "av1" ? 63 : 51;
+    const input = $("opt-cq");
+    input.max = max;
+    if (parseInt(input.value, 10) > max) input.value = max;
+  };
+
+  // Visual feedback only — the real drop is handled by Wails (OnFileDrop).
+  const zone = $("dropzone");
+  window.addEventListener("dragover", (e) => { e.preventDefault(); zone.classList.add("hot"); });
+  window.addEventListener("dragleave", () => zone.classList.remove("hot"));
+  window.addEventListener("drop", () => zone.classList.remove("hot"));
+
+  window.runtime.EventsOn("queue:dropped", (items) => { zone.classList.remove("hot"); addItems(items); });
+  window.runtime.EventsOn("conv:event", onConverterEvent);
+  window.runtime.EventsOn("conv:log", (line) => log(line, classifyLogLine(line)));
+  window.runtime.EventsOn("conv:state", onRunState);
+  window.runtime.EventsOn("conv:download", (info) => {
+    if (!info.total) return;
+    const done = (info.done / info.total * 100).toFixed(0);
+    $("btn-download").textContent = done + " %";
+  });
+}
+
+async function boot() {
+  wire();
+  afterQueueChange();
+  try {
+    const info = await api().GetStartupInfo();
+    showGPU(info.gpu);
+    showConverter(info.converter);
+  } catch (err) {
+    showError("Startup check failed: " + err);
+  }
+}
+window.addEventListener("DOMContentLoaded", boot);
+</script>
+</body>
+</html>

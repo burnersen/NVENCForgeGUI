@@ -1,0 +1,21 @@
+# Go sources are LF, always. gofmt normalises line endings to LF, so a CRLF
+# file is reported as "unformatted" no matter how well it is written — which
+# silently turns `gofmt -l` into a check that can never pass.
+*.go     text eol=lf
+go.mod   text eol=lf
+go.sum   text eol=lf
+
+# The window itself is one file. LF keeps its diffs readable.
+*.html   text eol=lf
+*.json   text eol=lf
+*.js     text eol=lf
+*.ts     text eol=lf
+
+# Documentation and config: normalise in the repository, check out native.
+*.md     text
+.gitignore text
+
+# Never touch binary content.
+*.png    binary
+*.ico    binary
+*.exe    binary
