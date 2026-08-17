@@ -618,6 +618,16 @@ function onResult(event) {
     entry.note = (RESULT_TEXT[event.status] || (() => event.status))(event);
     if (event.message) entry.note += " (" + event.message + ")";
   }
+  // The percentage is derived from ffmpeg's timestamps and usually stops a
+  // little short of 100 % (99.1 %, for instance) because the video track ends
+  // slightly before the duration the container claims. A file is not finished
+  // at a number, it is finished when its result arrives — so fill the bar
+  // here. "failed" and "preview" keep their last value on purpose: there the
+  // remainder really was not encoded.
+  if (event.status === "success" || event.status === "skipped") {
+    setBar("bar-file", "pct-file", 100, true);
+    updateOverall(1);
+  }
   if (event.status === "success") {
     note(event.name + ": " + fmtMB(event.in_mb) + " → " + fmtMB(event.out_mb) +
         " (" + event.saved_pct.toFixed(1) + " % smaller)");
