@@ -18,6 +18,10 @@ export function GetConverterStatus() {
   return window['go']['main']['App']['GetConverterStatus']();
 }
 
+export function GetSettingsFile() {
+  return window['go']['main']['App']['GetSettingsFile']();
+}
+
 export function GetStartupInfo() {
   return window['go']['main']['App']['GetStartupInfo']();
 }
@@ -32,6 +36,10 @@ export function PickFiles() {
 
 export function PickFolder() {
   return window['go']['main']['App']['PickFolder']();
+}
+
+export function SaveSettings(arg1) {
+  return window['go']['main']['App']['SaveSettings'](arg1);
 }
 
 export function StartRun(arg1) {

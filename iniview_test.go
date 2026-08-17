@@ -17,7 +17,7 @@ const sampleConfig = "# NVENCForge Configuration\r\n" +
 	"autoCQ=true\r\n"
 
 func TestParseConfigReadsTheValuesWeShow(t *testing.T) {
-	entries := parseConfigEntries(sampleConfig)
+	entries := entriesOf(sampleConfig)
 
 	cases := []struct {
 		key  string
@@ -45,7 +45,7 @@ func TestParseConfigReadsTheValuesWeShow(t *testing.T) {
 // in Kommentarzeilen darüber; würde eine davon mitgelesen, zeigte das Fenster
 // eine Einstellung an, die gar nicht aktiv ist.
 func TestCommentedKeysAreIgnored(t *testing.T) {
-	entries := parseConfigEntries("# maxResolution=720\r\nmaxResolution=1440\r\n")
+	entries := entriesOf("# maxResolution=720\r\nmaxResolution=1440\r\n")
 	if got := intEntry(entries, "maxResolution"); got != 1440 {
 		t.Errorf("maxResolution = %d, want 1440 (the comment must not win)", got)
 	}
@@ -54,7 +54,7 @@ func TestCommentedKeysAreIgnored(t *testing.T) {
 // Fehlt ein Wert, wird nichts geraten: 0 bedeutet für die Oberfläche
 // "unbekannt", und sie zeigt dann gar keine Zahl statt einer falschen.
 func TestMissingValuesStayUnknown(t *testing.T) {
-	entries := parseConfigEntries("maxResolution=1080\r\n")
+	entries := entriesOf("maxResolution=1080\r\n")
 	if got := intEntry(entries, "maxBitrate1080p"); got != 0 {
 		t.Errorf("missing key returned %d, want 0", got)
 	}
@@ -69,11 +69,11 @@ func TestMissingValuesStayUnknown(t *testing.T) {
 // Der wichtige Unterschied: "steht auf false" ist eine Aussage des Nutzers,
 // "steht nicht da" ist keine.
 func TestAutoCQFalseDiffersFromAbsent(t *testing.T) {
-	value, known := boolEntry(parseConfigEntries("autoCQ=false\r\n"), "autoCQ")
+	value, known := boolEntry(entriesOf("autoCQ=false\r\n"), "autoCQ")
 	if value || !known {
 		t.Errorf("autoCQ=false gave %v/%v, want false/true", value, known)
 	}
-	if _, known := boolEntry(parseConfigEntries("\r\n"), "autoCQ"); known {
+	if _, known := boolEntry(entriesOf("\r\n"), "autoCQ"); known {
 		t.Error("an empty file must not report autoCQ as known")
 	}
 }
@@ -82,7 +82,7 @@ func TestAutoCQFalseDiffersFromAbsent(t *testing.T) {
 // beim nächsten Start selbst zurück — bis dahin darf das Fenster sie nicht als
 // gültige Einstellung ausgeben.
 func TestBrokenValuesAreTreatedAsMissing(t *testing.T) {
-	entries := parseConfigEntries("maxResolution=hd\r\nautoCQ=vielleicht\r\ntargetCQ=\r\n")
+	entries := entriesOf("maxResolution=hd\r\nautoCQ=vielleicht\r\ntargetCQ=\r\n")
 	if got := intEntry(entries, "maxResolution"); got != 0 {
 		t.Errorf("maxResolution = %d, want 0 for a broken value", got)
 	}
@@ -134,8 +134,15 @@ func TestConfigViewReadsTheRealFile(t *testing.T) {
 // Leerzeichen um Schlüssel und Wert kommen vor, wenn jemand die Datei von Hand
 // bearbeitet hat.
 func TestSpacesAroundKeyAndValueAreTrimmed(t *testing.T) {
-	entries := parseConfigEntries("  maxResolution = 720  \r\n")
+	entries := entriesOf("  maxResolution = 720  \r\n")
 	if got := intEntry(entries, "maxResolution"); got != 720 {
 		t.Errorf("maxResolution = %d, want 720", got)
 	}
+}
+
+// entriesOf ist die Kurzform für die Tests: Datei-Inhalt rein, Nachschlage-
+// tabelle raus. Gelesen wird dabei mit demselben Zerleger, den auch die
+// Einstellungsseite benutzt — so prüfen diese Tests den Weg, der wirklich läuft.
+func entriesOf(content string) map[string]string {
+	return settingsByKey(parseSettings(content))
 }

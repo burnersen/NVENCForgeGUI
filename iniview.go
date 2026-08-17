@@ -85,7 +85,7 @@ func readConfigView() ConfigView {
 		return ConfigView{Path: path, Note: fmt.Sprintf("NVENCForge_Config.ini could not be read: %v", err)}
 	}
 
-	entries := parseConfigEntries(string(content))
+	entries := settingsByKey(parseSettings(string(content)))
 	view := ConfigView{Found: true, Path: path}
 	view.MaxResolution = intEntry(entries, "maxResolution")
 	view.MaxBitrate1080p = intEntry(entries, "maxBitrate1080p")
@@ -97,28 +97,6 @@ func readConfigView() ConfigView {
 	view.AutoCQTargetVMAF = intEntry(entries, "autoCQTargetVMAF")
 	view.AutoCQ, view.AutoCQKnown = boolEntry(entries, "autoCQ")
 	return view
-}
-
-// parseConfigEntries zerlegt den Dateiinhalt in Schlüssel und Wert.
-//
-// Bewusst so schlicht wie das Format selbst: "key=value", Zeilen mit "#" sind
-// Kommentar. Die Zeilenenden dürfen dabei CRLF oder LF sein — TrimSpace
-// erledigt beides. Groß- und Kleinschreibung wird NICHT vereinheitlicht, weil
-// der Konverter seine Schlüssel ebenfalls genau vergleicht.
-func parseConfigEntries(content string) map[string]string {
-	entries := make(map[string]string)
-	for _, rawLine := range strings.Split(content, "\n") {
-		line := strings.TrimSpace(rawLine)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		key, value, separated := strings.Cut(line, "=")
-		if !separated {
-			continue
-		}
-		entries[strings.TrimSpace(key)] = strings.TrimSpace(value)
-	}
-	return entries
 }
 
 // intEntry liefert eine Zahl oder 0, wenn der Schlüssel fehlt oder keine ist.

@@ -42,6 +42,15 @@ function loadGui() {
       return elements.get(id);
     },
     createElement: () => fakeElement("new"),
+    createDocumentFragment: () => fakeElement("fragment"),
+    createTextNode: (text) => fakeElement("text-" + text),
+    // Same stand-in for the same selector, so a check can look at what the
+    // code did to it.
+    querySelector(selector) {
+      if (!elements.has(selector)) elements.set(selector, fakeElement(selector));
+      return elements.get(selector);
+    },
+    querySelectorAll: () => [],
     addEventListener() {},
     body: fakeElement("body")
   };
@@ -49,7 +58,9 @@ function loadGui() {
 
   const exported = new Function(
     "window", "document",
-    scriptText + "\n;return { onConverterEvent, state, applyConfig, refreshFromConfig, bitrateCapKey, HELP };"
+    scriptText + "\n;return { onConverterEvent, state, applyConfig, refreshFromConfig, bitrateCapKey, HELP," +
+    " settingModel, looksInvalid, settingHelp, editSetting, revertSetting, restoreDefaults," +
+    " changedValues, defaultFor, noteGPUAdvice, renderSettings, showPage, log };"
   )(windowStub, documentStub);
 
   return {

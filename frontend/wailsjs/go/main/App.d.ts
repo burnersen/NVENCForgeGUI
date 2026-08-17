@@ -10,6 +10,8 @@ export function GetConfigView():Promise<main.ConfigView>;
 
 export function GetConverterStatus():Promise<main.ConverterStatus>;
 
+export function GetSettingsFile():Promise<main.SettingsFile>;
+
 export function GetStartupInfo():Promise<main.StartupInfo>;
 
 export function IsRunning():Promise<boolean>;
@@ -17,6 +19,8 @@ export function IsRunning():Promise<boolean>;
 export function PickFiles():Promise<Array<main.QueueItem>>;
 
 export function PickFolder():Promise<Array<main.QueueItem>>;
+
+export function SaveSettings(arg1:Record<string, string>):Promise<main.SaveResult>;
 
 export function StartRun(arg1:main.RunRequest):Promise<void>;
 

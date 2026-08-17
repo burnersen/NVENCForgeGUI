@@ -160,6 +160,39 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
 #tip .now { display: block; margin-top: 6px; color: var(--muted); font-size: 11.5px; }
 [data-help] > label, .check[data-help] { cursor: help; }
 
+/* ---------- settings page ----------
+   One row per setting, always in the same order: name, value, undo, default.
+   The eye should be able to run down a single column to spot what was
+   changed. */
+.setting {
+  display: grid; grid-template-columns: 210px 190px 28px 1fr;
+  align-items: center; gap: 12px;
+  padding: 7px 8px; border-bottom: 1px solid var(--line);
+}
+.setting:last-child { border-bottom: none; }
+.setting > .name { font-size: 12.5px; cursor: help; overflow-wrap: anywhere; }
+.setting.changed { background: rgba(255, 140, 26, .07); }
+.setting.changed > .name { color: var(--accent); }
+.setting.invalid input, .setting.invalid select { border-color: var(--warn); }
+.setting .std { color: var(--muted); font-size: 11.5px; }
+.setting .std b { color: var(--warn); font-weight: 600; }
+.revert {
+  background: none; border: none; color: var(--muted);
+  font-size: 15px; line-height: 1; padding: 2px 4px; visibility: hidden;
+}
+.setting.changed .revert { visibility: visible; }
+.revert:hover { color: var(--accent); }
+.sec-title {
+  margin: 14px 0 2px; font-size: 11px; text-transform: uppercase;
+  letter-spacing: .6px; color: var(--muted);
+}
+#settings-expert-box { margin-top: 16px; }
+#settings-expert-box > summary {
+  cursor: pointer; padding: 8px 0; font-size: 13px; color: var(--muted);
+}
+#settings-expert-box > summary:hover { color: var(--text); }
+#settings-path { margin: 2px 0 8px; }
+
 /* ---------- progress ---------- */
 .bar { height: 9px; border-radius: 999px; background: var(--panel-2); overflow: hidden; border: 1px solid var(--line); }
 .bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .18s linear; }
@@ -210,8 +243,8 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
 
   <div id="body">
     <nav>
-      <button class="nav-item active">Convert</button>
-      <button class="nav-item" disabled>Settings <span class="stage-tag">stage 4</span></button>
+      <button class="nav-item active" data-page="convert">Convert</button>
+      <button class="nav-item" data-page="settings">Settings</button>
       <button class="nav-item" disabled>DaVinci <span class="stage-tag">stage 5</span></button>
       <button class="nav-item" disabled>Split <span class="stage-tag">stage 5</span></button>
       <button class="nav-item" disabled>Join <span class="stage-tag">stage 5</span></button>
@@ -220,6 +253,7 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
     </nav>
 
     <main>
+    <div id="page-convert">
       <section class="panel">
         <h2>Queue</h2>
         <div id="dropzone">
@@ -351,6 +385,32 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
           <label class="check"><input type="checkbox" id="opt-autoscroll" checked /> Follow</label>
         </div>
       </section>
+    </div>
+
+    <div id="page-settings" hidden>
+      <section class="panel">
+        <h2>Settings <span style="text-transform:none;letter-spacing:0">— NVENCForge_Config.ini</span></h2>
+        <div class="row">
+          <button class="btn primary" id="btn-settings-save" disabled>Save</button>
+          <button class="btn" id="btn-settings-defaults">Restore defaults</button>
+          <div class="spacer"></div>
+          <span class="hint" id="settings-state" style="margin:0"></span>
+        </div>
+        <div class="hint" id="settings-path"></div>
+
+        <div id="settings-common"></div>
+
+        <details id="settings-expert-box">
+          <summary>Expert settings — safe to ignore, here for tinkering</summary>
+          <div id="settings-expert"></div>
+        </details>
+
+        <div class="hint">
+          Changes apply to the next run; a run in progress keeps the settings it started with.
+          The version before your last save is kept as NVENCForge_Config.ini.bak.
+        </div>
+      </section>
+    </div>
     </main>
   </div>
 </div>
@@ -376,7 +436,11 @@ const state = {
   converterFound: false,
   forceDownload: false,  // set after a download was held back on purpose
   config: null,          // values read out of NVENCForge_Config.ini, null = not read (yet)
-  cqTouched: false       // true once the CQ box was edited by hand
+  cqTouched: false,      // true once the CQ box was edited by hand
+  page: "convert",
+  settingsFile: null,    // the whole INI as parsed by the app
+  edits: {},             // key -> value typed on the settings page, not saved yet
+  gpuAdvice: {}          // key -> value the converter recommended for this card
 };
 
 const MAX_LOG_LINES = 400;
@@ -464,6 +528,7 @@ function log(line) {
     box.removeChild(box.lastElementChild);
   }
   if (!entry.text) return;
+  noteGPUAdvice(entry.text);
 
   const row = document.createElement("div");
   if (entry.text.startsWith("[gui]")) {
@@ -782,6 +847,10 @@ function refreshFromConfig() {
 function refreshConfig() {
   try {
     api().GetConfigView().then(applyConfig).catch(() => {});
+    // The converter repairs invalid lines when it starts, so the file may have
+    // changed underneath us. Unsaved edits always win — reloading over them
+    // would throw away typing without asking.
+    if (Object.keys(changedValues()).length === 0) loadSettings();
   } catch (err) {
     // No connection to the app yet. Nothing to refresh, and nothing broken:
     // the values are read again at the next opportunity.
@@ -879,10 +948,18 @@ const HELP = {
 // scrolling area, and it is remembered by target so moving the mouse inside a
 // field does not make it flicker.
 let tipTarget = null;
+// Two sources: the fixed texts above, and the settings page, whose texts come
+// out of the INI ("setting:<key>").
+function helpFor(key) {
+  if (!key) return null;
+  if (key.startsWith("setting:")) return settingHelp(key.slice("setting:".length));
+  const build = HELP[key];
+  return build ? build() : null;
+}
 function showTip(target) {
-  const build = HELP[target.dataset.help];
-  if (!build || tipTarget === target) return;
-  const help = build();
+  if (tipTarget === target) return;
+  const help = helpFor(target.dataset.help);
+  if (!help) return;
   const tip = $("tip");
   tip.innerHTML = "<b>" + help.title + "</b><br>" + help.text +
     (help.now ? '<span class="now">' + help.now + "</span>" : "");
@@ -907,6 +984,307 @@ function placeTip(tip, fieldBox) {
   }
   tip.style.top = Math.max(margin, top) + "px";
   tip.style.left = Math.max(margin, left) + "px";
+}
+
+/* ---------- settings page ----------
+   The page is not modelled here: it is built from the INI, which already
+   carries the order, the groups, an explanation, the allowed range and the
+   default of every setting. Nothing about the converter's settings is written
+   down twice, so nothing here can quietly go out of date. */
+
+// Two INI texts explain their value by quoting measurements. Useful in a file
+// you read once, noise in a tooltip you meet every day — so these two are said
+// in plain terms instead. Everything else comes straight out of the file.
+const SETTING_TEXT = {
+  aqStrength: "How strongly the encoder shifts bits towards busy parts of the picture. Low values spend fewer bits overall and give clearly smaller files at the same quality — that is why the default is low. Raise it only if you see blocky patches in dark, flat areas.",
+  cpuPreset: "Speed against quality for H.265 on the processor. “medium” gains almost nothing over “fast”, while “slow” buys a little quality for three to four times the encoding time."
+};
+
+// The allowed line for cpuPreset is abbreviated ("ultrafast ... placebo"), so
+// the full ladder is spelled out here. It is x265's own list and is fixed.
+const CPU_PRESETS = ["ultrafast", "superfast", "veryfast", "faster", "fast",
+  "medium", "slow", "slower", "veryslow", "placebo"];
+
+// Values whose range looks like whole numbers but accepts decimals as well.
+// Everything else is decided by the default: 0.5 means decimal, 5 does not.
+const DECIMAL_KEYS = ["autoCQTargetVMAF"];
+
+// The converter prints its own advice when a card refuses what the INI asks
+// for: "Set 'bFrames=4' in NVENCForge_Config.ini to make this permanent."
+// That line is written for the user and is the only honest source for what
+// this card really does — better than probing the card a second time here.
+const GPU_ADVICE_PATTERN = /Set '([A-Za-z0-9]+)=([^']*)' in NVENCForge_Config\.ini/;
+
+function findSetting(key) {
+  const file = state.settingsFile;
+  if (!file || !file.settings) return null;
+  return file.settings.find((setting) => setting.key === key) || null;
+}
+// What a reset goes back to: the INI's default — unless this card said it
+// cannot do that, then the card wins. Anything else would hand the user a
+// value their hardware already rejected.
+function defaultFor(setting) {
+  return state.gpuAdvice[setting.key] !== undefined ? state.gpuAdvice[setting.key] : setting.default;
+}
+function currentValue(setting) {
+  return state.edits[setting.key] !== undefined ? state.edits[setting.key] : setting.value;
+}
+function isChanged(setting) {
+  return state.edits[setting.key] !== undefined && state.edits[setting.key] !== setting.value;
+}
+
+// settingModel turns the "Allowed:" line into a control. Kept free of any DOM
+// work so it can be checked on its own — this is where a wrong guess would
+// silently offer the user values the converter rejects.
+function settingModel(setting) {
+  const allowed = (setting.allowed || "").trim();
+  const model = { key: setting.key, value: currentValue(setting), kind: "text" };
+
+  if (setting.key === "cpuPreset") {
+    return Object.assign(model, { kind: "choice", choices: CPU_PRESETS });
+  }
+  const ladder = allowed.match(/^p(\d) to p(\d)$/);
+  if (ladder) {
+    const choices = [];
+    for (let step = Number(ladder[1]); step <= Number(ladder[2]); step++) choices.push("p" + step);
+    return Object.assign(model, { kind: "choice", choices: choices });
+  }
+  const range = allowed.match(/^(-?[\d.]+) to (-?[\d.]+)$/);
+  if (range) {
+    return Object.assign(model, {
+      kind: "number", min: range[1], max: range[2], step: stepFor(setting, range[1], range[2])
+    });
+  }
+  const above = allowed.match(/^more than (-?[\d.]+)$/);
+  if (above) {
+    return Object.assign(model, {
+      kind: "number", min: String(Number(above[1]) + 1), max: "", step: stepFor(setting, above[1])
+    });
+  }
+  if (allowed.includes(",") && !allowed.includes("...") && !/ or /.test(allowed)) {
+    return Object.assign(model, {
+      kind: "choice", choices: allowed.split(",").map((choice) => choice.trim()).filter(Boolean)
+    });
+  }
+  return model;
+}
+function stepFor(setting, ...numbers) {
+  const decimal = DECIMAL_KEYS.includes(setting.key) ||
+    [setting.default, ...numbers].some((value) => String(value).includes("."));
+  return decimal ? "0.1" : "1";
+}
+// A value the converter would reject is not blocked — it is marked. The user
+// asked to stay in charge, and the converter repairs an impossible line by
+// itself at the next start.
+function looksInvalid(setting) {
+  const model = settingModel(setting);
+  const value = String(currentValue(setting));
+  if (model.kind === "choice") return !model.choices.includes(value);
+  if (model.kind === "number") {
+    const number = Number(value);
+    if (value.trim() === "" || Number.isNaN(number)) return true;
+    if (model.min !== "" && number < Number(model.min)) return true;
+    if (model.max !== "" && number > Number(model.max)) return true;
+  }
+  return false;
+}
+function settingHelp(key) {
+  const setting = findSetting(key);
+  if (!setting) return null;
+  const advice = state.gpuAdvice[key];
+  return {
+    title: key,
+    text: SETTING_TEXT[key] || setting.description || "This setting has no description in the INI.",
+    now: "Allowed: " + (setting.allowed || "—") + " · Default: " + (setting.default || "empty") +
+      (advice !== undefined ? " · your graphics card asked for " + advice : "")
+  };
+}
+
+/* ---------- settings: drawing ---------- */
+function renderSettings() {
+  const file = state.settingsFile;
+  const path = $("settings-path");
+  const common = $("settings-common");
+  const expert = $("settings-expert");
+  common.innerHTML = "";
+  expert.innerHTML = "";
+
+  if (!file || !file.found) {
+    path.textContent = file ? file.note : "Reading NVENCForge_Config.ini…";
+    updateSettingsButtons();
+    return;
+  }
+  path.textContent = file.path;
+
+  const lastSection = { common: null, expert: null };
+  file.settings.forEach((setting) => {
+    const group = setting.group === "expert" ? "expert" : "common";
+    const box = group === "expert" ? expert : common;
+    if (setting.section && setting.section !== lastSection[group]) {
+      lastSection[group] = setting.section;
+      const title = document.createElement("div");
+      title.className = "sec-title";
+      title.textContent = setting.section;
+      box.appendChild(title);
+    }
+    box.appendChild(settingRow(setting));
+  });
+  updateSettingsButtons();
+}
+function settingRow(setting) {
+  const model = settingModel(setting);
+  const row = document.createElement("div");
+  row.className = "setting";
+  row.id = "row-" + setting.key;
+
+  const name = document.createElement("div");
+  name.className = "name";
+  name.textContent = setting.key;
+  name.dataset.help = "setting:" + setting.key;
+  row.appendChild(name);
+
+  const control = model.kind === "choice" ? document.createElement("select") : document.createElement("input");
+  if (model.kind === "choice") {
+    model.choices.forEach((choice) => {
+      const option = document.createElement("option");
+      option.value = choice;
+      option.textContent = choice;
+      control.appendChild(option);
+    });
+    control.value = model.value;
+  } else {
+    control.type = model.kind === "number" ? "number" : "text";
+    if (model.kind === "number") {
+      if (model.min !== "") control.min = model.min;
+      if (model.max !== "") control.max = model.max;
+      control.step = model.step;
+    }
+    control.value = model.value;
+  }
+  control.id = "set-" + setting.key;
+  control.onchange = () => editSetting(setting.key, control.value);
+  control.oninput = () => editSetting(setting.key, control.value);
+  row.appendChild(control);
+
+  const revert = document.createElement("button");
+  revert.className = "revert";
+  revert.textContent = "↺";
+  revert.title = "back to " + (defaultFor(setting) || "empty");
+  revert.onclick = () => revertSetting(setting.key);
+  row.appendChild(revert);
+
+  const standard = document.createElement("div");
+  standard.className = "std";
+  row.appendChild(standard);
+
+  markRow(setting);
+  return row;
+}
+// markRow keeps one row honest: changed, out of range, and what its default is.
+function markRow(setting) {
+  const row = $("row-" + setting.key);
+  if (!row) return;
+  const changed = isChanged(setting);
+  row.className = "setting" + (changed ? " changed" : "") + (looksInvalid(setting) ? " invalid" : "");
+
+  const standard = row.querySelector(".std");
+  if (!standard) return;
+  const advice = state.gpuAdvice[setting.key];
+  let text = "default " + (setting.default === "" ? "empty" : setting.default);
+  if (advice !== undefined) text += " · your card: " + advice;
+  if (looksInvalid(setting)) text += " · outside " + setting.allowed;
+  standard.innerHTML = looksInvalid(setting) ? "<b>" + text + "</b>" : text;
+}
+
+/* ---------- settings: editing ---------- */
+function editSetting(key, value) {
+  const setting = findSetting(key);
+  if (!setting) return;
+  if (value === setting.value) delete state.edits[key];
+  else state.edits[key] = value;
+  markRow(setting);
+  updateSettingsButtons();
+}
+function revertSetting(key) {
+  const setting = findSetting(key);
+  if (!setting) return;
+  const control = $("set-" + key);
+  if (control) control.value = defaultFor(setting);
+  editSetting(key, defaultFor(setting));
+}
+function restoreDefaults() {
+  const file = state.settingsFile;
+  if (!file || !file.settings) return;
+  file.settings.forEach((setting) => revertSetting(setting.key));
+  note("All settings set back to their defaults — nothing is written until you press Save.");
+}
+function changedValues() {
+  const values = {};
+  Object.keys(state.edits).forEach((key) => {
+    const setting = findSetting(key);
+    if (setting && state.edits[key] !== setting.value) values[key] = state.edits[key];
+  });
+  return values;
+}
+function updateSettingsButtons() {
+  const pending = Object.keys(changedValues()).length;
+  const save = $("btn-settings-save");
+  save.disabled = pending === 0;
+  save.textContent = pending > 0 ? "Save " + pending + " change(s)" : "Save";
+  const file = state.settingsFile;
+  $("btn-settings-defaults").disabled = !file || !file.found;
+  $("settings-state").textContent = pending > 0 ? "unsaved changes" : "";
+  // Also visible from the other pages: unsaved settings are easy to forget
+  // once the queue has the attention again.
+  const navButton = document.querySelector('.nav-item[data-page="settings"]');
+  if (navButton) navButton.textContent = pending > 0 ? "Settings ●" : "Settings";
+}
+async function saveSettings() {
+  const values = changedValues();
+  if (Object.keys(values).length === 0) return;
+  showError("");
+  try {
+    await api().SaveSettings(values);
+    state.edits = {};
+    await loadSettings();
+    // The convert page shows caps and defaults from the same file.
+    refreshConfig();
+    if (state.running) {
+      note("A conversion is running — it keeps the settings it started with.");
+    }
+  } catch (err) {
+    showError(String(err));
+    note("Settings could not be saved: " + err);
+  }
+}
+async function loadSettings() {
+  try {
+    state.settingsFile = await api().GetSettingsFile();
+    renderSettings();
+  } catch (err) {
+    showError(String(err));
+  }
+}
+// noteGPUAdvice listens to the converter's own recommendation while the log
+// arrives. Nothing is changed behind the user's back: the value is offered as
+// the new default and shown next to the setting.
+function noteGPUAdvice(text) {
+  const found = GPU_ADVICE_PATTERN.exec(text);
+  if (!found) return;
+  const [, key, value] = found;
+  if (state.gpuAdvice[key] === value) return;
+  state.gpuAdvice[key] = value;
+  const setting = findSetting(key);
+  if (setting) markRow(setting);
+}
+
+/* ---------- pages ---------- */
+function showPage(name) {
+  state.page = name;
+  $("page-convert").hidden = name !== "convert";
+  $("page-settings").hidden = name !== "settings";
+  hideTip();
+  if (name === "settings" && (!state.settingsFile || !state.settingsFile.found)) loadSettings();
 }
 
 /* ---------- actions ---------- */
@@ -984,6 +1362,16 @@ function wire() {
   $("btn-stop").onclick = stop;
   $("btn-download").onclick = download;
   $("btn-log-clear").onclick = () => { $("logbox").innerHTML = ""; };
+  $("btn-settings-save").onclick = saveSettings;
+  $("btn-settings-defaults").onclick = restoreDefaults;
+
+  document.querySelectorAll(".nav-item[data-page]").forEach((button) => {
+    button.onclick = () => {
+      document.querySelectorAll(".nav-item").forEach((other) => other.classList.remove("active"));
+      button.classList.add("active");
+      showPage(button.dataset.page);
+    };
+  });
 
   $("opt-quality").onchange = (e) => { $("field-cq").hidden = e.target.value !== "fixed"; };
   $("opt-codec").onchange = (e) => {
@@ -1045,6 +1433,7 @@ async function boot() {
     showGPU(info.gpu);
     showConverter(info.converter);
     applyConfig(info.config);
+    await loadSettings();
   } catch (err) {
     showError("Startup check failed: " + err);
   }

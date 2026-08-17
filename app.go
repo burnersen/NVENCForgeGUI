@@ -85,6 +85,30 @@ func (a *App) GetConverterStatus() ConverterStatus {
 	return converterStatus()
 }
 
+// GetSettingsFile liefert alle Einstellungen für den Bereich "Settings" —
+// Werte, Erklärungen, erlaubte Bereiche und Standardwerte, wie sie in der INI
+// stehen.
+func (a *App) GetSettingsFile() SettingsFile {
+	return readSettingsFile()
+}
+
+// SaveSettings schreibt die geänderten Werte zurück.
+//
+// Ein laufender Lauf wird NICHT blockiert: Der Konverter liest seine INI beim
+// Start, geänderte Werte gelten also ab dem nächsten Lauf. Das sagt die
+// Oberfläche dazu, statt das Speichern zu verbieten.
+func (a *App) SaveSettings(values map[string]string) (SaveResult, error) {
+	result, err := writeSettings(values)
+	if err != nil {
+		return result, err
+	}
+	if result.Written > 0 {
+		a.note(fmt.Sprintf("Saved %d setting(s). Previous version kept as %s",
+			result.Written, filepath.Base(result.BackupPath)))
+	}
+	return result, nil
+}
+
 // GetConfigView liest die INI erneut.
 //
 // Nötig, weil sie erst entsteht, wenn NVENCForge zum ersten Mal läuft: Beim
