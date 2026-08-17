@@ -1,5 +1,41 @@
 export namespace main {
 	
+	export class ConfigView {
+	    found: boolean;
+	    path: string;
+	    note: string;
+	    maxResolution: number;
+	    maxBitrate1080p: number;
+	    maxBitrateOriginal: number;
+	    av1MaxBitrate1080p: number;
+	    av1MaxBitrateOriginal: number;
+	    targetCQ: number;
+	    av1TargetCQ: number;
+	    autoCQTargetVMAF: number;
+	    autoCQ: boolean;
+	    autoCQKnown: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ConfigView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.found = source["found"];
+	        this.path = source["path"];
+	        this.note = source["note"];
+	        this.maxResolution = source["maxResolution"];
+	        this.maxBitrate1080p = source["maxBitrate1080p"];
+	        this.maxBitrateOriginal = source["maxBitrateOriginal"];
+	        this.av1MaxBitrate1080p = source["av1MaxBitrate1080p"];
+	        this.av1MaxBitrateOriginal = source["av1MaxBitrateOriginal"];
+	        this.targetCQ = source["targetCQ"];
+	        this.av1TargetCQ = source["av1TargetCQ"];
+	        this.autoCQTargetVMAF = source["autoCQTargetVMAF"];
+	        this.autoCQ = source["autoCQ"];
+	        this.autoCQKnown = source["autoCQKnown"];
+	    }
+	}
 	export class ConverterStatus {
 	    found: boolean;
 	    path: string;
@@ -139,6 +175,7 @@ export namespace main {
 	export class StartupInfo {
 	    gpu: GPUInfo;
 	    converter: ConverterStatus;
+	    config: ConfigView;
 	
 	    static createFrom(source: any = {}) {
 	        return new StartupInfo(source);
@@ -148,6 +185,7 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.gpu = this.convertValues(source["gpu"], GPUInfo);
 	        this.converter = this.convertValues(source["converter"], ConverterStatus);
+	        this.config = this.convertValues(source["config"], ConfigView);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

@@ -71,16 +71,27 @@ func (a *App) emit(name string, data ...any) {
 type StartupInfo struct {
 	GPU       GPUInfo         `json:"gpu"`
 	Converter ConverterStatus `json:"converter"`
+	Config    ConfigView      `json:"config"`
 }
 
-// GetStartupInfo liefert Grafikkarte und Zustand der Programmdatei.
+// GetStartupInfo liefert Grafikkarte, Zustand der Programmdatei und die
+// Einstellungen, die gerade gelten.
 func (a *App) GetStartupInfo() StartupInfo {
-	return StartupInfo{GPU: queryGPU(), Converter: converterStatus()}
+	return StartupInfo{GPU: queryGPU(), Converter: converterStatus(), Config: readConfigView()}
 }
 
 // GetConverterStatus prüft die Programmdatei erneut.
 func (a *App) GetConverterStatus() ConverterStatus {
 	return converterStatus()
+}
+
+// GetConfigView liest die INI erneut.
+//
+// Nötig, weil sie erst entsteht, wenn NVENCForge zum ersten Mal läuft: Beim
+// Start des Fensters kann sie also noch fehlen und nach dem ersten Lauf da
+// sein.
+func (a *App) GetConfigView() ConfigView {
+	return readConfigView()
 }
 
 // DownloadConverter holt die neueste NVENCForge.exe von GitHub.

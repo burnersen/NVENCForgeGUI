@@ -10,6 +10,10 @@ export function DownloadConverter(arg1) {
   return window['go']['main']['App']['DownloadConverter'](arg1);
 }
 
+export function GetConfigView() {
+  return window['go']['main']['App']['GetConfigView']();
+}
+
 export function GetConverterStatus() {
   return window['go']['main']['App']['GetConverterStatus']();
 }

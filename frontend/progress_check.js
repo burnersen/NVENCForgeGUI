@@ -2,66 +2,17 @@
 //
 // Run it with:  node frontend\progress_check.js
 //
-// The display logic lives inside index.html and only ever runs in the web view,
-// so a wrong bar used to cost a full conversion to notice. This script loads the
-// script block straight out of the shipped index.html, hands it a stand-in for
-// the browser and feeds it the same events the converter sends. Exit code 0
-// means every case matched.
-//
-// It deliberately reads the shipped file, not a copy: a copy would drift and
-// then prove nothing.
-const fs = require("fs");
-const path = require("path");
+// A file's percentage comes from ffmpeg's timestamps against the duration the
+// container reports, so the last progress event usually stops just short of
+// 100 %. What fills the bar is the result event, and that is what is checked
+// here — together with the overall bar, which must never count a file twice.
+const { loadGui, createChecker } = require("./check_harness");
 
-const htmlPath = path.join(__dirname, "dist", "index.html");
-const html = fs.readFileSync(htmlPath, "utf8");
-const scriptText = html.slice(
-  html.lastIndexOf("<script>") + "<script>".length,
-  html.lastIndexOf("</script>")
-);
+const { gui, element } = loadGui();
+const { check, finish } = createChecker();
 
-// A Proxy saves rebuilding the DOM: known properties come from the object,
-// anything else turns into a harmless function returning another stand-in.
-function fakeElement(id) {
-  const store = {
-    id, textContent: "", innerHTML: "", value: "", checked: false, hidden: false,
-    className: "", disabled: false, max: 0, style: {}, dataset: {}, children: [],
-    scrollTop: 0, scrollHeight: 0,
-    classList: { add() {}, remove() {}, toggle() {}, contains: () => false }
-  };
-  return new Proxy(store, {
-    get: (target, prop) => (prop in target ? target[prop] : () => fakeElement("child")),
-    set: (target, prop, value) => { target[prop] = value; return true; }
-  });
-}
-const elements = new Map();
-const documentStub = {
-  getElementById(id) {
-    if (!elements.has(id)) elements.set(id, fakeElement(id));
-    return elements.get(id);
-  },
-  createElement: () => fakeElement("new"),
-  addEventListener() {},
-  body: fakeElement("body")
-};
-// boot() hangs on DOMContentLoaded, which never fires here — so evaluating the
-// script only defines things instead of trying to talk to a converter.
-const windowStub = { addEventListener() {}, runtime: { OnFileDrop() {}, EventsOn() {} } };
-
-const gui = new Function(
-  "window", "document",
-  scriptText + "\n;return { onConverterEvent, state };"
-)(windowStub, documentStub);
-
-const fileBar = () => documentStub.getElementById("pct-file").textContent;
-const overallBar = () => documentStub.getElementById("pct-all").textContent;
-
-let failed = 0;
-function check(what, got, want) {
-  const ok = got === want;
-  if (!ok) failed++;
-  console.log((ok ? "  ok   " : "  FAIL ") + what + ": " + got + (ok ? "" : "  (expected " + want + ")"));
-}
+const fileBar = () => element("pct-file").textContent;
+const overallBar = () => element("pct-all").textContent;
 
 const entry = (name, sizeMB) =>
   ({ path: "X:\\test\\" + name, name, folder: "X:\\test", sizeMB, status: "", note: "" });
@@ -132,5 +83,4 @@ gui.onConverterEvent(resultEvent(1, "skipped", queue[0], { in_mb: 0, out_mb: 0, 
 check("skipped -> file bar       ", fileBar(), "100.0 %");
 check("skipped -> overall        ", overallBar(), "100.0 %");
 
-console.log("\n" + (failed === 0 ? "all checks passed" : failed + " check(s) FAILED"));
-process.exit(failed === 0 ? 0 : 1);
+finish();

@@ -144,6 +144,22 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
 .check { display: flex; align-items: center; gap: 7px; font-size: 13px; }
 .hint { color: var(--muted); font-size: 11.5px; margin-top: 10px; }
 
+/* ---------- help bubble ----------
+   Shown while the mouse rests on a setting. It is placed with fixed
+   coordinates instead of inside the field, so it can never be cut off by the
+   scrolling area around it — and so the same bubble can serve the settings
+   page later on. */
+#tip {
+  position: fixed; z-index: 50; display: none; max-width: 330px;
+  background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--accent-dim); border-radius: 8px;
+  padding: 9px 11px; font-size: 12.5px; line-height: 1.45;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .45); pointer-events: none;
+}
+#tip b { color: var(--accent); }
+#tip .now { display: block; margin-top: 6px; color: var(--muted); font-size: 11.5px; }
+[data-help] > label, .check[data-help] { cursor: help; }
+
 /* ---------- progress ---------- */
 .bar { height: 9px; border-radius: 999px; background: var(--panel-2); overflow: hidden; border: 1px solid var(--line); }
 .bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .18s linear; }
@@ -223,72 +239,71 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
       <section class="panel">
         <h2>Options for this run</h2>
         <div class="options">
-          <div class="field">
+          <div class="field" data-help="codec">
             <label for="opt-codec">Codec</label>
             <select id="opt-codec">
               <option value="">H.265 (default)</option>
               <option value="av1">AV1</option>
             </select>
           </div>
-          <div class="field">
+          <div class="field" data-help="encoder">
             <label for="opt-encoder">Encoder</label>
             <select id="opt-encoder">
               <option value="">GPU / NVENC (default)</option>
               <option value="cpu">CPU (no NVIDIA card needed)</option>
             </select>
           </div>
-          <div class="field">
+          <div class="field" data-help="container">
             <label for="opt-container">Container</label>
             <select id="opt-container">
               <option value="">MKV (default)</option>
-              <option value="mp4">MP4 — keeps all tracks</option>
+              <option value="mp4">MP4</option>
             </select>
           </div>
-          <div class="field">
+          <div class="field" data-help="resolution">
             <label for="opt-resolution">Resolution</label>
             <select id="opt-resolution">
-              <option value="">Downscale if needed (default)</option>
+              <option value="" id="opt-resolution-default">Downscale if needed (default)</option>
               <option value="original">Keep original resolution</option>
             </select>
           </div>
-          <div class="field">
+          <div class="field" data-help="audio">
             <label for="opt-audio">Audio</label>
             <select id="opt-audio">
-              <option value="">Re-encode to AAC (default)</option>
-              <option value="copy">Copy 1:1</option>
+              <option value="">AAC where needed (default)</option>
+              <option value="copy">Copy 1:1 — original audio</option>
             </select>
           </div>
-          <div class="field">
+          <div class="field" data-help="bitdepth">
             <label for="opt-bitdepth">Bit depth</label>
             <select id="opt-bitdepth">
               <option value="">10 bit (default)</option>
               <option value="8">8 bit (older devices)</option>
             </select>
           </div>
-          <div class="field">
+          <div class="field" data-help="quality">
             <label for="opt-quality">Quality</label>
             <select id="opt-quality">
-              <option value="">As configured (default)</option>
-              <option value="auto">Auto-CQ on</option>
-              <option value="off">Auto-CQ off</option>
-              <option value="fixed">Fixed CQ…</option>
+              <option value="auto" id="opt-quality-auto">Auto CQ on</option>
+              <option value="fixed">Fixed CQ</option>
             </select>
           </div>
-          <div class="field" id="field-cq" hidden>
+          <div class="field" id="field-cq" data-help="cq" hidden>
             <label for="opt-cq">Fixed CQ</label>
-            <input type="number" id="opt-cq" value="28" min="1" max="51" />
+            <input type="number" id="opt-cq" value="26" min="1" max="51" />
           </div>
-          <div class="field">
-            <label for="opt-bitrate">Max bitrate (kbit/s, 0 = as configured)</label>
-            <input type="number" id="opt-bitrate" value="0" min="0" max="200000" />
+          <div class="field" data-help="bitrate">
+            <label for="opt-bitrate">Max bitrate (kbit/s)</label>
+            <input type="number" id="opt-bitrate" value="" min="100" max="200000" placeholder="as configured" />
           </div>
         </div>
         <div class="checks">
-          <label class="check"><input type="checkbox" id="opt-keep" /> Keep the source file where it is</label>
-          <label class="check"><input type="checkbox" id="opt-shutdown" /> Shut down the PC when finished</label>
+          <label class="check" data-help="keep"><input type="checkbox" id="opt-keep" /> Keep the source file where it is</label>
+          <label class="check" data-help="shutdown"><input type="checkbox" id="opt-shutdown" /> Shut down the PC when finished</label>
         </div>
         <div class="hint">
-          Anything left on “default” is not passed on — the value from NVENCForge_Config.ini applies.
+          Hold the mouse over a setting to see what it does and what your NVENCForge_Config.ini has it set to.
+          Anything left on “default” is not passed on — your INI applies.
           MP4 keeps every track for now; the track chooser arrives in stage 5.
         </div>
       </section>
@@ -339,6 +354,7 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
     </main>
   </div>
 </div>
+<div id="tip"></div>
 
 <script>
 "use strict";
@@ -358,7 +374,9 @@ const state = {
   byIndex: {},        // converter file number -> queue entry (result events only carry the number)
   eventChannel: false,
   converterFound: false,
-  forceDownload: false   // set after a download was held back on purpose
+  forceDownload: false,  // set after a download was held back on purpose
+  config: null,          // values read out of NVENCForge_Config.ini, null = not read (yet)
+  cqTouched: false       // true once the CQ box was edited by hand
 };
 
 const MAX_LOG_LINES = 400;
@@ -680,6 +698,9 @@ function onRunState(runState) {
       if (entry.status === "running") { entry.status = ""; entry.note = "no result reported"; }
     });
     renderQueue();
+    // The INI is written by NVENCForge itself, so on a fresh installation it
+    // only exists from the first run onwards — read it again now.
+    refreshConfig();
   }
   updateButtons();
 }
@@ -714,6 +735,178 @@ function showConverter(status) {
   state.forceDownload = false;
   if (status.note) note(status.note);
   updateButtons();
+}
+
+/* ---------- settings from the INI ----------
+   The window shows what is really in force, never a number of its own. If the
+   INI cannot be read, it says so instead of inventing a default — a wrong
+   number would be worse than none. */
+function iniNumber(key) {
+  const config = state.config;
+  if (!config || !config.found) return null;
+  const value = config[key];
+  return value > 0 ? value : null;
+}
+function isAV1() { return $("opt-codec").value === "av1"; }
+function keepsOriginalSize() { return $("opt-resolution").value === "original"; }
+
+// Which of the four caps applies is decided by the converter from codec and
+// resolution mode alone (main.go, parseArgs). This mirrors that decision, so
+// the number on screen is the number that will be used.
+function bitrateCapKey() {
+  if (isAV1()) return keepsOriginalSize() ? "av1MaxBitrateOriginal" : "av1MaxBitrate1080p";
+  return keepsOriginalSize() ? "maxBitrateOriginal" : "maxBitrate1080p";
+}
+function applyConfig(config) {
+  state.config = config || null;
+  refreshFromConfig();
+}
+// refreshFromConfig runs again on every codec or resolution change, because
+// both of them change which cap and which CQ apply.
+function refreshFromConfig() {
+  const cap = iniNumber(bitrateCapKey());
+  $("opt-bitrate").placeholder = cap ? cap + " (from your INI)" : "as configured";
+
+  const height = iniNumber("maxResolution");
+  $("opt-resolution-default").textContent = height
+    ? "Downscale to max " + height + "p (default)"
+    : "Downscale if needed (default)";
+
+  // Only until the box is edited by hand: after that the typed number stays,
+  // even when the codec changes.
+  if (!state.cqTouched) {
+    const fromIni = iniNumber(isAV1() ? "av1TargetCQ" : "targetCQ");
+    if (fromIni) $("opt-cq").value = fromIni;
+  }
+}
+function refreshConfig() {
+  try {
+    api().GetConfigView().then(applyConfig).catch(() => {});
+  } catch (err) {
+    // No connection to the app yet. Nothing to refresh, and nothing broken:
+    // the values are read again at the next opportunity.
+  }
+}
+
+/* ---------- help bubbles ----------
+   Every setting explains itself here, and each bubble also names the value
+   that is actually in force. A text that only repeated the label would be
+   worth nothing. */
+const HELP = {
+  codec: () => ({
+    title: "Codec",
+    text: "H.265 plays on nearly every device. AV1 gives clearly smaller files at the same quality, but it needs an RTX 40 card or newer to encode — and a fairly recent device to play back smoothly.",
+    now: "Default: H.265"
+  }),
+  encoder: () => ({
+    title: "Encoder",
+    text: "NVENC does the work on the graphics card and is many times faster. CPU mode needs no NVIDIA card at all, but takes roughly 40 minutes per hour of 1080p video.",
+    now: "Default: GPU / NVENC"
+  }),
+  container: () => ({
+    title: "Container",
+    text: "Only the file ending — the video itself is the same. MKV holds every track and chapter. MP4 is what phones, TVs and browsers expect; the video is re-tagged so Apple devices accept it.",
+    now: "Default: MKV"
+  }),
+  resolution: () => {
+    const height = iniNumber("maxResolution");
+    return {
+      title: "Resolution",
+      text: "Anything larger is scaled down and lightly sharpened. “Keep original” leaves 4K as 4K — and raises the bitrate ceiling automatically, so those files stay considerably bigger.",
+      now: height
+        ? "Your INI scales down to max " + height + "p (maxResolution)."
+        : "Your INI could not be read yet."
+    };
+  },
+  audio: () => ({
+    title: "Audio",
+    text: "Tracks in a format that is awkward to edit are re-encoded to AAC; tracks that are already fine are copied untouched either way. “Copy 1:1” keeps every track exactly as it is, whatever it is.",
+    now: "Default: AAC where needed"
+  }),
+  bitdepth: () => ({
+    title: "Bit depth",
+    text: "10 bit avoids visible banding in dark scenes and is the right choice for HDR. 8 bit is only for older devices that show a black screen on “Main 10” material.",
+    now: "Default: 10 bit"
+  }),
+  quality: () => {
+    const config = state.config;
+    const target = iniNumber("autoCQTargetVMAF");
+    let now = "Your INI could not be read yet.";
+    if (config && config.found && config.autoCQKnown) {
+      now = "Your INI has Auto CQ " + (config.autoCQ ? "on" : "off") +
+        (target ? ", aiming for a quality score of " + target + "." : ".");
+    }
+    return {
+      title: "Quality",
+      text: "Auto CQ encodes short samples, measures them against the source and picks the quality step that reaches the target — that costs a little time and saves a lot of space. “Fixed CQ” skips the measuring and uses exactly the number you enter.",
+      now: now
+    };
+  },
+  cq: () => {
+    const h265 = iniNumber("targetCQ");
+    const av1 = iniNumber("av1TargetCQ");
+    return {
+      title: "Fixed CQ",
+      text: "Lower number = better picture and bigger file. The scale differs per codec: 1–51 for H.265, 1–63 for AV1. Auto CQ stays switched off as long as a fixed value is set.",
+      now: (h265 || av1)
+        ? "Your INI: " + (h265 || "?") + " for H.265, " + (av1 || "?") + " for AV1."
+        : "Your INI could not be read yet."
+    };
+  },
+  bitrate: () => {
+    const cap = iniNumber(bitrateCapKey());
+    return {
+      title: "Max bitrate",
+      text: "The ceiling the encoder must not exceed, in kbit/s. Which one applies depends on codec and resolution — keeping the original resolution allows far more. Leave the box empty and your own setting applies.",
+      now: cap
+        ? "Applies to this run: " + cap + " kbit/s (" + bitrateCapKey() + ")."
+        : "Your INI could not be read yet."
+    };
+  },
+  keep: () => ({
+    title: "Keep the source file",
+    text: "The source stays exactly where it is. Without this it is moved to the “originals” folder after a successful run. The result is written to its own folder either way, so nothing is ever overwritten.",
+    now: "Default: off"
+  }),
+  shutdown: () => ({
+    title: "Shut down when finished",
+    text: "Shuts the PC down once the last file in the queue is done.",
+    now: "Default: off"
+  })
+};
+
+// The bubble is placed with fixed coordinates so it cannot be clipped by the
+// scrolling area, and it is remembered by target so moving the mouse inside a
+// field does not make it flicker.
+let tipTarget = null;
+function showTip(target) {
+  const build = HELP[target.dataset.help];
+  if (!build || tipTarget === target) return;
+  const help = build();
+  const tip = $("tip");
+  tip.innerHTML = "<b>" + help.title + "</b><br>" + help.text +
+    (help.now ? '<span class="now">' + help.now + "</span>" : "");
+  tip.style.display = "block";
+  placeTip(tip, target.getBoundingClientRect());
+  tipTarget = target;
+}
+function hideTip() {
+  tipTarget = null;
+  $("tip").style.display = "none";
+}
+function placeTip(tip, fieldBox) {
+  const margin = 8;
+  const tipBox = tip.getBoundingClientRect();
+  let top = fieldBox.bottom + margin;
+  if (top + tipBox.height > window.innerHeight - margin) {
+    top = fieldBox.top - tipBox.height - margin;
+  }
+  let left = fieldBox.left;
+  if (left + tipBox.width > window.innerWidth - margin) {
+    left = window.innerWidth - tipBox.width - margin;
+  }
+  tip.style.top = Math.max(margin, top) + "px";
+  tip.style.left = Math.max(margin, left) + "px";
 }
 
 /* ---------- actions ---------- */
@@ -798,7 +991,22 @@ function wire() {
     const input = $("opt-cq");
     input.max = max;
     if (parseInt(input.value, 10) > max) input.value = max;
+    refreshFromConfig();
   };
+  // Codec and resolution both decide which bitrate cap and which CQ apply, so
+  // the displayed values follow them immediately.
+  $("opt-resolution").onchange = refreshFromConfig;
+  $("opt-cq").oninput = () => { state.cqTouched = true; };
+
+  // One listener for the whole window instead of one per field: the settings
+  // page will add dozens more, and they will work without being registered.
+  document.addEventListener("mouseover", (e) => {
+    const field = e.target.closest("[data-help]");
+    if (field) showTip(field); else hideTip();
+  });
+  // Scrolling would leave the bubble hanging next to the wrong field. Capturing
+  // is needed because the scrolling happens in the content area, not on window.
+  window.addEventListener("scroll", hideTip, true);
 
   // Dropping files. This call is what actually arms it: without it the built-in
   // web view simply opens the dropped file for viewing, and the queue never
@@ -836,6 +1044,7 @@ async function boot() {
     const info = await api().GetStartupInfo();
     showGPU(info.gpu);
     showConverter(info.converter);
+    applyConfig(info.config);
   } catch (err) {
     showError("Startup check failed: " + err);
   }

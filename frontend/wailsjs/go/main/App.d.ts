@@ -6,6 +6,8 @@ export function AddPaths(arg1:Array<string>):Promise<Array<main.QueueItem>>;
 
 export function DownloadConverter(arg1:boolean):Promise<main.DownloadResult>;
 
+export function GetConfigView():Promise<main.ConfigView>;
+
 export function GetConverterStatus():Promise<main.ConverterStatus>;
 
 export function GetStartupInfo():Promise<main.StartupInfo>;
