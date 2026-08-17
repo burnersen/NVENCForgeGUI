@@ -28,12 +28,15 @@ func NewApp() *App {
 }
 
 // startup merkt sich den Zusammenhang, den Wails für Ereignisse und Dialoge
-// braucht, und schaltet das Hineinziehen von Dateien frei.
+// braucht.
+//
+// Das Hineinziehen von Dateien wird NICHT hier angemeldet: Die Ereigniskette
+// wird erst scharf, wenn die Fensterseite runtime.OnFileDrop aufruft. Ohne das
+// öffnet die eingebaute Webansicht die Datei einfach selbst — genau dieser
+// Fehler ist am 2026-08-17 aufgefallen. Der Aufruf steht deshalb in index.html,
+// dort wo er wirkt.
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
-	wailsruntime.OnFileDrop(ctx, func(x, y int, paths []string) {
-		wailsruntime.EventsEmit(ctx, "queue:dropped", expandPaths(paths))
-	})
 }
 
 // beforeClose verhindert das Schließen, solange ein Lauf aktiv ist.
@@ -45,8 +48,14 @@ func (a *App) beforeClose(ctx context.Context) bool {
 	if !a.runner.Running() {
 		return false
 	}
-	a.emit("conv:log", "[gui] A conversion is still running — stop it first, then close the window.")
+	a.note("A conversion is still running — stop it first, then close the window.")
 	return true
+}
+
+// note schreibt eine Meldung des Fensters selbst ins Protokoll. Die Vorsilbe
+// macht auf einen Blick klar, dass sie nicht vom Konverter stammt.
+func (a *App) note(text string) {
+	a.emit("conv:log", LogLine{Text: "[gui] " + text})
 }
 
 // emit schickt eine Meldung an die Oberfläche. Vor dem Start des Fensters gibt
@@ -75,10 +84,18 @@ func (a *App) GetConverterStatus() ConverterStatus {
 }
 
 // DownloadConverter holt die neueste NVENCForge.exe von GitHub.
-func (a *App) DownloadConverter() (ConverterStatus, error) {
-	return downloadConverter(a.ctx, func(done, total int64) {
+//
+// force=true spielt sie auch dann ein, wenn dabei der Datenkanal verloren geht.
+func (a *App) DownloadConverter(force bool) (DownloadResult, error) {
+	return downloadConverter(a.ctx, force, func(done, total int64) {
 		a.emit("conv:download", map[string]any{"done": done, "total": total})
 	})
+}
+
+// AddPaths nimmt Pfade entgegen, die ins Fenster gezogen wurden, und macht
+// daraus Einträge für die Warteschlange.
+func (a *App) AddPaths(paths []string) []QueueItem {
+	return expandPaths(paths)
 }
 
 // PickFiles öffnet den Dateidialog.
@@ -127,8 +144,7 @@ func (a *App) StartRun(request RunRequest) error {
 		return err
 	}
 	if !status.EventChannel {
-		a.emit("conv:log",
-			"[gui] This NVENCForge.exe has no event channel (-json): the progress bars stay empty, only the log fills up.")
+		a.note("This NVENCForge.exe has no event channel (-json): the progress bars stay empty, only the log fills up.")
 	}
 
 	// Arbeitsverzeichnis ist der tools-Ordner: dort liegen die Programmdatei,

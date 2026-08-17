@@ -268,27 +268,45 @@ func (w *progressWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// DownloadResult sagt der Oberfläche, was der Download bewirkt hat.
+type DownloadResult struct {
+	Status   ConverterStatus `json:"status"`
+	Replaced bool            `json:"replaced"`
+	Tag      string          `json:"tag"`
+	Message  string          `json:"message"`
+}
+
 // downloadConverter lädt die neueste NVENCForge.exe in den tools-Ordner.
 //
 // Geschrieben wird zuerst in eine Teildatei und erst nach vollständigem
 // Download umbenannt. Sonst bliebe nach einem Abbruch eine halbe exe liegen,
 // die beim nächsten Start als vorhanden gälte.
-func downloadConverter(ctx context.Context, report func(done, total int64)) (ConverterStatus, error) {
+//
+// force=false schützt vor einem Rückschritt: Kann die vorhandene Programmdatei
+// den Datenkanal und die geladene nicht, wird NICHT ersetzt. Sonst würde ein
+// Klick auf "update" die Fortschrittsanzeige stillschweigend abschalten —
+// genau das ist am 2026-08-17 passiert.
+func downloadConverter(ctx context.Context, force bool, report func(done, total int64)) (DownloadResult, error) {
+	before := converterStatus()
+	result := DownloadResult{Status: before}
+
 	release, err := fetchLatestRelease(ctx)
 	if err != nil {
-		return converterStatus(), err
+		return result, err
 	}
+	result.Tag = release.TagName
+
 	asset, err := pickConverterAsset(release)
 	if err != nil {
-		return converterStatus(), err
+		return result, err
 	}
 
 	dir, err := downloadDir()
 	if err != nil {
-		return converterStatus(), err
+		return result, err
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return converterStatus(), fmt.Errorf("converter.go: downloadConverter (MkdirAll): %w", err)
+		return result, fmt.Errorf("converter.go: downloadConverter (MkdirAll): %w", err)
 	}
 
 	targetPath := filepath.Join(dir, converterExeName)
@@ -299,24 +317,24 @@ func downloadConverter(ctx context.Context, report func(done, total int64)) (Con
 
 	req, err := http.NewRequestWithContext(downloadCtx, http.MethodGet, asset.URL, nil)
 	if err != nil {
-		return converterStatus(), fmt.Errorf("converter.go: downloadConverter (NewRequest): %w", err)
+		return result, fmt.Errorf("converter.go: downloadConverter (NewRequest): %w", err)
 	}
 	req.Header.Set("User-Agent", "NVENCForgeGUI")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return converterStatus(), fmt.Errorf("converter.go: downloadConverter (Do): %w", err)
+		return result, fmt.Errorf("converter.go: downloadConverter (Do): %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return converterStatus(), fmt.Errorf(
+		return result, fmt.Errorf(
 			"converter.go: downloadConverter: download answered %s", resp.Status)
 	}
 
 	part, err := os.Create(partPath)
 	if err != nil {
-		return converterStatus(), fmt.Errorf("converter.go: downloadConverter (Create): %w", err)
+		return result, fmt.Errorf("converter.go: downloadConverter (Create): %w", err)
 	}
 
 	counter := &progressWriter{total: asset.Size, report: report}
@@ -325,18 +343,26 @@ func downloadConverter(ctx context.Context, report func(done, total int64)) (Con
 
 	if copyErr != nil {
 		_ = os.Remove(partPath)
-		return converterStatus(), fmt.Errorf("converter.go: downloadConverter (Copy): %w", copyErr)
+		return result, fmt.Errorf("converter.go: downloadConverter (Copy): %w", copyErr)
 	}
 	if closeErr != nil {
 		_ = os.Remove(partPath)
-		return converterStatus(), fmt.Errorf("converter.go: downloadConverter (Close): %w", closeErr)
+		return result, fmt.Errorf("converter.go: downloadConverter (Close): %w", closeErr)
+	}
+
+	if !force && wouldLoseEventChannel(before, partPath) {
+		_ = os.Remove(partPath)
+		result.Message = "Release " + release.TagName + " has no event channel (-json), " +
+			"but the converter installed here has one. Nothing was replaced — " +
+			"the progress display would have stopped working."
+		return result, nil
 	}
 
 	// Eine laufende alte exe kann nicht überschrieben werden; die vorher zu
 	// entfernen ist der verlässlichere Weg als sich auf Rename zu verlassen.
 	_ = os.Remove(targetPath)
 	if err := os.Rename(partPath, targetPath); err != nil {
-		return converterStatus(), fmt.Errorf("converter.go: downloadConverter (Rename): %w", err)
+		return result, fmt.Errorf("converter.go: downloadConverter (Rename): %w", err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, versionFileName), []byte(release.TagName), 0o644); err != nil {
 		// Die Programmdatei liegt richtig — nur die Versionsnotiz fehlt. Das ist
@@ -347,5 +373,24 @@ func downloadConverter(ctx context.Context, report func(done, total int64)) (Con
 	if report != nil {
 		report(asset.Size, asset.Size)
 	}
-	return converterStatus(), nil
+	result.Replaced = true
+	result.Status = converterStatus()
+	result.Message = "NVENCForge " + release.TagName + " installed."
+	return result, nil
+}
+
+// wouldLoseEventChannel prüft, ob das Einspielen ein Rückschritt wäre.
+//
+// Lässt sich die geladene Datei nicht lesen, gilt sie als "kein Rückschritt" —
+// die Entscheidung darüber trifft dann die Prüfung nach dem Einspielen, und
+// die Oberfläche sagt es ohnehin an.
+func wouldLoseEventChannel(before ConverterStatus, downloadedPath string) bool {
+	if !before.Found || !before.EventChannel {
+		return false
+	}
+	hasChannel, err := fileContainsMarker(downloadedPath, jsonFlagMarker)
+	if err != nil {
+		return false
+	}
+	return !hasChannel
 }

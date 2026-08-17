@@ -46,8 +46,8 @@ func (c *liveCollector) emit(name string, data ...any) {
 			c.events = append(c.events, event)
 		}
 	case "conv:log":
-		if line, ok := data[0].(string); ok {
-			c.logLines = append(c.logLines, line)
+		if line, ok := data[0].(LogLine); ok && line.Text != "" {
+			c.logLines = append(c.logLines, line.Text)
 		}
 	case "conv:state":
 		if state, ok := data[0].(RunState); ok && !state.Running {

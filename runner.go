@@ -2,8 +2,13 @@
 //
 // Der Datenkanal (-json) liefert auf dem Hauptkanal je Ereignis eine Zeile
 // JSON; die für Menschen gedachte Anzeige läuft parallel über den Fehlerkanal
-// und landet unverändert im Protokoll. Diese Trennung ist der ganze Grund,
-// warum hier nichts mehr geraten werden muss.
+// und landet im Protokoll. Diese Trennung ist der Grund, warum am Fortschritt
+// nichts mehr geraten werden muss.
+//
+// Eine ÄLTERE Programmdatei kennt -json nicht. Dann kommt die komplette
+// Bildschirmausgabe über den Hauptkanal herein. Deshalb behandeln beide Leser
+// ihre Zeilen gleich: Was sich als Ereignis lesen lässt, ist eines — alles
+// andere ist Protokoll und wird genauso aufbereitet.
 package main
 
 import (
@@ -14,6 +19,7 @@ import (
 	"io"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -26,9 +32,32 @@ import (
 // Speicher nicht vollschreiben kann.
 const maxEventLine = 1 << 20
 
-// ansiPattern entfernt Farb- und Cursorbefehle aus der Bildschirmausgabe.
-// Im Protokollfenster wären sie unlesbarer Zeichensalat.
-var ansiPattern = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(\x07|\x1b\\)`)
+var (
+	// cursorUpPattern erkennt "gehe n Zeilen hoch". Genau damit zeichnet die
+	// Fortschrittsanzeige sich neu: Sie setzt den Cursor zurück und schreibt
+	// ihre Zeilen ein weiteres Mal. Ohne diese Auswertung würde das Protokoll
+	// pro Sekunde um zehn fast gleiche Zeilen wachsen.
+	cursorUpPattern = regexp.MustCompile(`\x1b\[([0-9]*)[AF]`)
+
+	// nonColorEscape entfernt alle Steuerbefehle AUSSER den Farben: Cursor
+	// bewegen, Zeile löschen, Fenstertitel setzen. Der einzige Endbuchstabe,
+	// der stehen bleibt, ist "m" — das sind die Farben.
+	nonColorEscape = regexp.MustCompile(`\x1b\[[0-9;?]*[@-ln-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)`)
+
+	// colorEscape dient nur zum Prüfen, ob nach Abzug der Farben überhaupt
+	// noch etwas Sichtbares übrig bleibt.
+	colorEscape = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+)
+
+// LogLine ist eine Zeile für das Protokollfenster.
+//
+// Back sagt, wie viele bereits angezeigte Zeilen diese hier ersetzt. So
+// verhält sich das Protokoll wie ein echtes Terminal: Die Fortschrittsanzeige
+// überschreibt sich selbst, statt sich zu stapeln.
+type LogLine struct {
+	Text string `json:"text"`
+	Back int    `json:"back"`
+}
 
 // RunState beschreibt, was gerade läuft — und wie ein Lauf ausgegangen ist.
 type RunState struct {
@@ -39,9 +68,6 @@ type RunState struct {
 }
 
 // Runner überwacht genau einen Konverter-Prozess.
-//
-// Mehr als einer ist erst für die Mehrfach-Verarbeitung vorgesehen; bis dahin
-// verhindert diese Beschränkung, dass zwei Läufe still übereinander schreiben.
 type Runner struct {
 	mu       sync.Mutex
 	cmd      *exec.Cmd
@@ -103,11 +129,11 @@ func (r *Runner) Start(exePath, workDir string, args []string) error {
 	readers.Add(2)
 	go func() {
 		defer readers.Done()
-		r.readEvents(stdout)
+		r.readChannel(stdout, true)
 	}()
 	go func() {
 		defer readers.Done()
-		r.readLog(stderr)
+		r.readChannel(stderr, false)
 	}()
 
 	go func() {
@@ -144,60 +170,89 @@ func (r *Runner) finish(waitErr error) {
 	r.emit("conv:state", state)
 }
 
-// readEvents liest den Datenkanal: eine Zeile JSON je Ereignis.
+// readChannel liest einen der beiden Ausgabekanäle.
 //
-// Was sich nicht als Ereignis lesen lässt, wird nicht verworfen, sondern ins
-// Protokoll gereicht. Stiller Verlust wäre der schlechteste Ausgang: dann
-// stünde die Anzeige still, ohne dass jemand den Grund sähe.
-func (r *Runner) readEvents(pipe io.Reader) {
-	scanner := bufio.NewScanner(pipe)
-	scanner.Buffer(make([]byte, 0, 64*1024), maxEventLine)
-
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
-		}
-		var event map[string]any
-		if err := json.Unmarshal([]byte(line), &event); err != nil {
-			r.emit("conv:log", line)
-			continue
-		}
-		if _, ok := event["ev"]; !ok {
-			r.emit("conv:log", line)
-			continue
-		}
-		r.emit("conv:event", event)
-	}
-	if err := scanner.Err(); err != nil {
-		r.emit("conv:log", "[event channel] "+err.Error())
-	}
-}
-
-// readLog liest die Bildschirmausgabe des Konverters für das Protokollfenster.
-func (r *Runner) readLog(pipe io.Reader) {
+// mayCarryEvents ist nur für den Hauptkanal wahr. Was sich dort nicht als
+// Ereignis lesen lässt, wird nicht verworfen, sondern wie Bildschirmausgabe
+// behandelt — genau dieser Fall tritt bei einer älteren Programmdatei ohne
+// Datenkanal für JEDE Zeile ein.
+func (r *Runner) readChannel(pipe io.Reader, mayCarryEvents bool) {
 	scanner := bufio.NewScanner(pipe)
 	scanner.Buffer(make([]byte, 0, 64*1024), maxEventLine)
 	scanner.Split(splitLinesAndReturns)
 
 	for scanner.Scan() {
-		line := strings.TrimRight(ansiPattern.ReplaceAllString(scanner.Text(), ""), " \t")
-		if strings.TrimSpace(line) == "" {
-			continue
+		raw := scanner.Text()
+		if mayCarryEvents {
+			if event, ok := parseEvent(raw); ok {
+				r.emit("conv:event", event)
+				continue
+			}
 		}
-		r.emit("conv:log", line)
+		r.emitLogLine(raw)
 	}
 	if err := scanner.Err(); err != nil {
-		r.emit("conv:log", "[log channel] "+err.Error())
+		r.emit("conv:log", LogLine{Text: "[gui] output channel: " + err.Error()})
 	}
+}
+
+// parseEvent versucht, aus einer Zeile ein Ereignis zu machen.
+func parseEvent(raw string) (map[string]any, bool) {
+	line := strings.TrimSpace(raw)
+	if !strings.HasPrefix(line, "{") {
+		return nil, false
+	}
+	var event map[string]any
+	if err := json.Unmarshal([]byte(line), &event); err != nil {
+		return nil, false
+	}
+	if _, ok := event["ev"]; !ok {
+		return nil, false
+	}
+	return event, true
+}
+
+// emitLogLine bereitet eine Zeile Bildschirmausgabe auf und schickt sie weiter.
+func (r *Runner) emitLogLine(raw string) {
+	if line, ok := toLogLine(raw); ok {
+		r.emit("conv:log", line)
+	}
+}
+
+// toLogLine macht aus roher Terminal-Ausgabe eine anzeigbare Zeile.
+//
+// Die Farben bleiben absichtlich erhalten: Das Fenster stellt sie genauso dar
+// wie das Terminal, und ohne sie wäre der Unterschied zwischen einem Hinweis
+// und einem Fehler nur noch am Wortlaut zu erkennen.
+func toLogLine(raw string) (LogLine, bool) {
+	back := 0
+	for _, match := range cursorUpPattern.FindAllStringSubmatch(raw, -1) {
+		count := 1
+		if match[1] != "" {
+			if parsed, err := strconv.Atoi(match[1]); err == nil {
+				count = parsed
+			}
+		}
+		back += count
+	}
+
+	text := strings.TrimRight(nonColorEscape.ReplaceAllString(raw, ""), " \t")
+	visible := strings.TrimSpace(colorEscape.ReplaceAllString(text, ""))
+	if visible == "" {
+		if back == 0 {
+			return LogLine{}, false
+		}
+		// Nichts zu zeigen, aber vorherige Zeilen sollen weg.
+		return LogLine{Back: back}, true
+	}
+	return LogLine{Text: text, Back: back}, true
 }
 
 // splitLinesAndReturns trennt zusätzlich am Wagenrücklauf.
 //
-// Die Fortschrittsanzeige zeichnet sich immer wieder über dieselbe Zeile und
-// beendet sie mit "\r" statt mit einem Zeilenumbruch. Ohne diese Trennung
-// wüchse daraus eine einzige riesige Zeile, die erst am Ende des Laufs im
-// Protokoll auftauchte.
+// Die Fortschrittsanzeige beendet ihre Zeile mit "\r" statt mit einem
+// Zeilenumbruch. Ohne diese Trennung wüchse daraus eine einzige riesige Zeile,
+// die erst am Ende des Laufs im Protokoll auftauchte.
 func splitLinesAndReturns(data []byte, atEOF bool) (int, []byte, error) {
 	if atEOF && len(data) == 0 {
 		return 0, nil, nil
@@ -230,11 +285,11 @@ func (r *Runner) RequestStop() error {
 	if err := requestCleanStop(pid); err != nil {
 		return err
 	}
+	note := "[gui] Clean stop requested. The part already encoded is finalised as a playable preview."
 	if alreadyStopping {
-		r.emit("conv:log", "[gui] Stop requested a second time — NVENCForge quits immediately.")
-	} else {
-		r.emit("conv:log", "[gui] Clean stop requested. The part already encoded is finalised as a playable preview.")
+		note = "[gui] Stop requested a second time — NVENCForge quits immediately."
 	}
+	r.emit("conv:log", LogLine{Text: note})
 	r.emit("conv:state", RunState{Running: true, Stopping: true})
 	return nil
 }

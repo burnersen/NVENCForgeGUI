@@ -32,9 +32,6 @@ html, body {
   background: var(--bg);
   color: var(--text);
   font: 14px/1.5 "Segoe UI", system-ui, sans-serif;
-  /* Wails uses this property to decide where a dropped file is accepted.
-     On <body> the whole window takes files. */
-  --wails-drop-target: drop;
   user-select: none;
   overflow: hidden;
 }
@@ -166,15 +163,16 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
   background: var(--panel-2); border: 1px solid var(--line); font-size: 13px; display: none;
 }
 
-/* ---------- log ---------- */
+/* ---------- log ----------
+   The converter draws a real terminal picture. Its colours are kept and shown
+   as they are meant to look; only the cursor commands are removed. */
 #logbox {
   background: #0d0d0f; border: 1px solid var(--line); border-radius: 8px;
-  padding: 8px 10px; height: 190px; overflow-y: auto;
-  font: 12px/1.55 Consolas, "Cascadia Mono", monospace; white-space: pre-wrap;
-  word-break: break-word; user-select: text;
+  padding: 8px 10px; height: 220px; overflow-y: auto;
+  font: 12px/1.5 Consolas, "Cascadia Mono", monospace; white-space: pre;
+  overflow-x: auto; user-select: text; color: #c8c8ce;
 }
-#logbox div.warn { color: var(--warn); }
-#logbox div.bad { color: var(--bad); }
+#logbox div { min-height: 1.5em; }
 #logbox div.gui { color: var(--accent); }
 .spacer { flex: 1; }
 .err { color: var(--bad); font-size: 12.5px; }
@@ -359,7 +357,8 @@ const state = {
   current: null,      // queue entry being worked on
   byIndex: {},        // converter file number -> queue entry (result events only carry the number)
   eventChannel: false,
-  converterFound: false
+  converterFound: false,
+  forceDownload: false   // set after a download was held back on purpose
 };
 
 const MAX_LOG_LINES = 400;
@@ -379,23 +378,89 @@ function setBar(barId, pctId, value, known) {
 }
 function showError(message) { $("error-text").textContent = message || ""; }
 
-/* ---------- log ---------- */
-function log(line, kind) {
+/* ---------------------------------------------------------------------------
+   Log. The converter writes a real terminal picture: colours as escape codes,
+   and it redraws its progress display by jumping back a few lines. Both are
+   reproduced here — colours become real colours, and a redraw removes exactly
+   the lines it overwrites instead of piling up ten near-identical rows per
+   second.
+   --------------------------------------------------------------------------- */
+const SGR_FOREGROUND = {
+  30: "#4a4a52", 31: "#e06c6c", 32: "#4ec97a", 33: "#e8b53c",
+  34: "#5b8dd6", 35: "#c07ad6", 36: "#3fbcc9", 37: "#c8c8ce",
+  90: "#7c7c86", 91: "#ff8b8b", 92: "#7ee59f", 93: "#ffd166",
+  94: "#82b1ff", 95: "#e0a6f5", 96: "#5fe0ec", 97: "#ffffff"
+};
+const SGR_BACKGROUND = {
+  40: "#0d0d0f", 41: "#5a2626", 42: "#1f5233", 43: "#5c4a1c",
+  44: "#24436e", 45: "#4a2a5a", 46: "#1c5057", 47: "#3a3a42",
+  100: "#3a3a42", 101: "#7c3a3a", 102: "#2f6b45", 103: "#7c6528",
+  104: "#35598f", 105: "#633a7a", 106: "#2a6b74", 107: "#54545e"
+};
+const SGR_PATTERN = /\x1b\[([0-9;]*)m/g;
+
+function applySGR(style, parameters) {
+  const codes = (parameters === "" ? "0" : parameters).split(";").map(Number);
+  for (const code of codes) {
+    if (code === 0) { style.fg = null; style.bg = null; style.bold = false; }
+    else if (code === 1) style.bold = true;
+    else if (code === 22) style.bold = false;
+    else if (code === 39) style.fg = null;
+    else if (code === 49) style.bg = null;
+    else if (SGR_FOREGROUND[code]) style.fg = SGR_FOREGROUND[code];
+    else if (SGR_BACKGROUND[code]) style.bg = SGR_BACKGROUND[code];
+  }
+}
+
+function renderTerminalText(raw) {
+  const fragment = document.createDocumentFragment();
+  const style = { fg: null, bg: null, bold: false };
+  let cursor = 0, match;
+
+  const push = (text) => {
+    if (!text) return;
+    const span = document.createElement("span");
+    span.textContent = text;
+    if (style.fg) span.style.color = style.fg;
+    if (style.bg) span.style.background = style.bg;
+    if (style.bold) span.style.fontWeight = "600";
+    fragment.appendChild(span);
+  };
+
+  SGR_PATTERN.lastIndex = 0;
+  while ((match = SGR_PATTERN.exec(raw)) !== null) {
+    push(raw.slice(cursor, match.index));
+    applySGR(style, match[1]);
+    cursor = SGR_PATTERN.lastIndex;
+  }
+  push(raw.slice(cursor));
+  return fragment;
+}
+
+function log(line) {
   const box = $("logbox");
+  const entry = typeof line === "string" ? { text: line, back: 0 } : line;
+
+  // A redraw first takes back what it overwrites.
+  for (let i = 0; i < (entry.back || 0) && box.lastElementChild; i++) {
+    box.removeChild(box.lastElementChild);
+  }
+  if (!entry.text) return;
+
   const row = document.createElement("div");
-  if (kind) row.className = kind;
-  row.textContent = line;
+  if (entry.text.startsWith("[gui]")) {
+    row.className = "gui";
+    row.textContent = entry.text;
+  } else {
+    row.appendChild(renderTerminalText(entry.text));
+  }
   box.appendChild(row);
   while (box.childElementCount > MAX_LOG_LINES) box.removeChild(box.firstChild);
   if ($("opt-autoscroll").checked) box.scrollTop = box.scrollHeight;
 }
-function classifyLogLine(line) {
-  if (line.startsWith("[gui]")) return "gui";
-  const upper = line.toUpperCase();
-  if (upper.includes("ERROR") || upper.includes("FAILED")) return "bad";
-  if (upper.includes("WARNING") || upper.includes("ABORT")) return "warn";
-  return "";
-}
+
+// note is what the window itself has to say, never the converter.
+function note(text) { log({ text: "[gui] " + text, back: 0 }); }
 
 /* ---------- queue rendering ---------- */
 function renderQueue() {
@@ -455,7 +520,7 @@ function addItems(items) {
     state.queue.push(Object.assign({ status: "", note: "" }, item));
     added++;
   }
-  if (added > 0) log("[gui] " + added + " file(s) added to the queue.", "gui");
+  if (added > 0) note(added + " file(s) added to the queue.");
   afterQueueChange();
 }
 function findEntry(path) {
@@ -499,8 +564,8 @@ function updateOverall(currentFraction) {
 function onRunStart(event) {
   resetProgress();
   state.queue.forEach((entry) => { entry.status = ""; entry.note = "queued"; });
-  log("[gui] Run started: " + event.mode + ", " + event.codec + " on " + event.encoder +
-      ", " + event.files + " file(s), NVENCForge " + event.version, "gui");
+  note("Run started: " + event.mode + ", " + event.codec + " on " + event.encoder +
+      ", " + event.files + " file(s), NVENCForge " + event.version);
   renderQueue();
 }
 function onFileStart(event) {
@@ -554,8 +619,8 @@ function onResult(event) {
     if (event.message) entry.note += " (" + event.message + ")";
   }
   if (event.status === "success") {
-    log("[gui] " + event.name + ": " + fmtMB(event.in_mb) + " → " + fmtMB(event.out_mb) +
-        " (" + event.saved_pct.toFixed(1) + " % smaller)", "gui");
+    note(event.name + ": " + fmtMB(event.in_mb) + " → " + fmtMB(event.out_mb) +
+        " (" + event.saved_pct.toFixed(1) + " % smaller)");
   }
   renderQueue();
 }
@@ -580,7 +645,7 @@ function onConverterEvent(event) {
     case "progress": onProgress(event); break;
     case "result": onResult(event); break;
     case "summary": onSummary(event); break;
-    default: log("[gui] unknown event: " + JSON.stringify(event), "gui");
+    default: note("unknown event: " + JSON.stringify(event));
   }
 }
 
@@ -594,11 +659,11 @@ function onRunState(runState) {
     $("nowstage").textContent = "";
     if (runState.error) {
       showError(runState.error);
-      log("[gui] Could not run NVENCForge: " + runState.error, "bad");
+      note("Could not run NVENCForge: " + runState.error);
     } else if (runState.exitCode !== 0) {
-      log("[gui] NVENCForge ended with exit code " + runState.exitCode + ".", "warn");
+      note("NVENCForge ended with exit code " + runState.exitCode + ".");
     } else {
-      log("[gui] NVENCForge finished.", "gui");
+      note("NVENCForge finished.");
     }
     // Anything still marked as running never reported a result.
     state.queue.forEach((entry) => {
@@ -627,17 +692,17 @@ function showConverter(status) {
   if (!status.found) {
     dot.className = "dot bad";
     text.textContent = "NVENCForge.exe missing";
-    download.hidden = false;
-    download.textContent = "download";
+    download.textContent = "get it from GitHub";
   } else {
     dot.className = "dot " + (status.eventChannel ? "ok" : "warn");
     text.innerHTML = "<b>NVENCForge " + status.version + "</b> · " +
       (status.eventChannel ? "event channel" : "no event channel") +
       (status.ffmpegPresent ? "" : " · FFmpeg is fetched on first run");
-    download.hidden = false;
-    download.textContent = "update";
+    download.textContent = "check GitHub";
   }
-  if (status.note) log("[gui] " + status.note, "gui");
+  download.hidden = false;
+  state.forceDownload = false;
+  if (status.note) note(status.note);
   updateButtons();
 }
 
@@ -666,7 +731,7 @@ async function start() {
     await api().StartRun(collectRequest());
   } catch (err) {
     showError(String(err));
-    log("[gui] Start refused: " + err, "bad");
+    note("Start refused: " + err);
   }
 }
 async function stop() {
@@ -679,17 +744,29 @@ async function stop() {
     showError(String(err));
   }
 }
+// download fetches the latest release. It never silently replaces a converter
+// that can report progress with one that cannot — that would switch off the
+// whole progress display without saying so. The second click does it anyway,
+// on purpose.
 async function download() {
   const button = $("btn-download");
+  const force = state.forceDownload === true;
   button.disabled = true;
   showError("");
-  log("[gui] Fetching the latest NVENCForge.exe from GitHub…", "gui");
+  note("Asking GitHub for the latest NVENCForge…");
   try {
-    showConverter(await api().DownloadConverter());
-    log("[gui] Download finished.", "gui");
+    const result = await api().DownloadConverter(force);
+    if (result.message) note(result.message);
+    if (result.replaced) {
+      state.forceDownload = false;
+      showConverter(result.status);
+    } else {
+      state.forceDownload = true;
+      button.textContent = "install " + (result.tag || "it") + " anyway";
+    }
   } catch (err) {
     showError(String(err));
-    log("[gui] Download failed: " + err, "bad");
+    note("Download failed: " + err);
   } finally {
     button.disabled = false;
   }
@@ -713,15 +790,27 @@ function wire() {
     if (parseInt(input.value, 10) > max) input.value = max;
   };
 
-  // Visual feedback only — the real drop is handled by Wails (OnFileDrop).
+  // Dropping files. This call is what actually arms it: without it the built-in
+  // web view simply opens the dropped file for viewing, and the queue never
+  // hears about it. The second argument false means "the whole window takes
+  // files", not just one marked element.
   const zone = $("dropzone");
+  window.runtime.OnFileDrop(async (x, y, paths) => {
+    zone.classList.remove("hot");
+    if (!paths || !paths.length) return;
+    try {
+      addItems(await api().AddPaths(paths));
+    } catch (err) {
+      showError(String(err));
+    }
+  }, false);
+
   window.addEventListener("dragover", (e) => { e.preventDefault(); zone.classList.add("hot"); });
   window.addEventListener("dragleave", () => zone.classList.remove("hot"));
   window.addEventListener("drop", () => zone.classList.remove("hot"));
 
-  window.runtime.EventsOn("queue:dropped", (items) => { zone.classList.remove("hot"); addItems(items); });
   window.runtime.EventsOn("conv:event", onConverterEvent);
-  window.runtime.EventsOn("conv:log", (line) => log(line, classifyLogLine(line)));
+  window.runtime.EventsOn("conv:log", log);
   window.runtime.EventsOn("conv:state", onRunState);
   window.runtime.EventsOn("conv:download", (info) => {
     if (!info.total) return;

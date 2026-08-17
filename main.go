@@ -36,10 +36,11 @@ func main() {
 		BackgroundColour: &options.RGBA{R: 18, G: 18, B: 20, A: 1},
 		DragAndDrop: &options.DragAndDrop{
 			EnableFileDrop: true,
-			// Ohne das Abschalten öffnet die eingebaute Webansicht eine
-			// hineingezogene Datei einfach selbst — die Warteschlange bekäme
-			// davon nichts mit.
-			DisableWebViewDrop: true,
+			// DisableWebViewDrop darf hier NICHT gesetzt werden: Es schaltet
+			// über AllowExternalDrag(false) den kompletten Weg ab, über den
+			// die Dateipfade überhaupt erst hereinkommen. Verhindert wird das
+			// Öffnen in der Webansicht stattdessen dadurch, dass die
+			// Fensterseite runtime.OnFileDrop anmeldet (siehe index.html).
 		},
 		Windows: &windows.Options{
 			WebviewIsTransparent: false,
