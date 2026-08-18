@@ -1,62 +1,118 @@
 # NVENCForgeGUI
 
-A desktop window for [NVENCForge](https://github.com/burnersen/NVENCForge).
+**A window for [NVENCForge](https://github.com/burnersen/NVENCForge) — for everyone who would rather click than type.**
 
-The window never re-implements the converter. It starts the unchanged
-`NVENCForge.exe` as a separate process, passes the chosen options on the
-command line and reads its machine-readable event channel (`-json`). Whatever
-the converter decides — quality, bitrate caps, GPU capability probing — stays
-exactly as it is on the command line.
+Drop your videos in, press Start, watch it happen. Same converter, same
+results, same settings file — just visible.
 
-## The download chain
+<!-- Screenshot goes here, e.g. docs/screenshot.png -->
 
-You download the window. The window downloads `NVENCForge.exe` from its latest
-GitHub release into `tools\`. On its first run `NVENCForge.exe` downloads
-FFmpeg by itself. Nothing else has to be installed.
+---
 
-If a `tools\NVENCForge.exe` is already there it is used as it is — that is how
-a locally built converter can be tested before it is released.
+## What you get
 
-## Layout
+- **Drag and drop** — files or whole folders, subfolders included.
+- **Live progress** — one line per running converter: file, bar, speed, ETA, bitrate, output size so far.
+- **Up to three videos at once.** Measured here with four 90-second clips: two at a time took **52 seconds instead of 72**. A third brought nothing more — the graphics card is busy by then. You pick 1, 2 or 3.
+- **Watch a folder.** Point it at your downloads folder and forget about it: every video that lands there is converted on its own. A file is only picked up once it has stopped growing for 30 seconds, so a download in progress is left alone.
+- **The lossless tools, with buttons:** split a video into its parts, join them back together, or prepare everything for DaVinci Resolve.
+- **The track chooser** — when a file has several audio tracks or subtitles, you tick what you want instead of typing numbers.
+- **Every setting explained.** The Settings page is built from `NVENCForge_Config.ini` itself: hover over anything and it tells you what it does, what is allowed, and what your file currently says.
+- **Stop one, or stop all.** Each converter has its own ✕; what is already encoded is kept as a playable preview.
 
-| Path | What it is |
-|---|---|
-| `main.go` | window, size, drag and drop |
-| `app.go` | every method the window may call |
-| `runner.go` | starts the converter, reads its two channels |
-| `wincon.go` | hidden console and the clean stop |
-| `converter.go` | finding, checking and downloading `NVENCForge.exe` |
-| `queue.go` | dropped files and folders become a queue |
-| `runargs.go` | the options become a command line |
-| `frontend/dist/index.html` | the whole window: HTML, CSS and JavaScript, no build step |
+## Getting started
 
-## Building
+1. Download `NVENCForgeGUI.exe` from the [releases](../../releases) and put it wherever you like.
+2. Start it. If `NVENCForge.exe` is missing, one click fetches the latest one from its own repository — and it then sets itself up (configuration file and FFmpeg) without you doing anything else.
+3. Drop a video in and press Start.
+
+Nothing is installed, nothing is written to the registry. Delete the folder and
+it is gone.
+
+**You need:** Windows 10 or 11 and an NVIDIA graphics card (GTX 10 series or
+newer). Without one, NVENCForge can still convert on the processor — slower,
+but it works.
+
+## The window never converts anything itself
+
+It starts the unchanged `NVENCForge.exe` as a separate process, hands it the
+options on the command line and reads its machine-readable event channel
+(`-json`). Quality decisions, bitrate caps, the GPU capability probe — all of
+that stays exactly where it was. If a converter is already sitting in `tools\`,
+it is used as it is.
+
+That is the design rule throughout: **no button may lie.** What is not built is
+greyed out rather than pretending to work, and nothing on screen claims
+anything the converter did not report.
+
+<details>
+<summary><b>How several converters share the work</b></summary>
+
+Each file gets its own process, and up to three run side by side.
+
+The obvious alternative — handing the same file list to every instance and
+letting the converter's own `.lock` files sort it out — was measured and
+dropped. It is a race: when one instance moves a finished original into
+`originals` while another is still probing that same file, the second one
+reports *"No such file or directory"* for a file that is in fact finished. One
+process per file is just as fast (53 seconds against 52) and reports honestly.
+
+The tool modes (Split, Join, DaVinci) always run one at a time. They copy
+instead of encoding — the disk is the limit there, not the card — and they ask
+about tracks, where two dialogs at once would be a nuisance.
+
+</details>
+
+<details>
+<summary><b>Building it yourself</b></summary>
+
+Needs [Go](https://go.dev/) and [Wails v2](https://wails.io/).
 
 ```
 wails build
 ```
 
-Put `NVENCForge.exe` (and, if you want to skip the first download, `ffmpeg.exe`
-and `ffprobe.exe`) into a `tools\` folder next to the built exe.
+**Without `-clean`** — that would delete `build\bin\tools\` and with it the
+converter sitting next to the window.
 
-## Tests
+The interface is a single HTML file with no build step: no npm, no bundler, no
+node_modules.
+
+</details>
+
+<details>
+<summary><b>Tests</b></summary>
 
 ```
-go test .
+go test ./...
+node frontend\progress_check.js
+node frontend\options_check.js
+node frontend\settings_check.js
+node frontend\davinci_check.js
+node frontend\split_check.js
+node frontend\join_check.js
+node frontend\watch_check.js
+node frontend\parallel_check.js
 ```
 
-The two live checks in `runner_live_test.go` run a real conversion and are
-skipped unless they are asked for:
+The `*_check.js` files run the window's own script without a browser and check
+what the display really does: that a bar never reports more than the converter
+said, that the start button carries the mode of the page you are on, that an
+answer goes back to the converter that asked. Every check is written so that
+breaking the code on purpose makes it fail — a check that stays green when the
+code is wrong is worth nothing.
 
-```
-$env:NVENCFORGEGUI_LIVE = "1"
-$env:NVENCFORGEGUI_LIVE_SHORT = "C:\path\to\a\short.mkv"
-$env:NVENCFORGEGUI_LIVE_LONG  = "C:\path\to\a\long.mkv"
-go test -run TestLive -v .
-```
+The live tests (`NVENCFORGEGUI_LIVE=1`) go further and start the real converter
+on a real file.
 
-## Status
+</details>
 
-Stage 3 of 8: the Convert area works — queue, options, real progress, clean
-stop. Settings, the tool modes with their track chooser, parallel runs and
-folder watching are not built yet and are shown as disabled in the window.
+## Feedback
+
+Something unclear, something missing, something behaving oddly? Open an issue —
+a short one is fine. Nobody has ever complained too much.
+
+---
+
+Free for personal use. Built for my own media library, shared because it might
+save you the evening it saved me.
