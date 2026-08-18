@@ -57,7 +57,7 @@ func TestFolderScanSkipsOwnResults(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "notes.txt"))
 	writeFile(t, filepath.Join(dir, "sub", "clip.mp4"))
 
-	items := expandPaths([]string{dir})
+	items, _ := expandPaths([]string{dir})
 	var names []string
 	for _, item := range items {
 		names = append(names, item.Name)
@@ -82,7 +82,7 @@ func TestExplicitFileIsAlwaysKept(t *testing.T) {
 	path := filepath.Join(dir, "movie.h265.mkv")
 	writeFile(t, path)
 
-	items := expandPaths([]string{path})
+	items, _ := expandPaths([]string{path})
 	if len(items) != 1 {
 		t.Fatalf("an explicitly added file must stay, got %d entries", len(items))
 	}
@@ -93,7 +93,7 @@ func TestDuplicatesAreDroppedOnce(t *testing.T) {
 	path := filepath.Join(dir, "movie.mkv")
 	writeFile(t, path)
 
-	items := expandPaths([]string{path, path, dir})
+	items, _ := expandPaths([]string{path, path, dir})
 	if len(items) != 1 {
 		t.Fatalf("the same file must appear once, got %d entries", len(items))
 	}
@@ -105,5 +105,49 @@ func TestVideoFilterPatternCoversEveryExtension(t *testing.T) {
 		if !strings.Contains(pattern, "*"+extension) {
 			t.Errorf("file dialog pattern is missing %q: %s", extension, pattern)
 		}
+	}
+}
+
+// TestExpandPathsReportsRejectedFiles: Eine abgelegte Ton- oder Untertiteldatei
+// verschwand früher wortlos aus der Warteschlange. Genau das tut jemand, der
+// das Zusammenfügen sucht — er soll erfahren, dass die Datei hier nichts
+// verloren hat, statt sie sich auflösen zu sehen.
+func TestExpandPathsReportsRejectedFiles(t *testing.T) {
+	dir := t.TempDir()
+	video := filepath.Join(dir, "film.mkv")
+	audio := filepath.Join(dir, "film.ger.ac3")
+	subs := filepath.Join(dir, "film.ger.srt")
+	for _, path := range []string{video, audio, subs} {
+		writeFile(t, path)
+	}
+
+	items, rejected := expandPaths([]string{video, audio, subs})
+	if len(items) != 1 {
+		t.Fatalf("%d Dateien in der Warteschlange, erwartet 1: %+v", len(items), items)
+	}
+	if len(rejected) != 2 {
+		t.Fatalf("%d abgelehnte gemeldet, erwartet 2: %v", len(rejected), rejected)
+	}
+	for _, name := range rejected {
+		if name != "film.ger.ac3" && name != "film.ger.srt" {
+			t.Errorf("unerwartete Meldung: %q", name)
+		}
+	}
+}
+
+// Ein durchsuchter ORDNER meldet nichts: Dort ist Fremdmaterial normal, und
+// eine Zeile je Datei würde das Protokoll fluten.
+func TestExpandPathsStaysQuietForFolders(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "film.mkv"))
+	writeFile(t, filepath.Join(dir, "notiz.txt"))
+	writeFile(t, filepath.Join(dir, "bild.jpg"))
+
+	items, rejected := expandPaths([]string{dir})
+	if len(items) != 1 {
+		t.Fatalf("%d Dateien gefunden, erwartet 1", len(items))
+	}
+	if len(rejected) != 0 {
+		t.Errorf("aus einem Ordner darf nichts gemeldet werden, bekommen: %v", rejected)
 	}
 }

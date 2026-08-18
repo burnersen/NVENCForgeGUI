@@ -566,9 +566,16 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
         <h2>What this does</h2>
         <p class="lead">
           Builds one new MKV out of separate parts: a video file plus the
-          audio and subtitle files you drop next to it. Every stream is copied
-          exactly as it is — nothing is re-encoded.
+          audio and subtitle files you drop next to it.
         </p>
+        <div class="row" style="margin-bottom:10px">
+          <label for="join-mode">Result</label>
+          <select id="join-mode">
+            <option value="join">1:1 — everything copied unchanged</option>
+            <option value="joindavinci">Resolve-ready — AAC audio, cleaned subtitles</option>
+          </select>
+        </div>
+        <div class="hint" id="join-mode-hint"></div>
         <details><summary>The details</summary>
         <ul class="notes">
           <li>The audio files you add <b>replace</b> the sound of the video file. Add subtitles only, and the video keeps its own sound.</li>
@@ -576,7 +583,7 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
           <li>Your files stay where they are; the result is always a new file next to the video file.</li>
           <li>One job per run: exactly one video file, plus at least one audio or subtitle file.</li>
           <li>A <b>.sub</b> only works together with its <b>.idx</b> of the same name — drop both.</li>
-          <li>The converter names the result itself: it tidies the base name (spaces become dots) and falls back to <b>.joined2.mkv</b> if that name is already taken.</li>
+          <li>The converter names the result itself: it tidies the base name (spaces become dots) and picks another name if that one is taken.</li>
         </ul></details>
         <div class="hint">
           The video can be <b>.mkv .mp4 .m4v .mov</b> — other formats
@@ -1429,7 +1436,7 @@ function isToolRun() { return state.runMode !== "convert"; }
 // — it has its own list. Without this, queue entries left over from another
 // page would be marked as if they were part of this run, and the file the
 // converter names would light up in a list it never came from.
-function runUsesQueue() { return state.runMode !== "join"; }
+function runUsesQueue() { return !isJoinMode(state.runMode); }
 
 // markProcessed closes a queue entry that will never get a result event. It
 // deliberately does not claim success: whether every track really came out is
@@ -2446,6 +2453,42 @@ const MODE_PAGES = {
   split: { mode: "split", start: "Split losslessly" },
   join: { mode: "join", start: "Join into one MKV" }
 };
+
+/* ---------- the two ways of joining ----------
+   Both take the same files and hand the converter the same list, but they are
+   not the same job: -join copies everything as it is, -davinci re-encodes the
+   audio Resolve cannot read and cleans the subtitles. The Join page would have
+   quietly offered only the first one, so the second half of the DaVinci
+   workflow was missing from the window entirely. */
+const JOIN_MODES = {
+  join: {
+    start: "Join into one MKV",
+    hint: "Every stream is copied exactly as it is — nothing is re-encoded, " +
+          "so this is the way back from Split."
+  },
+  joindavinci: {
+    start: "Join for Resolve",
+    hint: "Audio that DaVinci Resolve cannot read — AC3, E-AC3, DTS, TrueHD, " +
+          "Opus, Vorbis, FLAC, anything above 5.1 or above 48 kHz — is re-encoded " +
+          "to AAC, and subtitles are cleaned along the way. The picture is copied " +
+          "either way."
+  }
+};
+function joinMode() {
+  const chosen = $("join-mode").value;
+  return JOIN_MODES[chosen] ? chosen : "join";
+}
+function isJoinMode(mode) { return mode === "join" || mode === "joindavinci"; }
+function applyJoinMode() {
+  const mode = joinMode();
+  $("join-mode-hint").textContent = JOIN_MODES[mode].hint;
+  // Only take over the running mode while the Join page is the one on show —
+  // otherwise a change here would rename another page's start button.
+  if (state.page === "join") {
+    state.mode = mode;
+    $("btn-start").textContent = JOIN_MODES[mode].start;
+  }
+}
 const PAGES = ["convert", "davinci", "split", "join", "settings"];
 
 function showPage(name) {
@@ -2471,6 +2514,8 @@ function showPage(name) {
     state.mode = mode.mode;
     $("btn-start").textContent = mode.start;
   }
+  // The Join page decides between its two routes itself.
+  if (name === "join") applyJoinMode();
 
   hideTip();
   // Each page has its own condition for starting (the queue on most, the join
@@ -2488,7 +2533,7 @@ function collectRequest(modeOverride, filesOverride, extra) {
   return Object.assign({
     mode: mode,
     // Joining draws from its own list — the queue belongs to the other pages.
-    files: filesOverride || (mode === "join" ? joinRunFiles() : state.queue.map((entry) => entry.path)),
+    files: filesOverride || (isJoinMode(mode) ? joinRunFiles() : state.queue.map((entry) => entry.path)),
     codec: $("opt-codec").value,
     encoder: $("opt-encoder").value,
     container: $("opt-container").value,
@@ -2591,6 +2636,7 @@ function wire() {
   $("btn-log-clear").onclick = () => { $("logbox").innerHTML = ""; state.lastLogSlot = 0; clearProgress(); };
   $("btn-settings-save").onclick = saveSettings;
   $("btn-settings-defaults").onclick = restoreDefaults;
+  $("join-mode").onchange = applyJoinMode;
   $("btn-srt-add").onclick = addSRTPhrase;
   $("btn-srt-save").onclick = saveSRTPhrases;
   // Enter in the phrase box adds it — typing a list one line at a time

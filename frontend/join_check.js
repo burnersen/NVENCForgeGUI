@@ -187,5 +187,44 @@ gui.addJoinPaths([german.path]).then(() => {
   checker.check("split keeps its queue", gui.runUsesQueue(), true);
   checker.check("and is still a tool run", gui.isToolRun(), true);
 
+  // The two ways of joining send the same files but do NOT do the same job:
+  // -join copies everything, -davinci re-encodes the audio Resolve cannot read
+  // and cleans the subtitles. A start button that quietly ran the wrong one
+  // would either lose the AAC conversion or re-encode a lossless round trip.
+  console.log("\nThe join page offers both routes");
+  gui.showPage("join");
+  element("join-mode").value = "join";
+  gui.applyJoinMode();
+  checker.check("1:1 is the mode", gui.state.mode, "join");
+  checker.check("and the button says so", element("btn-start").textContent, "Join into one MKV");
+  checker.contains("the hint mentions copying", element("join-mode-hint").textContent, "copied exactly as it is");
+
+  element("join-mode").value = "joindavinci";
+  gui.applyJoinMode();
+  checker.check("Resolve-ready is the mode", gui.state.mode, "joindavinci");
+  checker.check("and the button changes", element("btn-start").textContent, "Join for Resolve");
+  checker.contains("the hint names AAC", element("join-mode-hint").textContent, "AAC");
+
+  console.log("\nBoth routes draw from the join list, the others do not");
+  checker.check("1:1 does", gui.isJoinMode("join"), true);
+  checker.check("Resolve-ready does", gui.isJoinMode("joindavinci"), true);
+  checker.check("splitting does not", gui.isJoinMode("split"), false);
+  checker.check("converting does not", gui.isJoinMode(""), false);
+
+  // A run started as -davinci from the join page must not eat the queue of the
+  // other pages either — it is still a join.
+  gui.onConverterEvent({ ev: "run", mode: "joindavinci", version: "1.18.0" });
+  checker.check("a Resolve join spares the queue", gui.runUsesQueue(), false);
+
+  console.log("\nAn unknown value falls back instead of sending nonsense");
+  element("join-mode").value = "something-else";
+  checker.check("falls back to 1:1", gui.joinMode(), "join");
+
+  console.log("\nThe choice leaves another page's button alone");
+  gui.showPage("split");
+  element("join-mode").value = "joindavinci";
+  gui.applyJoinMode();
+  checker.check("split keeps its mode", gui.state.mode, "split");
+
   checker.finish();
 });

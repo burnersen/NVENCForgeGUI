@@ -226,13 +226,17 @@ func TestEveryModeGetsItsOwnFlag(t *testing.T) {
 		"davinci": "-davinci",
 		"split":   "-split",
 		"join":    "-join",
+		// Der zweite Zusammenfüge-Weg: dieselben Dateien, aber -davinci, damit
+		// der Ton nach AAC umkodiert und die Untertitel gereinigt werden.
+		"joindavinci": "-davinci",
 	}
-	// Zusammenfügen ist der einzige Modus mit einer Bedingung an die Dateien:
-	// ein Bild plus mindestens eine Ton- oder Untertiteldatei.
+	// Die Zusammenfüge-Wege sind die einzigen Modi mit einer Bedingung an die
+	// Dateien: ein Bild plus mindestens eine Ton- oder Untertiteldatei.
 	files := map[string][]string{
-		"davinci": {`C:\a.mkv`},
-		"split":   {`C:\a.mkv`},
-		"join":    {`C:\a.mkv`, `C:\a.ger.m4a`},
+		"davinci":     {`C:\a.mkv`},
+		"split":       {`C:\a.mkv`},
+		"join":        {`C:\a.mkv`, `C:\a.ger.m4a`},
+		"joindavinci": {`C:\a.mkv`, `C:\a.ger.m4a`},
 	}
 	if len(modeFlags) != len(expected) {
 		t.Fatalf("modeFlags kennt %d Modi, geprüft werden %d", len(modeFlags), len(expected))

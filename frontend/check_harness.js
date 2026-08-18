@@ -120,6 +120,7 @@ function loadGui() {
     " joinReady, joinRunFiles, onWatchFiles, maybeStartWatchRun, showWatch, toggleWatch, onQueueState," +
     " startBatch, clearProgress, updateOverall, stopSlot, stop, renderLanes," +
     " loadSRTCleaner, renderSRTCleaner, addSRTPhrase, saveSRTPhrases, srtSignature," +
+    " joinMode, isJoinMode, applyJoinMode, JOIN_MODES," +
     " onRunState };"
   )(windowStub, documentStub);
 

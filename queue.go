@@ -43,8 +43,17 @@ type QueueItem struct {
 // Ausdrücklich hineingezogene EINZELDATEIEN bleiben immer stehen, auch wenn sie
 // wie ein früheres Ergebnis aussehen: Wer eine Datei bewusst hinzufügt, soll
 // sie in der Liste wiederfinden und nicht rätseln, wo sie geblieben ist.
-func expandPaths(paths []string) []QueueItem {
-	var items []QueueItem
+//
+// Der zweite Rückgabewert nennt die ausdrücklich abgelegten Dateien, die hier
+// keinen Platz haben — Ton- oder Untertiteldateien etwa. Sie verschwanden
+// früher wortlos, und genau das tut jemand, der das Zusammenfügen sucht: Er
+// legt Video plus Ton ab, der Ton löst sich auf, und das Fenster zerlegt
+// kommentarlos nur das Video.
+//
+// Beim Durchsuchen eines ORDNERS wird nichts gemeldet: Dort ist es normal, dass
+// zwischen den Videos anderes liegt, und eine Meldung je Fremddatei würde das
+// Protokoll fluten, statt zu helfen.
+func expandPaths(paths []string) (items []QueueItem, rejected []string) {
 	seen := make(map[string]bool)
 
 	appendFile := func(path string) {
@@ -69,6 +78,8 @@ func expandPaths(paths []string) []QueueItem {
 		if !info.IsDir() {
 			if isVideoFile(path) {
 				appendFile(path)
+			} else {
+				rejected = append(rejected, filepath.Base(path))
 			}
 			continue
 		}
@@ -76,7 +87,7 @@ func expandPaths(paths []string) []QueueItem {
 			appendFile(found)
 		}
 	}
-	return items
+	return items, rejected
 }
 
 // scanFolder sammelt alle Videodateien eines Ordners samt Unterordnern.

@@ -47,9 +47,19 @@ const (
 	maxBitrateKbps = 200000
 )
 
-// modeJoin steht als Konstante da, weil dieser Modus als Einziger eine eigene
-// Prüfung hat — ein Tippfehler im Vergleich würde sie still überspringen.
-const modeJoin = "join"
+// Die beiden Wege, aus Einzeldateien wieder eine Datei zu machen. Sie brauchen
+// dieselbe Zusammenstellung, liefern aber Verschiedenes:
+//
+//   - modeJoin (-join): alles 1:1 kopiert, Ergebnis ".joined.mkv".
+//   - modeJoinDavinci (-davinci): Ton wird nach AAC umkodiert, wo DaVinci ihn
+//     sonst nicht liest, Untertitel werden gereinigt, Ergebnis ".sub.mkv".
+//
+// Sie stehen als Konstanten da, weil sie als Einzige eine eigene Prüfung haben
+// — ein Tippfehler im Vergleich würde sie still überspringen.
+const (
+	modeJoin        = "join"
+	modeJoinDavinci = "joindavinci"
+)
 
 // modeFlags übersetzt die Modus-Bereiche der Oberfläche in ihr Flag.
 //
@@ -57,9 +67,16 @@ const modeJoin = "join"
 // Betriebsmodus an os.Args[1] und sonst nirgends. -json fällt bei ihm schon
 // vorher aus der Liste und stört deshalb nicht.
 var modeFlags = map[string]string{
-	"davinci": "-davinci",
-	"split":   "-split",
-	modeJoin:  "-join",
+	"davinci":       "-davinci",
+	"split":         "-split",
+	modeJoin:        "-join",
+	modeJoinDavinci: "-davinci",
+}
+
+// needsJoinOrder sagt, ob ein Modus die Zusammenstellung "genau ein Bild zuerst"
+// braucht. Beide Zusammenfüge-Wege reichen dem Konverter dieselbe Liste.
+func needsJoinOrder(mode string) bool {
+	return mode == modeJoin || mode == modeJoinDavinci
 }
 
 // RunRequest ist das, was die Oberfläche für einen Lauf schickt.
@@ -147,7 +164,7 @@ func buildConverterArgs(request RunRequest, eventChannel bool) ([]string, error)
 		// Zusammenfügen ist der einzige Modus, der eine bestimmte Zusammen-
 		// stellung braucht: genau EIN Bild plus mindestens eine Ton- oder
 		// Untertiteldatei, Bild zuerst (die Begründung steht bei joinArgOrder).
-		if request.Mode == modeJoin {
+		if needsJoinOrder(request.Mode) {
 			ordered, err := joinArgOrder(files)
 			if err != nil {
 				return nil, err

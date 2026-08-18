@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/wailsapp/wails/v2/pkg/options"
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -264,7 +265,30 @@ func (a *App) DownloadConverter(force bool) (DownloadResult, error) {
 // AddPaths nimmt Pfade entgegen, die ins Fenster gezogen wurden, und macht
 // daraus Einträge für die Warteschlange.
 func (a *App) AddPaths(paths []string) []QueueItem {
-	return expandPaths(paths)
+	items, rejected := expandPaths(paths)
+	a.noteRejected(rejected)
+	return items
+}
+
+// noteRejected sagt, welche abgelegten Dateien hier nichts verloren haben.
+//
+// Warum überhaupt: Diese Liste nimmt nur Videos. Ton- und Untertiteldateien
+// gehören in den Bereich "Join" — wer sie hier ablegt, hat sich in der Seite
+// geirrt und soll das erfahren, statt sie verschwinden zu sehen.
+func (a *App) noteRejected(rejected []string) {
+	if len(rejected) == 0 {
+		return
+	}
+	const maxNamed = 3
+	named := rejected
+	suffix := ""
+	if len(named) > maxNamed {
+		named = named[:maxNamed]
+		suffix = fmt.Sprintf(" and %d more", len(rejected)-maxNamed)
+	}
+	a.note(fmt.Sprintf(
+		"Not a video, so not added: %s%s. Audio and subtitle files belong in the Join area.",
+		strings.Join(named, ", "), suffix))
 }
 
 // PickFiles öffnet den Dateidialog.
@@ -279,7 +303,9 @@ func (a *App) PickFiles() ([]QueueItem, error) {
 	if err != nil {
 		return nil, fmt.Errorf("app.go: PickFiles: %w", err)
 	}
-	return expandPaths(paths), nil
+	items, rejected := expandPaths(paths)
+	a.noteRejected(rejected)
+	return items, nil
 }
 
 // SortJoinFiles ordnet die Ablage des Bereichs "Join" neu ein.
@@ -323,7 +349,10 @@ func (a *App) PickFolder() ([]QueueItem, error) {
 	if folder == "" {
 		return nil, nil
 	}
-	return expandPaths([]string{folder}), nil
+	// Ein ausgewählter ORDNER wird durchsucht; was darin nicht passt, ist kein
+	// Irrtum des Benutzers und wird deshalb nicht gemeldet.
+	items, _ := expandPaths([]string{folder})
+	return items, nil
 }
 
 // WatchState ist das, was die Oberfläche über die Ordner-Beobachtung wissen
