@@ -5,7 +5,7 @@
 Drop your videos in, press Start, watch it happen. Same converter, same
 results, same settings file — just visible.
 
-<!-- Screenshot goes here, e.g. docs/screenshot.png -->
+![NVENCForgeGUI](docs/screenshot.png)
 
 ---
 

@@ -17,6 +17,11 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
+// guiVersion ist die einzige Stelle, an der die Version dieses Fensters
+// steht. Angezeigt wird sie im Fensterkopf (Titelleiste) und in der
+// Kopfzeile der Oberfläche selbst (siehe StartupInfo in app.go).
+const guiVersion = "0.9.0"
+
 func main() {
 	// Muss vor dem Fenster passieren: ohne eigene Konsole gibt es später keinen
 	// sauberen Abbruch (siehe wincon.go).
@@ -25,7 +30,7 @@ func main() {
 	app := NewApp()
 
 	err := wails.Run(&options.App{
-		Title:     "NVENCForge",
+		Title:     "NVENCForge v" + guiVersion,
 		Width:     1180,
 		Height:    860,
 		MinWidth:  920,

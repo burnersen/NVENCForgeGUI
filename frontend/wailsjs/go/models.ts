@@ -293,6 +293,7 @@ export namespace main {
 		}
 	}
 	export class StartupInfo {
+	    guiVersion: string;
 	    gpu: GPUInfo;
 	    converter: ConverterStatus;
 	    config: ConfigView;
@@ -303,6 +304,7 @@ export namespace main {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.guiVersion = source["guiVersion"];
 	        this.gpu = this.convertValues(source["gpu"], GPUInfo);
 	        this.converter = this.convertValues(source["converter"], ConverterStatus);
 	        this.config = this.convertValues(source["config"], ConfigView);

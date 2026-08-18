@@ -305,7 +305,7 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
 <div id="shell">
 
   <header>
-    <div class="brand"><b>NVENCForge</b><span>GUI</span></div>
+    <div class="brand"><b>NVENCForge</b><span id="gui-version">GUI</span></div>
     <div class="badges">
       <div class="badge"><i class="dot" id="gpu-dot"></i><span id="gpu-text">checking GPU…</span></div>
       <div class="badge">
@@ -2517,6 +2517,7 @@ async function boot() {
   showWatch(null);
   try {
     const info = await api().GetStartupInfo();
+    $("gui-version").textContent = "GUI v" + info.guiVersion;
     showGPU(info.gpu);
     showConverter(info.converter);
     applyConfig(info.config);

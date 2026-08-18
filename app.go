@@ -77,15 +77,21 @@ func (a *App) emit(name string, data ...any) {
 
 // StartupInfo ist das, was die Oberfläche beim Start einmal abfragt.
 type StartupInfo struct {
-	GPU       GPUInfo         `json:"gpu"`
-	Converter ConverterStatus `json:"converter"`
-	Config    ConfigView      `json:"config"`
+	GUIVersion string          `json:"guiVersion"`
+	GPU        GPUInfo         `json:"gpu"`
+	Converter  ConverterStatus `json:"converter"`
+	Config     ConfigView      `json:"config"`
 }
 
-// GetStartupInfo liefert Grafikkarte, Zustand der Programmdatei und die
-// Einstellungen, die gerade gelten.
+// GetStartupInfo liefert die Version dieses Fensters, Grafikkarte, Zustand
+// der Programmdatei und die Einstellungen, die gerade gelten.
 func (a *App) GetStartupInfo() StartupInfo {
-	return StartupInfo{GPU: queryGPU(), Converter: converterStatus(), Config: readConfigView()}
+	return StartupInfo{
+		GUIVersion: guiVersion,
+		GPU:        queryGPU(),
+		Converter:  converterStatus(),
+		Config:     readConfigView(),
+	}
 }
 
 // GetConverterStatus prüft die Programmdatei erneut.
