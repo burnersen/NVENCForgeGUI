@@ -1,3 +1,7 @@
+// NVENCForgeGUI — Required Notice: Copyright (c) 2026 burnersen — NVENCForgeGUI
+// Licensed under the PolyForm Noncommercial License 1.0.0 (non-commercial use only).
+// Full terms: LICENSE.md · https://polyformproject.org/licenses/noncommercial/1.0.0
+
 // gpu.go — welche Grafikkarte steckt im Rechner?
 //
 // Die Oberfläche zeigt die Karte nur an; sie graut nichts aus und blockiert

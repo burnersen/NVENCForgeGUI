@@ -1,5 +1,7 @@
 # NVENCForgeGUI
 
+[![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial-blue)](LICENSE.md)
+
 **A window for [NVENCForge](https://github.com/burnersen/NVENCForge) — for everyone who would rather click than type.**
 
 Drop your videos in, press Start, watch it happen. Same converter, same
@@ -108,6 +110,19 @@ The live tests (`NVENCFORGEGUI_LIVE=1`) go further and start the real converter
 on a real file.
 
 </details>
+
+## License
+
+NVENCForgeGUI is source-available under the [PolyForm Noncommercial License 1.0.0](LICENSE.md).
+Free to use, study, modify and share for any **noncommercial** purpose: personal use, hobby, education, research. **Commercial use, resale or bundling into paid products is not permitted** without a separate license from the author. Want a commercial license? Open an issue or reach out.
+
+### What it is built on
+
+The window is built with [Wails v2](https://wails.io/) (MIT-licensed), which pairs a Go program with the WebView2 runtime Windows already ships. Wails stays under its own license; the license above covers the code in this repository.
+
+The converter is a separate program: [NVENCForge](https://github.com/burnersen/NVENCForge), same author, same PolyForm Noncommercial license. The window looks for `NVENCForge.exe` in its `tools` folder and downloads it from GitHub if it is missing — it is not part of this repository. NVENCForge in turn fetches FFmpeg (GPL) on its own first run. Each step only handles what it knows about.
+
+---
 
 ## Feedback
 

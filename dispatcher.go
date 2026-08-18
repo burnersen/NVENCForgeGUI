@@ -1,3 +1,7 @@
+// NVENCForgeGUI — Required Notice: Copyright (c) 2026 burnersen — NVENCForgeGUI
+// Licensed under the PolyForm Noncommercial License 1.0.0 (non-commercial use only).
+// Full terms: LICENSE.md · https://polyformproject.org/licenses/noncommercial/1.0.0
+
 // dispatcher.go — mehrere Konverter-Läufe gleichzeitig, geordnet.
 //
 // Warum überhaupt mehrere: Gemessen am 2026-08-18 (4 Stücke à 90 s, 1080p) sind

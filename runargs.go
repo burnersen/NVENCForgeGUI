@@ -1,3 +1,7 @@
+// NVENCForgeGUI — Required Notice: Copyright (c) 2026 burnersen — NVENCForgeGUI
+// Licensed under the PolyForm Noncommercial License 1.0.0 (non-commercial use only).
+// Full terms: LICENSE.md · https://polyformproject.org/licenses/noncommercial/1.0.0
+
 // runargs.go — aus den Schaltern der Oberfläche wird die Befehlszeile.
 //
 // Eine eigene Datei, weil das die Stelle ist, an der die Oberfläche und der
