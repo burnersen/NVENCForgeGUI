@@ -50,6 +50,11 @@ type ConfigView struct {
 	// Abschalten aussehen.
 	AutoCQ      bool `json:"autoCQ"`
 	AutoCQKnown bool `json:"autoCQKnown"`
+
+	// RetireMode entscheidet, wohin ein Original nach erfolgreicher Umwandlung
+	// wandert: "folder" (Unterordner "originals") oder "recyclebin". Die
+	// Oberfläche darf das nicht raten — beide Einstellungen sind üblich.
+	RetireMode string `json:"retireMode"`
 }
 
 // locateConfig sucht die INI dort, wo auch die Programmdatei liegt.
@@ -96,6 +101,7 @@ func readConfigView() ConfigView {
 	view.AV1TargetCQ = intEntry(entries, "av1TargetCQ")
 	view.AutoCQTargetVMAF = intEntry(entries, "autoCQTargetVMAF")
 	view.AutoCQ, view.AutoCQKnown = boolEntry(entries, "autoCQ")
+	view.RetireMode = strings.ToLower(strings.TrimSpace(entries["retireMode"]))
 	return view
 }
 

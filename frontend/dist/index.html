@@ -443,7 +443,7 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
             <li>A file is only picked up once it has stopped growing for 30 seconds, so a download that is still running is left alone.</li>
             <li>What is already in the folder when you switch on is taken along. Finished results and their sources are skipped, and so is the <b>originals</b> folder.</li>
             <li>Watching only lasts while this window is open — closing it ends the standing order.</li>
-            <li>The results are written next to their sources, and your originals are moved wherever your INI says. The watched folder will look different afterwards.</li>
+            <li>The results are written into an <b>output</b> folder next to their sources, and your originals are moved wherever your INI says. The watched folder will look different afterwards.</li>
           </ul>
         </details>
       </section>
@@ -605,6 +605,27 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
           <div id="settings-expert"></div>
         </details>
 
+        <details id="srt-box">
+          <summary>Subtitle cleaner — the lines it throws away</summary>
+          <div class="hint">
+            <b>Only when you take files apart for DaVinci.</b> Split and Join
+            never touch a subtitle, and an ordinary conversion does not clean
+            either — so nothing here changes those.
+            A phrase deletes every subtitle block it turns up in, upper or
+            lower case makes no difference. Tick <b>exact</b> and a block only
+            goes if it reads exactly like this and nothing else.
+          </div>
+          <div id="srt-list"></div>
+          <div class="row" style="margin-top:10px">
+            <input type="text" id="srt-new" placeholder="line to throw away, e.g. an advertising phrase" style="flex:1;min-width:220px" />
+            <label class="check"><input type="checkbox" id="srt-new-exact" /> exact</label>
+            <button class="btn" id="btn-srt-add">Add</button>
+            <div class="spacer"></div>
+            <button class="btn primary" id="btn-srt-save" disabled>Save</button>
+          </div>
+          <div class="hint" id="srt-state"></div>
+        </details>
+
         <div class="hint">
           Changes apply to the next run; a run in progress keeps the settings it started with.
           The version before your last save is kept as NVENCForge_Config.ini.bak.
@@ -678,7 +699,10 @@ const state = {
   answerAllThisRun: false,  // set by "stop asking": every further question gets "all tracks"
   settingsFile: null,    // the whole INI as parsed by the app
   edits: {},             // key -> value typed on the settings page, not saved yet
-  gpuAdvice: {}          // key -> value the converter recommended for this card
+  gpuAdvice: {},         // key -> value the converter recommended for this card
+  // The subtitle cleaner's phrase list. saved holds what is in the file, so
+  // the Save button can tell a real change from a round trip.
+  srt: { view: null, phrases: [], saved: "" }
 };
 
 const MAX_LOG_LINES = 400;
@@ -1798,6 +1822,8 @@ function onSetupDone(ok) {
   if (!ok) return;
   refreshConfig();
   loadSettings();
+  // The phrase list is written by the same first run as the INI.
+  loadSRTCleaner();
   api().GetConverterStatus().then(showConverter).catch(() => {});
 }
 
@@ -1868,7 +1894,7 @@ const HELP = {
   }),
   encoder: () => ({
     title: "Encoder",
-    text: "NVENC does the work on the graphics card and is many times faster. CPU mode needs no NVIDIA card at all, but takes roughly 40 minutes per hour of 1080p video.",
+    text: "NVENC does the work on the graphics card and is many times faster. CPU mode needs no NVIDIA card at all, but it is slow — on a current 16-thread processor roughly 40 minutes for an hour of 1080p, and on a weaker one considerably more.",
     now: "Default: GPU / NVENC"
   }),
   container: () => ({
@@ -1931,11 +1957,23 @@ const HELP = {
         : "Your INI could not be read yet."
     };
   },
-  keep: () => ({
-    title: "Keep the source file",
-    text: "The source stays exactly where it is. Without this it is moved to the “originals” folder after a successful run. The result is written to its own folder either way, so nothing is ever overwritten.",
-    now: "Default: off"
-  }),
+  keep: () => {
+    // Wohin das Original wandert, steht in der INI (retireMode) und ist keine
+    // feste Größe — "originals" ist nur der Standard. Ein Text, der den
+    // Papierkorb verschweigt, wäre für jeden falsch, der ihn eingestellt hat.
+    const mode = state.config && state.config.found ? state.config.retireMode : "";
+    let now = "Default: off";
+    if (mode === "recyclebin") {
+      now = "Default: off · your INI moves originals to the recycle bin.";
+    } else if (mode === "folder") {
+      now = "Default: off · your INI moves originals into the “originals” folder.";
+    }
+    return {
+      title: "Keep the source file",
+      text: "The source stays exactly where it is. Without this it is moved out of the way after a successful run — into the “originals” folder or the recycle bin, whichever your INI says. The result is written to an “output” folder either way, so nothing is ever overwritten.",
+      now: now
+    };
+  },
   shutdown: () => ({
     title: "Shut down when finished",
     text: "Shuts the PC down once the last file in the queue is done.",
@@ -2269,6 +2307,121 @@ async function loadSettings() {
     showError(String(err));
   }
 }
+
+/* ---------- subtitle cleaner ----------
+   The phrase list lives in its own file next to the converter. It is edited
+   here rather than in a text editor, but the rules stay the converter's: one
+   phrase per line, "=" means the block must match exactly. */
+function srtSignature(phrases) {
+  return phrases.map((p) => (p.exact ? "=" : "") + p.text).join("\n");
+}
+async function loadSRTCleaner() {
+  try {
+    const view = await api().GetSRTCleaner();
+    state.srt.view = view;
+    state.srt.phrases = (view.phrases || []).map((p) => ({ text: p.text, exact: !!p.exact }));
+    state.srt.saved = srtSignature(state.srt.phrases);
+    renderSRTCleaner();
+  } catch (err) {
+    showError(String(err));
+  }
+}
+function renderSRTCleaner() {
+  const list = $("srt-list");
+  const view = state.srt.view;
+  list.innerHTML = "";
+
+  // Built as real nodes, not as HTML text: a file path or an error message
+  // from Go is data, and data has no business being parsed as markup.
+  const sayInstead = (message) => {
+    const line = document.createElement("div");
+    line.className = "hint";
+    line.style.margin = "0";
+    line.textContent = message;
+    list.appendChild(line);
+    updateSRTButtons();
+  };
+  if (!view || !view.found) {
+    sayInstead(view && view.note ? view.note : "Not read yet.");
+    return;
+  }
+  if (state.srt.phrases.length === 0) {
+    sayInstead("No phrases yet — subtitles keep every line as it is.");
+    return;
+  }
+
+  state.srt.phrases.forEach((phrase, index) => {
+    const row = document.createElement("div");
+    row.className = "row";
+    row.style.margin = "4px 0";
+
+    const text = document.createElement("span");
+    text.style.flex = "1";
+    text.textContent = phrase.text;
+    row.appendChild(text);
+
+    const exact = document.createElement("label");
+    exact.className = "check";
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = phrase.exact;
+    box.onchange = () => {
+      state.srt.phrases[index].exact = box.checked;
+      updateSRTButtons();
+    };
+    exact.appendChild(box);
+    exact.appendChild(document.createTextNode(" exact"));
+    row.appendChild(exact);
+
+    const remove = document.createElement("button");
+    remove.className = "btn";
+    remove.textContent = "✕";
+    remove.title = "Remove this phrase";
+    remove.onclick = () => {
+      state.srt.phrases.splice(index, 1);
+      renderSRTCleaner();
+    };
+    row.appendChild(remove);
+
+    list.appendChild(row);
+  });
+  updateSRTButtons();
+}
+function updateSRTButtons() {
+  const view = state.srt.view;
+  const usable = !!(view && view.found);
+  const changed = usable && srtSignature(state.srt.phrases) !== state.srt.saved;
+  $("btn-srt-save").disabled = !changed;
+  $("btn-srt-add").disabled = !usable;
+  $("srt-new").disabled = !usable;
+  $("srt-state").textContent = changed ? "unsaved changes" : (usable ? view.path : "");
+}
+function addSRTPhrase() {
+  const field = $("srt-new");
+  const text = field.value.trim();
+  if (text === "") return;
+  if (text.startsWith("#")) {
+    // Would land in the file as a comment and quietly do nothing.
+    showError("A phrase cannot start with \"#\" — that would make it a comment.");
+    return;
+  }
+  showError("");
+  state.srt.phrases.push({ text: text, exact: $("srt-new-exact").checked });
+  field.value = "";
+  $("srt-new-exact").checked = false;
+  renderSRTCleaner();
+  field.focus();
+}
+async function saveSRTPhrases() {
+  showError("");
+  try {
+    await api().SaveSRTCleaner(state.srt.phrases);
+    await loadSRTCleaner();
+  } catch (err) {
+    showError(String(err));
+    note("The filter phrases could not be saved: " + err);
+  }
+}
 // noteGPUAdvice listens to the converter's own recommendation while the log
 // arrives. Nothing is changed behind the user's back: the value is offered as
 // the new default and shown next to the setting.
@@ -2438,6 +2591,16 @@ function wire() {
   $("btn-log-clear").onclick = () => { $("logbox").innerHTML = ""; state.lastLogSlot = 0; clearProgress(); };
   $("btn-settings-save").onclick = saveSettings;
   $("btn-settings-defaults").onclick = restoreDefaults;
+  $("btn-srt-add").onclick = addSRTPhrase;
+  $("btn-srt-save").onclick = saveSRTPhrases;
+  // Enter in the phrase box adds it — typing a list one line at a time
+  // without reaching for the mouse is the whole point of this box.
+  $("srt-new").onkeydown = (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      addSRTPhrase();
+    }
+  };
 
   $("btn-ask-ok").onclick = () => sendAnswer(askSelection());
   $("btn-ask-all").onclick = () => sendAnswer("");
@@ -2526,6 +2689,7 @@ async function boot() {
     showConverter(info.converter);
     applyConfig(info.config);
     await loadSettings();
+    await loadSRTCleaner();
   } catch (err) {
     showError("Startup check failed: " + err);
   }

@@ -73,7 +73,9 @@ function loadGui() {
   // Everything the window would hand to the Go side is recorded instead. That
   // is how a check can see WHICH answer a button really sends — the one thing
   // that decides whether the user gets the tracks they picked.
-  const calls = { answers: [], answerSlots: [], runs: [], joinSorts: [], stops: [] };
+  const calls = { answers: [], answerSlots: [], runs: [], joinSorts: [], stops: [], srtSaves: [] };
+  // What GetSRTCleaner should answer; set per check with setSRTReply.
+  let srtReply = { found: false, path: "", note: "not set", phrases: [] };
   // Sorting the join list happens in Go (joinfiles.go) and is tested there.
   // Here only the answer is staged, so a check can see what the WINDOW does
   // with it — and, just as important, which paths it hands over.
@@ -94,7 +96,15 @@ function loadGui() {
           PickJoinFiles() { return Promise.resolve(joinReply); },
           StartWatching(folder) { return Promise.resolve({ watching: true, folder }); },
           StopWatching() { return Promise.resolve({ watching: false, folder: "" }); },
-          PickWatchFolder() { return Promise.resolve(""); }
+          PickWatchFolder() { return Promise.resolve(""); },
+          // The phrase list of the subtitle cleaner. What the window SENDS is
+          // recorded: a phrase that changes on its way to the file would strip
+          // something other than the list on screen promises.
+          GetSRTCleaner() { return Promise.resolve(srtReply); },
+          SaveSRTCleaner(phrases) {
+            calls.srtSaves.push(phrases);
+            return Promise.resolve({ written: phrases.length });
+          }
         }
       }
     }
@@ -109,6 +119,7 @@ function loadGui() {
     " runUsesQueue, updateButtons, afterJoinChange, addJoinPaths, joinBase, joinOfKind," +
     " joinReady, joinRunFiles, onWatchFiles, maybeStartWatchRun, showWatch, toggleWatch, onQueueState," +
     " startBatch, clearProgress, updateOverall, stopSlot, stop, renderLanes," +
+    " loadSRTCleaner, renderSRTCleaner, addSRTPhrase, saveSRTPhrases, srtSignature," +
     " onRunState };"
   )(windowStub, documentStub);
 
@@ -121,7 +132,9 @@ function loadGui() {
     // setQueryAll stellt die Ticks, die askSelection einsammelt.
     setQueryAll: (selector, list) => selectorLists.set(selector, list),
     // setJoinReply legt fest, was die Go-Seite auf SortJoinFiles antworten soll.
-    setJoinReply: (files) => { joinReply = files; }
+    setJoinReply: (files) => { joinReply = files; },
+    // setSRTReply legt fest, was die Go-Seite auf GetSRTCleaner antworten soll.
+    setSRTReply: (view) => { srtReply = view; }
   };
 }
 

@@ -14,6 +14,7 @@ export namespace main {
 	    autoCQTargetVMAF: number;
 	    autoCQ: boolean;
 	    autoCQKnown: boolean;
+	    retireMode: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new ConfigView(source);
@@ -34,6 +35,7 @@ export namespace main {
 	        this.autoCQTargetVMAF = source["autoCQTargetVMAF"];
 	        this.autoCQ = source["autoCQ"];
 	        this.autoCQKnown = source["autoCQKnown"];
+	        this.retireMode = source["retireMode"];
 	    }
 	}
 	export class ConverterStatus {
@@ -216,6 +218,57 @@ export namespace main {
 	        this.shutdown = source["shutdown"];
 	    }
 	}
+	export class SRTPhrase {
+	    text: string;
+	    exact: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new SRTPhrase(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.text = source["text"];
+	        this.exact = source["exact"];
+	    }
+	}
+	export class SRTCleanerView {
+	    found: boolean;
+	    path: string;
+	    note: string;
+	    phrases: SRTPhrase[];
+	
+	    static createFrom(source: any = {}) {
+	        return new SRTCleanerView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.found = source["found"];
+	        this.path = source["path"];
+	        this.note = source["note"];
+	        this.phrases = this.convertValues(source["phrases"], SRTPhrase);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
 	export class SaveResult {
 	    written: number;
 	    backupPath: string;

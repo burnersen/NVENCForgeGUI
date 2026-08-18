@@ -14,6 +14,8 @@ export function GetConverterStatus():Promise<main.ConverterStatus>;
 
 export function GetQueueStatus():Promise<main.QueueState>;
 
+export function GetSRTCleaner():Promise<main.SRTCleanerView>;
+
 export function GetSettingsFile():Promise<main.SettingsFile>;
 
 export function GetStartupInfo():Promise<main.StartupInfo>;
@@ -31,6 +33,8 @@ export function PickJoinFiles():Promise<Array<main.JoinFile>>;
 export function PickWatchFolder():Promise<string>;
 
 export function RunSetup():Promise<void>;
+
+export function SaveSRTCleaner(arg1:Array<main.SRTPhrase>):Promise<main.SaveResult>;
 
 export function SaveSettings(arg1:Record<string, string>):Promise<main.SaveResult>;
 

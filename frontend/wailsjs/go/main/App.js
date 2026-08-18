@@ -26,6 +26,10 @@ export function GetQueueStatus() {
   return window['go']['main']['App']['GetQueueStatus']();
 }
 
+export function GetSRTCleaner() {
+  return window['go']['main']['App']['GetSRTCleaner']();
+}
+
 export function GetSettingsFile() {
   return window['go']['main']['App']['GetSettingsFile']();
 }
@@ -60,6 +64,10 @@ export function PickWatchFolder() {
 
 export function RunSetup() {
   return window['go']['main']['App']['RunSetup']();
+}
+
+export function SaveSRTCleaner(arg1) {
+  return window['go']['main']['App']['SaveSRTCleaner'](arg1);
 }
 
 export function SaveSettings(arg1) {

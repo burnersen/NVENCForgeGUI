@@ -20,7 +20,7 @@ var assets embed.FS
 // guiVersion ist die einzige Stelle, an der die Version dieses Fensters
 // steht. Angezeigt wird sie im Fensterkopf (Titelleiste) und in der
 // Kopfzeile der Oberfläche selbst (siehe StartupInfo in app.go).
-const guiVersion = "0.9.2"
+const guiVersion = "0.9.3"
 
 // singleInstanceID hält die Startsperre. Der Name muss auf dem Rechner
 // einmalig sein und darf sich nie ändern — sonst erkennt eine neue Ausgabe die

@@ -223,6 +223,26 @@ func (a *App) SaveSettings(values map[string]string) (SaveResult, error) {
 	return result, nil
 }
 
+// GetSRTCleaner liefert die Phrasenliste des Untertitel-Reinigers.
+func (a *App) GetSRTCleaner() SRTCleanerView {
+	return readSRTCleaner()
+}
+
+// SaveSRTCleaner schreibt die Phrasenliste zurück.
+//
+// Wie bei den Einstellungen bleibt die vorige Fassung als .bak liegen, und ein
+// laufender Lauf wird nicht aufgehalten — der Konverter liest die Liste beim
+// Start eines Laufs.
+func (a *App) SaveSRTCleaner(phrases []SRTPhrase) (SaveResult, error) {
+	result, err := writeSRTCleaner(phrases)
+	if err != nil {
+		return result, err
+	}
+	a.note(fmt.Sprintf("Saved %d filter phrase(s). Previous version kept as %s",
+		result.Written, filepath.Base(result.BackupPath)))
+	return result, nil
+}
+
 // GetConfigView liest die INI erneut.
 //
 // Nötig, weil sie erst entsteht, wenn NVENCForge zum ersten Mal läuft: Beim
