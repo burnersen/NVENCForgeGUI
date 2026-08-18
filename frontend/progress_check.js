@@ -11,7 +11,14 @@ const { loadGui, createChecker } = require("./check_harness");
 const { gui, element } = loadGui();
 const { check, finish } = createChecker();
 
-const fileBar = () => element("pct-file").textContent;
+// Each converter has its own lane now, so the file bar is read from the slot
+// the events came from. Slot 1 unless a check says otherwise.
+const laneOf = (slot) => gui.state.slots[slot || 1];
+const fileBar = (slot) => {
+  const lane = laneOf(slot);
+  if (!lane || !lane.known) return "—";
+  return lane.pct.toFixed(1) + " %";
+};
 const overallBar = () => element("pct-all").textContent;
 
 const entry = (name, sizeMB) =>
@@ -19,8 +26,16 @@ const entry = (name, sizeMB) =>
 
 // The run event clears the queue notes, so the queue is restored afterwards —
 // in the real window the queue is filled by the user, not by an event.
+// resetProgress is what the start button does for the whole batch; the run
+// events themselves must NOT clear anything, or the second converter would
+// wipe out the first one's lane.
 function startRun(queue) {
   gui.state.queue = queue;
+  gui.resetProgress();
+  // The overall bar is worked out from the files of THIS batch, so the batch
+  // has to be named — that is what the start button does.
+  gui.startBatch(queue.map((e) => e.path));
+  gui.state.parallel = 1;
   gui.onConverterEvent({ ev: "run", mode: "convert", codec: "h265", encoder: "nvenc", files: queue.length, version: "test" });
   gui.state.queue = queue;
   gui.state.totalMB = queue.reduce((sum, e) => sum + e.sizeMB, 0);

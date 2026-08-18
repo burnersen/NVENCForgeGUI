@@ -6,8 +6,8 @@ export function AddPaths(arg1) {
   return window['go']['main']['App']['AddPaths'](arg1);
 }
 
-export function AnswerQuestion(arg1) {
-  return window['go']['main']['App']['AnswerQuestion'](arg1);
+export function AnswerQuestion(arg1, arg2) {
+  return window['go']['main']['App']['AnswerQuestion'](arg1, arg2);
 }
 
 export function DownloadConverter(arg1) {
@@ -22,6 +22,10 @@ export function GetConverterStatus() {
   return window['go']['main']['App']['GetConverterStatus']();
 }
 
+export function GetQueueStatus() {
+  return window['go']['main']['App']['GetQueueStatus']();
+}
+
 export function GetSettingsFile() {
   return window['go']['main']['App']['GetSettingsFile']();
 }
@@ -32,6 +36,10 @@ export function GetStartupInfo() {
 
 export function IsRunning() {
   return window['go']['main']['App']['IsRunning']();
+}
+
+export function NeedsSetup() {
+  return window['go']['main']['App']['NeedsSetup']();
 }
 
 export function PickFiles() {
@@ -46,6 +54,14 @@ export function PickJoinFiles() {
   return window['go']['main']['App']['PickJoinFiles']();
 }
 
+export function PickWatchFolder() {
+  return window['go']['main']['App']['PickWatchFolder']();
+}
+
+export function RunSetup() {
+  return window['go']['main']['App']['RunSetup']();
+}
+
 export function SaveSettings(arg1) {
   return window['go']['main']['App']['SaveSettings'](arg1);
 }
@@ -58,6 +74,22 @@ export function StartRun(arg1) {
   return window['go']['main']['App']['StartRun'](arg1);
 }
 
+export function StartWatching(arg1) {
+  return window['go']['main']['App']['StartWatching'](arg1);
+}
+
 export function StopRun() {
   return window['go']['main']['App']['StopRun']();
+}
+
+export function StopSlot(arg1) {
+  return window['go']['main']['App']['StopSlot'](arg1);
+}
+
+export function StopWatching() {
+  return window['go']['main']['App']['StopWatching']();
+}
+
+export function WatchStatus() {
+  return window['go']['main']['App']['WatchStatus']();
 }

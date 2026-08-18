@@ -124,7 +124,7 @@ func liveRunner(t *testing.T) (*Runner, *liveCollector, ConverterStatus) {
 	setupHiddenConsole()
 
 	collector := newLiveCollector()
-	return NewRunner(collector.emit), collector, status
+	return NewRunner(1, collector.emit), collector, status
 }
 
 func TestLiveFullRun(t *testing.T) {

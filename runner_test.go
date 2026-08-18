@@ -127,7 +127,7 @@ func (s *answerSink) Close() error { s.closed = true; return nil }
 
 func TestAnswerSendsTheLineAPersonWouldType(t *testing.T) {
 	sink := &answerSink{}
-	runner := NewRunner(func(string, ...any) {})
+	runner := NewRunner(1, func(string, ...any) {})
 	runner.input = sink
 
 	if err := runner.Answer("1,3"); err != nil {
@@ -140,7 +140,7 @@ func TestAnswerSendsTheLineAPersonWouldType(t *testing.T) {
 
 func TestAnswerSendsAnEmptyLineForAllTracks(t *testing.T) {
 	sink := &answerSink{}
-	runner := NewRunner(func(string, ...any) {})
+	runner := NewRunner(1, func(string, ...any) {})
 	runner.input = sink
 
 	if err := runner.Answer(""); err != nil {
@@ -157,7 +157,7 @@ func TestAnswerSendsAnEmptyLineForAllTracks(t *testing.T) {
 // Antwort nie und nimmt stillschweigend alle Spuren.
 func TestAnswerNeverSendsTwoLinesAtOnce(t *testing.T) {
 	sink := &answerSink{}
-	runner := NewRunner(func(string, ...any) {})
+	runner := NewRunner(1, func(string, ...any) {})
 	runner.input = sink
 
 	if err := runner.Answer("1\n3"); err != nil {
@@ -173,7 +173,7 @@ func TestAnswerNeverSendsTwoLinesAtOnce(t *testing.T) {
 }
 
 func TestAnswerFailsWhenNothingIsRunning(t *testing.T) {
-	runner := NewRunner(func(string, ...any) {})
+	runner := NewRunner(1, func(string, ...any) {})
 	if err := runner.Answer("1"); err == nil {
 		t.Error("ohne laufenden Konverter muss die Antwort einen Fehler ergeben")
 	}

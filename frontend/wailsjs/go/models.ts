@@ -162,8 +162,25 @@ export namespace main {
 	        this.missing = source["missing"];
 	    }
 	}
+	export class QueueState {
+	    active: number;
+	    pending: number;
+	    limit: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new QueueState(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.active = source["active"];
+	        this.pending = source["pending"];
+	        this.limit = source["limit"];
+	    }
+	}
 	export class RunRequest {
 	    mode: string;
+	    parallel: number;
 	    files: string[];
 	    codec: string;
 	    encoder: string;
@@ -184,6 +201,7 @@ export namespace main {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.mode = source["mode"];
+	        this.parallel = source["parallel"];
 	        this.files = source["files"];
 	        this.codec = source["codec"];
 	        this.encoder = source["encoder"];
@@ -307,6 +325,20 @@ export namespace main {
 		    }
 		    return a;
 		}
+	}
+	export class WatchState {
+	    watching: boolean;
+	    folder: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new WatchState(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.watching = source["watching"];
+	        this.folder = source["folder"];
+	    }
 	}
 
 }

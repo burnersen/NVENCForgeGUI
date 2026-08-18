@@ -57,6 +57,7 @@ var (
 type LogLine struct {
 	Text string `json:"text"`
 	Back int    `json:"back"`
+	Slot int    `json:"slot"`
 }
 
 // RunState beschreibt, was gerade läuft — und wie ein Lauf ausgegangen ist.
@@ -65,22 +66,54 @@ type RunState struct {
 	Stopping bool   `json:"stopping"`
 	ExitCode int    `json:"exitCode"`
 	Error    string `json:"error"`
+	Slot     int    `json:"slot"`
 }
 
 // Runner überwacht genau einen Konverter-Prozess.
+//
+// slot ist die Platznummer dieses Läufers (1, 2, 3). Sie hängt an JEDER
+// Meldung, die er weitergibt: Laufen zwei Konverter gleichzeitig, wäre sonst
+// nicht zu erkennen, welcher Fortschritt und welche Rückfrage zu welcher Datei
+// gehört — und eine Antwort landete womöglich beim falschen Prozess.
 type Runner struct {
 	mu       sync.Mutex
 	cmd      *exec.Cmd
 	pid      int
+	slot     int
 	stopping bool
 	input    io.WriteCloser
-	emit     func(name string, data ...any)
+	sink     func(name string, data ...any)
 }
 
-// NewRunner erzeugt den Läufer. emit reicht Meldungen an die Oberfläche weiter.
-func NewRunner(emit func(name string, data ...any)) *Runner {
-	return &Runner{emit: emit}
+// NewRunner erzeugt den Läufer für einen Platz. sink reicht Meldungen weiter.
+func NewRunner(slot int, sink func(name string, data ...any)) *Runner {
+	return &Runner{slot: slot, sink: sink}
 }
+
+// emit hängt die Platznummer an und gibt die Meldung weiter. Alles im Läufer
+// meldet über diesen einen Weg, damit keine Meldung ohne Nummer entwischt.
+func (r *Runner) emit(name string, data ...any) {
+	if len(data) == 1 {
+		switch payload := data[0].(type) {
+		case RunState:
+			payload.Slot = r.slot
+			r.sink(name, payload)
+			return
+		case LogLine:
+			payload.Slot = r.slot
+			r.sink(name, payload)
+			return
+		case map[string]any:
+			payload["slot"] = r.slot
+			r.sink(name, payload)
+			return
+		}
+	}
+	r.sink(name, data...)
+}
+
+// Slot liefert die Platznummer dieses Läufers.
+func (r *Runner) Slot() int { return r.slot }
 
 // Running meldet, ob gerade ein Lauf aktiv ist.
 func (r *Runner) Running() bool {

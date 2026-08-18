@@ -93,6 +93,20 @@ main { flex: 1; min-width: 0; overflow-y: auto; padding: 16px 18px 22px; }
 }
 .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
+/* A panel that is one line of controls plus an explanation to unfold. Keeps
+   the page short enough to work without scrolling past the file lists. */
+.panel.compact { padding: 10px 14px; }
+.inline-title { font-size: 12.5px; letter-spacing: .4px; color: var(--muted); text-transform: uppercase; }
+details { margin-top: 8px; }
+details > summary {
+  cursor: pointer; color: var(--muted); font-size: 11.5px; list-style: none;
+  padding: 2px 0; user-select: none;
+}
+details > summary::before { content: "▸ "; }
+details[open] > summary::before { content: "▾ "; }
+details > summary:hover { color: var(--text); }
+details > .notes { margin-top: 6px; }
+
 /* ---------- buttons ---------- */
 .btn {
   background: var(--panel-2); border: 1px solid var(--line);
@@ -222,12 +236,24 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
 .barline .label { width: 92px; flex: 0 0 auto; color: var(--muted); font-size: 12px; }
 .barline .pct { width: 54px; text-align: right; font-variant-numeric: tabular-nums; font-size: 12.5px; }
 .barline .bar { flex: 1; }
-.stats { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 12px; }
-.stat { min-width: 78px; }
-.stat .k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
-.stat .v { font-size: 15px; font-variant-numeric: tabular-nums; }
-#nowfile { font-size: 13.5px; margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#nowstage { color: var(--accent); font-size: 12px; }
+/* ---------- one lane per running converter ---------- */
+#lanes { margin-bottom: 10px; }
+.lane-idle { color: var(--muted); font-size: 13px; padding: 2px 0 8px; }
+.lane { display: grid; grid-template-columns: 20px 1fr; gap: 9px; align-items: start; padding: 5px 0; }
+.lane + .lane { border-top: 1px solid var(--line); }
+.lane-slot {
+  font-size: 11px; color: var(--muted); text-align: center; line-height: 18px;
+  border: 1px solid var(--line); border-radius: 5px; font-variant-numeric: tabular-nums;
+}
+.lane.done .lane-slot { opacity: .5; }
+.lane-body { min-width: 0; }
+.lane-top { display: flex; gap: 10px; align-items: baseline; }
+.lane-name { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lane-stage { color: var(--accent); font-size: 11.5px; margin-left: auto; flex: 0 0 auto; }
+.lane-stop { flex: 0 0 auto; font-size: 13px; padding: 0 4px; }
+.lane-stop:disabled { opacity: .25; }
+.lane-stats { color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; min-height: 15px; }
+.log-slot { color: var(--muted); }
 #summary {
   margin-top: 12px; padding: 10px 12px; border-radius: 8px;
   background: var(--panel-2); border: 1px solid var(--line); font-size: 13px; display: none;
@@ -261,6 +287,7 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
   box-shadow: 0 18px 40px rgba(0, 0, 0, .55);
 }
 .ask-box h3 { margin: 0 0 4px; font-size: 15px; }
+.ask-slot { color: var(--muted); font-size: 12px; font-weight: 400; text-transform: none; letter-spacing: 0; }
 .ask-file { color: var(--muted); font-size: 12px; margin-bottom: 12px; word-break: break-all; }
 /* The labels arrive as a terminal table (padded with spaces), so they only
    line up in a fixed-width font with the spacing left alone. */
@@ -295,8 +322,6 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
       <button class="nav-item" data-page="join">Join</button>
       <button class="nav-item" data-page="davinci">DaVinci</button>
       <button class="nav-item" data-page="settings">Settings</button>
-      <button class="nav-item" disabled>Watch folder <span class="stage-tag">stage 7</span></button>
-      <div class="nav-note">Greyed-out areas are not built yet.</div>
     </nav>
 
     <main>
@@ -378,6 +403,14 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
             <label for="opt-bitrate">Max bitrate (kbit/s)</label>
             <input type="number" id="opt-bitrate" value="" min="100" max="200000" placeholder="as configured" />
           </div>
+          <div class="field" data-help="parallel">
+            <label for="opt-parallel">At the same time</label>
+            <select id="opt-parallel">
+              <option value="1">1 video</option>
+              <option value="2" selected>2 videos</option>
+              <option value="3">3 videos</option>
+            </select>
+          </div>
         </div>
         <div class="checks">
           <label class="check" data-help="keep"><input type="checkbox" id="opt-keep" /> Keep the source file where it is</label>
@@ -390,34 +423,47 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
         </div>
       </section>
 
+      <!-- Watching a folder sits on this page on purpose: it converts with the
+           settings above, so they belong together. It gets a button of its own
+           though — "Start" runs the queue once, watching is a standing order,
+           and one button cannot honestly mean both. -->
+      <section class="panel compact" id="panel-watch">
+        <div class="row">
+          <b class="inline-title">Watch a folder</b>
+          <button class="btn" id="btn-watch-pick">Choose…</button>
+          <span class="hint" id="watch-folder" style="margin:0">No folder chosen yet.</span>
+          <div class="spacer"></div>
+          <span class="hint" id="watch-state" style="margin:0"></span>
+          <button class="btn primary" id="btn-watch-toggle" disabled>Start watching</button>
+        </div>
+        <details>
+          <summary>What happens while this is on</summary>
+          <ul class="notes">
+            <li>Every video that turns up in that folder — or in any folder inside it — is converted on its own, with the options set above.</li>
+            <li>A file is only picked up once it has stopped growing for 30 seconds, so a download that is still running is left alone.</li>
+            <li>What is already in the folder when you switch on is taken along. Finished results and their sources are skipped, and so is the <b>originals</b> folder.</li>
+            <li>Watching only lasts while this window is open — closing it ends the standing order.</li>
+            <li>The results are written next to their sources, and your originals are moved wherever your INI says. The watched folder will look different afterwards.</li>
+          </ul>
+        </details>
+      </section>
+
       <div class="shared-slot" data-slot="run"></div>
       <section class="panel" id="panel-progress">
         <h2>Progress</h2>
-        <div id="nowfile">Idle.</div>
-        <div id="nowstage"></div>
+        <!-- One line per converter. Up to three can run at once, and each of
+             them only ever reports on its own file. -->
+        <div id="lanes"><div class="lane-idle">Idle.</div></div>
 
-        <div class="barline">
-          <span class="label">Current file</span>
-          <div class="bar"><i id="bar-file"></i></div>
-          <span class="pct" id="pct-file">—</span>
-        </div>
         <div class="barline">
           <span class="label">All files</span>
           <div class="bar overall"><i id="bar-all"></i></div>
           <span class="pct" id="pct-all">—</span>
         </div>
 
-        <div class="stats">
-          <div class="stat"><div class="k">ETA (file)</div><div class="v" id="st-eta">—</div></div>
-          <div class="stat"><div class="k">Speed</div><div class="v" id="st-speed">—</div></div>
-          <div class="stat"><div class="k">FPS</div><div class="v" id="st-fps">—</div></div>
-          <div class="stat"><div class="k">Bitrate</div><div class="v" id="st-bitrate">—</div></div>
-          <div class="stat"><div class="k">Output so far</div><div class="v" id="st-est">—</div></div>
-        </div>
-
         <div id="summary"></div>
 
-        <div class="row" style="margin-top:14px">
+        <div class="row" style="margin-top:12px">
           <button class="btn primary" id="btn-start">Start</button>
           <button class="btn danger" id="btn-stop" disabled>Stop cleanly</button>
           <span class="hint" style="margin:0" id="stop-hint"></span>
@@ -430,8 +476,10 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
         <h2>Log <span style="text-transform:none;letter-spacing:0">— the converter's own screen output</span></h2>
         <div id="logbox"></div>
         <div class="row" style="margin-top:8px">
+          <button class="btn" id="btn-log-copy">Copy log</button>
           <button class="btn" id="btn-log-clear">Clear log</button>
           <label class="check"><input type="checkbox" id="opt-autoscroll" checked /> Follow</label>
+          <span class="hint" id="log-copied" style="margin:0"></span>
         </div>
       </section>
     </div>
@@ -446,12 +494,13 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
           picture file plus every audio track and every subtitle as its own
           file, written next to the source.
         </p>
+        <details><summary>The details</summary>
         <ul class="notes">
           <li>Nothing is re-encoded — the picture and the audio are copied as they are.</li>
           <li>Your source file stays where it is and is not touched.</li>
           <li>Files with more than one track open a chooser, so you decide what gets pulled out.</li>
           <li>Audio with more than two channels can additionally be written as a stereo mix — it is in the chooser as its own line.</li>
-        </ul>
+        </ul></details>
         <div class="hint">
           There are no options here: this mode copies, it does not encode.
           What the Convert area is set to makes no difference.
@@ -472,13 +521,14 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
           next to the source. Nothing is re-encoded and nothing is cleaned up,
           so Join can put it back together unchanged.
         </p>
+        <details><summary>The details</summary>
         <ul class="notes">
           <li>Every track is copied exactly as it is: audio keeps its own format (.ac3, .dts, .eac3, .m4a, .flac …), subtitles stay untouched.</li>
           <li>The silent picture keeps the source container — an MP4 stays an MP4, everything else becomes MKV.</li>
           <li>Your source file stays where it is and is not touched.</li>
           <li>Files with more than one track open a chooser, so you decide what gets pulled out.</li>
           <li>No stereo mix here: a downmix would be a re-encode, and this mode never re-encodes.</li>
-        </ul>
+        </ul></details>
         <div class="hint">
           Not sure which one? <b>DaVinci</b> makes the parts ready for Resolve
           — audio as AAC, subtitles cleaned. <b>Split</b> keeps everything bit
@@ -515,6 +565,7 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
           audio and subtitle files you drop next to it. Every stream is copied
           exactly as it is — nothing is re-encoded.
         </p>
+        <details><summary>The details</summary>
         <ul class="notes">
           <li>The audio files you add <b>replace</b> the sound of the video file. Add subtitles only, and the video keeps its own sound.</li>
           <li>Subtitles already inside the video file are never carried over — add them as files.</li>
@@ -522,7 +573,7 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
           <li>One job per run: exactly one video file, plus at least one audio or subtitle file.</li>
           <li>A <b>.sub</b> only works together with its <b>.idx</b> of the same name — drop both.</li>
           <li>The converter names the result itself: it tidies the base name (spaces become dots) and falls back to <b>.joined2.mkv</b> if that name is already taken.</li>
-        </ul>
+        </ul></details>
         <div class="hint">
           The video can be <b>.mkv .mp4 .m4v .mov</b> — other formats
           cannot be used as a base here.
@@ -567,7 +618,7 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
      standing still. -->
 <div id="ask" hidden>
   <div class="ask-box">
-    <h3 id="ask-title">Which tracks do you want?</h3>
+    <h3 id="ask-title">Which tracks do you want? <span class="ask-slot" id="ask-slot"></span></h3>
     <div class="ask-file" id="ask-file"></div>
     <div id="ask-options"></div>
     <div class="row ask-buttons">
@@ -593,13 +644,28 @@ const state = {
   stopClicks: 0,
   totalMB: 0,
   doneMB: 0,          // input MB of files already finished
-  current: null,      // queue entry being worked on
-  byIndex: {},        // converter file number -> queue entry (result events only carry the number)
+  slots: {},          // slot number -> what that converter is doing right now
+  parallel: 1,        // how many converters the current batch may use
+  active: 0,          // converters working, as reported by the dispatcher
+  pending: 0,         // jobs still waiting for a free slot
+  // Running balance over all converters of this batch. Filled in from the
+  // start, not null: an event arriving before the first start must not hit a
+  // hole and take the whole display down with it.
+  tally: { files: 0, success: 0, skipped: 0, failed: 0, savedMB: 0, seconds: 0 },
+  batch: null,        // lower-cased paths of the files this run is about
+  setupRunning: false,// the converter is writing its configuration right now
+  setupTried: false,  // it was offered once this window; not again
+  runAnnounced: false,// the "run started" line is written once per batch
+  lastLogSlot: 0,     // which converter wrote the last log line
+  questions: [],      // open track questions, one per waiting converter
+  byIndex: {},        // "slot:file number" -> queue entry (result events only carry the number)
   eventChannel: false,
   converterFound: false,
   forceDownload: false,  // set after a download was held back on purpose
   config: null,          // values read out of NVENCForge_Config.ini, null = not read (yet)
   cqTouched: false,      // true once the CQ box was edited by hand
+  watch: { folder: "", active: false },
+  watchPending: [],   // paths the watcher found that have not run yet
   joinFiles: [],      // the join area's own list, sorted by Go (joinfiles.go)
   joinBasePath: "",   // path of the video file the join is built on
   page: "convert",
@@ -690,12 +756,17 @@ function renderTerminalText(raw) {
 function log(line) {
   const box = $("logbox");
   const entry = typeof line === "string" ? { text: line, back: 0 } : line;
+  const slot = entry.slot || 0;
 
-  // A redraw first takes back what it overwrites.
-  for (let i = 0; i < (entry.back || 0) && box.lastElementChild; i++) {
+  // A redraw first takes back what it overwrites — but only its OWN lines.
+  // With two converters writing at once, a redraw from one of them would
+  // otherwise delete the other one's lines, and the log would eat itself.
+  const back = slot === state.lastLogSlot ? (entry.back || 0) : 0;
+  for (let i = 0; i < back && box.lastElementChild; i++) {
     box.removeChild(box.lastElementChild);
   }
   if (!entry.text) return;
+  state.lastLogSlot = slot;
   noteGPUAdvice(entry.text);
 
   const row = document.createElement("div");
@@ -703,6 +774,13 @@ function log(line) {
     row.className = "gui";
     row.textContent = entry.text;
   } else {
+    // Which converter said it — only worth showing when more than one can talk.
+    if (slot > 0 && state.parallel > 1) {
+      const tag = document.createElement("span");
+      tag.className = "log-slot";
+      tag.textContent = "[" + slot + "] ";
+      row.appendChild(tag);
+    }
     row.appendChild(renderTerminalText(entry.text));
   }
   box.appendChild(row);
@@ -719,7 +797,7 @@ function renderQueue() {
   box.innerHTML = "";
   state.queue.forEach((entry, index) => {
     const row = document.createElement("div");
-    row.className = "item" + (entry === state.current ? " active" : "");
+    row.className = "item" + (entry.status === "running" ? " active" : "");
 
     const idx = document.createElement("div");
     idx.className = "idx";
@@ -962,6 +1040,104 @@ function afterJoinChange() {
   updateButtons();
 }
 
+/* ---------- watched folder ----------
+   The Go side only ever says WHAT it found — never that something should run.
+   Deciding that is the window's job, because only the window knows whether a
+   run is already going and which options are set. */
+
+// watchPending holds what the watcher reported and what has not run yet. The
+// queue itself is not enough: after a run its entries stay on show as a record,
+// and starting them again would hand the converter files that are already done.
+function onWatchFiles(items) {
+  if (!items || !items.length) return;
+  addItems(items);
+  const known = new Set(state.watchPending.map((path) => path.toLowerCase()));
+  items.forEach((item) => {
+    if (known.has(item.path.toLowerCase())) return;
+    known.add(item.path.toLowerCase());
+    state.watchPending.push(item.path);
+  });
+  note(items.length + " new file(s) in the watched folder.");
+  maybeStartWatchRun();
+}
+
+// maybeStartWatchRun starts the waiting files as ONE run. Files arriving while
+// that run is going wait for the next one — the converter takes its file list
+// at startup and cannot be extended halfway through.
+function maybeStartWatchRun() {
+  if (!state.watch.active || state.running || !state.watchPending.length) return;
+  const files = state.watchPending;
+  state.watchPending = [];
+  showError("");
+  resetProgress();
+  startBatch(files);
+  state.parallel = parallelSetting();
+  // Always the converting mode, whatever page is on show — and never with
+  // "shut down when finished": a standing order that switches the machine off
+  // after the first video would be a nasty surprise.
+  api().StartRun(collectRequest("", files, { shutdown: false })).catch((err) => {
+    showError(String(err));
+    note("Watched folder: start refused: " + err);
+    // Put them back, otherwise they would be silently forgotten.
+    state.watchPending = files.concat(state.watchPending);
+  });
+}
+
+function showWatch(watchState) {
+  // Go hat das letzte Wort darüber, ob wirklich beobachtet wird.
+  if (watchState) state.watch.active = !!watchState.watching;
+  if (watchState && watchState.folder) state.watch.folder = watchState.folder;
+  $("watch-folder").textContent = state.watch.folder || "No folder chosen yet.";
+  $("btn-watch-toggle").textContent = state.watch.active ? "Stop watching" : "Start watching";
+  $("watch-state").textContent = state.watch.active
+    ? "Watching — new videos are converted on their own."
+    : "";
+  updateButtons();
+}
+
+async function pickWatchFolder() {
+  try {
+    const folder = await api().PickWatchFolder();
+    if (!folder) return;
+    state.watch.folder = folder;
+    // Changing the folder while watching moves the standing order over, rather
+    // than leaving the label pointing somewhere the watcher is not looking.
+    if (state.watch.active) await startWatching();
+    else showWatch(null);
+  } catch (err) {
+    showError(String(err));
+  }
+}
+
+async function startWatching() {
+  try {
+    const result = await api().StartWatching(state.watch.folder);
+    state.watch.active = true;
+    showWatch(result);
+  } catch (err) {
+    state.watch.active = false;
+    showError(String(err));
+    note("Could not watch that folder: " + err);
+    showWatch(null);
+  }
+}
+
+async function toggleWatch() {
+  if (!state.watch.active) {
+    if (!state.watch.folder) return;
+    await startWatching();
+    return;
+  }
+  try {
+    const result = await api().StopWatching();
+    state.watch.active = false;
+    state.watchPending = [];
+    showWatch(result);
+  } catch (err) {
+    showError(String(err));
+  }
+}
+
 /* ---------- buttons ---------- */
 function updateButtons() {
   // The join page has its own list and its own conditions: one video file
@@ -978,45 +1154,241 @@ function updateButtons() {
   $("btn-clear").disabled = state.running || state.queue.length === 0;
   $("btn-join-files").disabled = state.running;
   $("btn-join-clear").disabled = state.running || state.joinFiles.length === 0;
+  $("btn-watch-toggle").disabled = !state.watch.folder || !state.converterFound;
+  // "Shut down when finished" and a standing order do not go together: the
+  // machine would switch itself off after the first video and every one after
+  // it would never be converted. The box says why it is out of reach.
+  const shutdownBox = $("opt-shutdown");
+  shutdownBox.disabled = state.watch.active;
+  shutdownBox.title = state.watch.active
+    ? "Not available while a folder is being watched — the next video needs the machine on."
+    : "";
+  if (state.watch.active) shutdownBox.checked = false;
   $("stop-hint").textContent = state.stopping
     ? "Stopping — click again to quit immediately."
     : (state.running ? "Keeps what is already encoded as a playable preview." : "");
 }
 
 /* ---------- progress ---------- */
+/* ---------- progress across several converters ----------
+   Every event carries the number of the slot it came from, because up to three
+   converters can run at once (measured 2026-08-18: two are 26 % faster than
+   one, three bring nothing more). Each slot gets its own line; the overall bar
+   and the summary are added up here in the window, since each converter only
+   ever reports on its own file. */
+
+// slotState returns the record for one slot, creating it on first sight.
+function slotState(slot) {
+  if (!state.slots[slot]) {
+    state.slots[slot] = {
+      slot: slot, name: "", entry: null, pct: 0, known: false,
+      stage: "", stats: "", done: false, stopping: false
+    };
+  }
+  return state.slots[slot];
+}
+
+// stopSlot stops ONE converter. The batch keeps going: the other slots are not
+// touched, and the next waiting file moves onto this one. state.stopping stays
+// alone — it means "the whole run is being stopped" and drives the big button
+// and the final summary.
+async function stopSlot(slot) {
+  const lane = state.slots[slot];
+  if (!lane || lane.done) return;
+  lane.stopping = true;
+  renderLanes();
+  try {
+    await api().StopSlot(slot);
+  } catch (err) {
+    lane.stopping = false;
+    renderLanes();
+    showError(String(err));
+  }
+}
+
+// clearProgress puts the progress display back to idle. Only ever called by
+// hand (clearing the list or the log) — never while something is running, so
+// the bars of a live run cannot vanish under it.
+function clearProgress() {
+  if (state.running) return;
+  state.batch = null;
+  resetProgress();
+}
+
+// copyLog puts the whole log on the clipboard, ready to paste into a message.
+// Selecting hundreds of terminal lines with the mouse is no fun, and half a log
+// is no use to anybody trying to help.
+async function copyLog() {
+  const text = $("logbox").textContent || "";
+  if (!text.trim()) return;
+  try {
+    await window.runtime.ClipboardSetText(text);
+    $("log-copied").textContent = "copied";
+    setTimeout(() => { $("log-copied").textContent = ""; }, 2000);
+  } catch (err) {
+    showError(String(err));
+  }
+}
+
+// startBatch marks which files this run is about and clears what they carry
+// from an earlier one. The overall bar is worked out from exactly this set.
+function startBatch(files) {
+  state.batch = new Set((files || []).map((path) => path.toLowerCase()));
+  state.queue.forEach((entry) => {
+    if (!state.batch.has(entry.path.toLowerCase())) return;
+    entry.finished = false;
+    entry.status = "";
+    entry.note = "queued";
+  });
+  renderQueue();
+}
+
 function resetProgress() {
   state.doneMB = 0;
-  state.current = null;
+  state.slots = {};
+  // A new batch is not a stopped one. Left standing, the flag from an earlier
+  // abort would keep the next summary from filling the bar.
+  state.stopping = false;
+  state.stopClicks = 0;
   state.byIndex = {};
-  setBar("bar-file", "pct-file", 0, false);
+  state.tally = { files: 0, success: 0, skipped: 0, failed: 0, savedMB: 0, seconds: 0 };
+  state.runAnnounced = false;
+  state.lastLogSlot = 0;
   setBar("bar-all", "pct-all", 0, false);
-  ["st-eta", "st-speed", "st-fps", "st-bitrate", "st-est"].forEach((id) => { $(id).textContent = "—"; });
   $("summary").style.display = "none";
-  $("nowstage").textContent = "";
+  renderLanes();
 }
-function updateOverall(currentFraction) {
+
+// renderLanes draws one line per converter that is working or has just
+// finished. With a single slot it looks like the old single progress block.
+function renderLanes() {
+  const box = $("lanes");
+  box.innerHTML = "";
+  const slots = Object.keys(state.slots).map(Number).sort((a, b) => a - b);
+  if (!slots.length) {
+    const idle = document.createElement("div");
+    idle.className = "lane-idle";
+    idle.textContent = "Idle.";
+    box.appendChild(idle);
+    return;
+  }
+  slots.forEach((number) => box.appendChild(renderLane(state.slots[number])));
+}
+
+function renderLane(lane) {
+  const row = document.createElement("div");
+  row.className = "lane" + (lane.done ? " done" : "");
+
+  const tag = document.createElement("div");
+  tag.className = "lane-slot";
+  tag.textContent = lane.slot;
+
+  const body = document.createElement("div");
+  body.className = "lane-body";
+
+  const top = document.createElement("div");
+  top.className = "lane-top";
+  const name = document.createElement("span");
+  name.className = "lane-name";
+  name.textContent = lane.name || "starting…";
+  const stage = document.createElement("span");
+  stage.className = "lane-stage";
+  stage.textContent = lane.stopping ? "stopping…" : (lane.stage || "");
+
+  // Each converter can be stopped on its own. With one running it does the same
+  // as the big button; with two or three it is the only way to drop a single
+  // file without taking the whole batch down. The waiting jobs stay where they
+  // are — the next one simply moves onto the freed slot.
+  const stop = document.createElement("button");
+  stop.className = "x lane-stop";
+  stop.textContent = "✕";
+  stop.title = lane.stopping
+    ? "Stopping — click again to quit this one immediately"
+    : "Stop this one (keeps what is already encoded as a playable preview)";
+  stop.disabled = lane.done;
+  stop.onclick = () => stopSlot(lane.slot);
+  top.append(name, stage, stop);
+
+  const barline = document.createElement("div");
+  barline.className = "barline";
+  const bar = document.createElement("div");
+  bar.className = "bar";
+  const fill = document.createElement("i");
+  fill.style.width = lane.known ? pct(lane.pct).toFixed(1) + "%" : "0%";
+  bar.appendChild(fill);
+  const percent = document.createElement("span");
+  percent.className = "pct";
+  percent.textContent = lane.known ? pct(lane.pct).toFixed(1) + " %" : "—";
+  barline.append(bar, percent);
+
+  const stats = document.createElement("div");
+  stats.className = "lane-stats";
+  stats.textContent = lane.stats || "";
+
+  body.append(top, barline, stats);
+  row.append(tag, body);
+  return row;
+}
+
+// laneFor finds the converter that is working on this queue entry.
+function laneFor(entry) {
+  return Object.values(state.slots).find((lane) => lane.entry === entry) || null;
+}
+
+// updateOverall works the bar out from the queue itself, every time, instead of
+// counting megabytes as they go by.
+//
+// The counting version was wrong and looked it: with one process per file
+// nobody ever added the finished ones up, and when a converter closed, its file
+// dropped out of the sum — the bar FELL BACK while a file had just been
+// finished, and ended at 44.5 % on a batch that was completely done (reported
+// 2026-08-18). Read from the queue, a file that is done stays done: the bar can
+// only ever go up.
+function updateOverall() {
   // A join run is not fed by the queue (see runUsesQueue), so measuring it
   // against the queue's total size would show a bar for files nobody is
   // touching. One job per run means there is no overall progress to show.
-  if (!runUsesQueue()) { setBar("bar-all", "pct-all", 0, false); return; }
-  if (state.totalMB <= 0) { setBar("bar-all", "pct-all", 0, false); return; }
-  const currentMB = state.current ? (state.current.sizeMB || 0) : 0;
-  const value = (state.doneMB + currentMB * currentFraction) / state.totalMB * 100;
-  setBar("bar-all", "pct-all", value, true);
+  if (!runUsesQueue() || !state.batch || !state.batch.size) {
+    setBar("bar-all", "pct-all", 0, false);
+    return;
+  }
+  let total = 0;
+  let done = 0;
+  state.queue.forEach((entry) => {
+    // Only the files of THIS batch. Older entries stay on show as a record and
+    // must not weigh the bar down.
+    if (!state.batch.has(entry.path.toLowerCase())) return;
+    const size = entry.sizeMB || 0;
+    total += size;
+    if (entry.finished) {
+      done += size;
+      return;
+    }
+    const lane = laneFor(entry);
+    if (lane && lane.known) done += size * (lane.pct || 0) / 100;
+  });
+  if (total <= 0) { setBar("bar-all", "pct-all", 0, false); return; }
+  setBar("bar-all", "pct-all", done / total * 100, true);
 }
 
 /* ---------- converter events ---------- */
+// onRunStart fires once per converter, so with three slots it fires three
+// times. It must NOT clear the display — that would wipe out the slots that are
+// already working. Clearing happens once, where the batch is started.
 function onRunStart(event) {
-  resetProgress();
   state.runMode = event.mode || "convert";
-  if (runUsesQueue()) state.queue.forEach((entry) => { entry.status = ""; entry.note = "queued"; });
-  // The tool modes carry neither a codec nor a file count at this point — the
-  // count only exists once the folder has been read.
-  note(isToolRun()
-    ? "Run started: " + event.mode + ", NVENCForge " + event.version
-    : "Run started: " + event.mode + ", " + event.codec + " on " + event.encoder +
-      ", " + event.files + " file(s), NVENCForge " + event.version);
+  slotState(event.slot || 1);
+  if (!state.runAnnounced) {
+    state.runAnnounced = true;
+    // The tool modes carry neither a codec nor a file count at this point — the
+    // count only exists once the folder has been read.
+    note(isToolRun()
+      ? "Run started: " + event.mode + ", NVENCForge " + event.version
+      : "Run started: " + event.mode + ", " + event.codec + " on " + event.encoder +
+        ", NVENCForge " + event.version);
+  }
   renderQueue();
+  renderLanes();
 }
 
 // isToolRun tells the two kinds of run apart. It matters for the queue: only a
@@ -1037,44 +1409,62 @@ function runUsesQueue() { return state.runMode !== "join"; }
 function markProcessed(entry) {
   entry.status = "processed";
   entry.note = "processed — details in the log";
+  entry.finished = true;
 }
 function onFileStart(event) {
+  const lane = slotState(event.slot || 1);
   const entry = runUsesQueue() ? findEntry(event.path) : null;
-  if (state.current) {
-    state.doneMB += state.current.sizeMB || 0;
-    if (isToolRun() && state.current.status === "running") markProcessed(state.current);
-  }
-  state.current = entry;
-  state.byIndex[event.index] = entry;
+  // A tool run walks through several files in ONE process, so the start of the
+  // next file is what closes off the previous one on this slot.
+  if (lane.entry && isToolRun() && lane.entry.status === "running") markProcessed(lane.entry);
+  lane.entry = entry;
+  lane.name = event.name;
+  lane.pct = 0;
+  lane.known = true;
+  lane.stage = "";
+  lane.stats = "";
+  lane.done = false;
+  state.byIndex[laneKey(event.slot, event.index)] = entry;
   if (entry) {
     entry.status = "running";
     entry.note = "working…";
     // The converter knows the real size; trust it over our own reading.
     if (event.in_mb > 0) entry.sizeMB = event.in_mb;
   }
-  $("nowfile").textContent = "[" + event.index + "/" + event.total + "] " + event.name;
-  $("nowstage").textContent = "";
-  setBar("bar-file", "pct-file", 0, true);
-  updateOverall(0);
+  updateOverall();
+  renderLanes();
   afterQueueChange();
 }
+
+// laneKey: the result event carries only the file number, and every converter
+// counts from 1. Without the slot in the key, the result of slot 2 would land
+// on the file of slot 1.
+function laneKey(slot, index) { return (slot || 1) + ":" + index; }
+
 const STAGE_TEXT = {
-  analyze: "Measuring quality to pick the CQ (no progress numbers during this step)",
-  encode: "Encoding",
-  remux: "Repackaging",
-  mp4: "Writing the MP4"
+  analyze: "measuring quality to pick the CQ",
+  encode: "encoding",
+  remux: "repackaging",
+  mp4: "writing the MP4"
 };
 function onStage(event) {
-  $("nowstage").textContent = STAGE_TEXT[event.stage] || event.stage;
+  const lane = slotState(event.slot || 1);
+  lane.stage = STAGE_TEXT[event.stage] || event.stage;
+  renderLanes();
 }
 function onProgress(event) {
-  setBar("bar-file", "pct-file", event.pct, true);
-  updateOverall((event.pct || 0) / 100);
-  $("st-eta").textContent = event.eta || "—";
-  $("st-speed").textContent = event.speed || "—";
-  $("st-fps").textContent = event.fps || "—";
-  $("st-bitrate").textContent = event.bitrate || "—";
-  $("st-est").textContent = event.est_mb > 0 ? fmtMB(event.est_mb) : "—";
+  const lane = slotState(event.slot || 1);
+  lane.pct = event.pct;
+  lane.known = true;
+  lane.stats = [
+    event.speed && event.speed !== "-" ? event.speed : "",
+    event.eta ? "ETA " + event.eta : "",
+    event.fps && event.fps !== "-" ? event.fps + " fps" : "",
+    event.bitrate && event.bitrate !== "-" ? event.bitrate : "",
+    event.est_mb > 0 ? "→ " + fmtMB(event.est_mb) : ""
+  ].filter(Boolean).join("  ·  ");
+  updateOverall();
+  renderLanes();
 }
 const RESULT_TEXT = {
   success: (e) => "done, " + e.saved_pct.toFixed(0) + " % smaller",
@@ -1083,14 +1473,24 @@ const RESULT_TEXT = {
   preview: () => "stopped — preview kept"
 };
 function onResult(event) {
+  const lane = slotState(event.slot || 1);
   // The result event carries only the file number, not the input path — the
   // mapping was noted down when the file started.
-  const entry = state.byIndex[event.index] || state.current;
+  const entry = state.byIndex[laneKey(event.slot, event.index)] || lane.entry;
   if (entry) {
     entry.status = event.status;
     entry.note = (RESULT_TEXT[event.status] || (() => event.status))(event);
     if (event.message) entry.note += " (" + event.message + ")";
+    // Done is done, whatever the outcome: the overall bar must never fall back
+    // because a converter closed and its file dropped out of the sum.
+    entry.finished = true;
   }
+  // Counted here, because with several converters each one only reports on its
+  // own file — the balance for the whole batch exists nowhere else.
+  state.tally.files++;
+  if (state.tally[event.status] !== undefined) state.tally[event.status]++;
+  state.tally.savedMB += event.saved_mb || 0;
+
   // The percentage is derived from ffmpeg's timestamps and usually stops a
   // little short of 100 % (99.1 %, for instance) because the video track ends
   // slightly before the duration the container claims. A file is not finished
@@ -1098,37 +1498,60 @@ function onResult(event) {
   // here. "failed" and "preview" keep their last value on purpose: there the
   // remainder really was not encoded.
   if (event.status === "success" || event.status === "skipped") {
-    setBar("bar-file", "pct-file", 100, true);
-    updateOverall(1);
+    lane.pct = 100;
+    lane.known = true;
   }
+  lane.stage = RESULT_TEXT[event.status] ? (RESULT_TEXT[event.status])(event) : event.status;
   if (event.status === "success") {
     note(event.name + ": " + fmtMB(event.in_mb) + " → " + fmtMB(event.out_mb) +
         " (" + event.saved_pct.toFixed(1) + " % smaller)");
   }
+  updateOverall();
+  renderLanes();
   renderQueue();
 }
+// onSummary fires once per converter — with three slots, three times. Each one
+// only knows about its own file, so the numbers are added up and the balance is
+// shown when the whole batch is through (see showFinalSummary).
 function onSummary(event) {
+  const lane = slotState(event.slot || 1);
+  lane.done = true;
+  state.tally.seconds += event.elapsed_sec || 0;
+  // The tool modes report no result per file, so nothing ever filled their bar.
+  // The percentage comes from ffmpeg's timestamps and stops a little short
+  // (measured on a finished join: 95.6 %), which then stood next to an overall
+  // bar at 100 % and looked like something was left undone. A stopped run keeps
+  // its last value on purpose: there the rest really was not written.
+  if (isToolRun()) {
+    state.tally.files += event.files || 0;
+    if (!state.stopping && !lane.stopping) { lane.pct = 100; lane.known = true; }
+    lane.stage = "finished";
+  }
+  renderLanes();
+}
+
+// showFinalSummary is the balance for everything that ran — drawn when no
+// converter is left working and nothing is waiting.
+function showFinalSummary() {
   const box = $("summary");
+  const tally = state.tally;
+  if (!tally || !tally.files) return;
   box.style.display = "block";
-  const minutes = Math.floor(event.elapsed_sec / 60);
-  const seconds = Math.round(event.elapsed_sec % 60);
+  const minutes = Math.floor(tally.seconds / 60);
+  const seconds = Math.round(tally.seconds % 60);
+  // With several converters the wall clock is shorter than the times added up,
+  // so it says "converter time" instead of pretending to be a stopwatch.
+  const time = state.parallel > 1
+    ? minutes + " min " + seconds + " s of converter time"
+    : minutes + " min " + seconds + " s";
   // A tool run has no success/failed counters and nothing was saved — showing
   // "0 converted, 0 saved" would read like a failure instead of a finished job.
   box.textContent = isToolRun()
-    ? event.files + " file(s) processed in " + minutes + " min " + seconds + " s."
-    : event.files + " file(s): " + event.success + " converted, " +
-      event.skipped + " skipped, " + event.failed + " not finished — " +
-      fmtMB(event.saved_mb) + " saved in " + minutes + " min " + seconds + " s.";
-  setBar("bar-all", "pct-all", 100, true);
-  // The file bar has to be closed off here as well. A conversion fills it when
-  // the file's result arrives — but the tool modes report no result at all, so
-  // nobody ever did. The percentage comes from ffmpeg's timestamps and stops a
-  // little short (measured on a finished join: 95.6 %), which then stood next
-  // to an overall bar at 100 % and looked like something was left undone.
-  // A stopped run keeps its last value on purpose: there the rest really was
-  // not written.
-  if (isToolRun() && !state.stopping) setBar("bar-file", "pct-file", 100, true);
-  $("nowstage").textContent = "";
+    ? tally.files + " file(s) processed in " + time + "."
+    : tally.files + " file(s): " + tally.success + " converted, " +
+      tally.skipped + " skipped, " + tally.failed + " not finished — " +
+      fmtMB(tally.savedMB) + " saved in " + time + ".";
+  if (!state.stopping) setBar("bar-all", "pct-all", 100, true);
 }
 
 /* ---------- the track chooser ----------
@@ -1144,13 +1567,22 @@ function onSummary(event) {
 // they are only written when asked for.
 function isExtraOption(label) { return String(label || "").trim().startsWith("↳"); }
 
+// onQuestion queues the question up. Two converters can ask at the same time,
+// and both are standing still until they get their line — so the second one is
+// kept and shown as soon as the first is answered, instead of overwriting it.
 function onQuestion(event) {
   // "stop asking" was clicked earlier in this run: answer straight away, so
   // nothing stands still and no dialog flashes up.
-  if (state.answerAllThisRun) { sendAnswer(""); return; }
+  if (state.answerAllThisRun) { sendAnswer("", event.slot); return; }
+  state.questions.push(event);
+  if (state.questions.length === 1) showQuestion(event);
+}
 
+function showQuestion(event) {
   const options = event.options || [];
   $("ask-file").textContent = event.file || "";
+  // Which converter is waiting — only worth saying when more than one can ask.
+  $("ask-slot").textContent = state.parallel > 1 ? "converter " + (event.slot || 1) : "";
 
   const box = $("ask-options");
   box.innerHTML = "";
@@ -1193,19 +1625,30 @@ function updateAskButtons() {
   $("btn-ask-ok").disabled = askSelection() === "";
 }
 
-async function sendAnswer(text) {
+// sendAnswer sends the line to the converter that asked. slot is only passed in
+// when answering ahead of the queue ("stop asking"); otherwise it is the
+// question currently on show.
+async function sendAnswer(text, slot) {
+  const pending = state.questions[0];
+  const target = slot !== undefined ? slot : (pending ? pending.slot : 0);
+  if (slot === undefined) state.questions.shift();
   $("ask").hidden = true;
   try {
-    await api().AnswerQuestion(text);
+    await api().AnswerQuestion(target || 1, text);
   } catch (err) {
     showError(String(err));
     note("Could not send the answer: " + err);
   }
+  // Somebody else may still be waiting.
+  if (state.questions.length) showQuestion(state.questions[0]);
 }
 
-// closeQuestion takes an open dialog away WITHOUT answering. Only correct once
+// closeQuestion takes open dialogs away WITHOUT answering. Only correct once
 // the run is over anyway — then nobody is waiting for the line any more.
-function closeQuestion() { $("ask").hidden = true; }
+function closeQuestion() {
+  state.questions = [];
+  $("ask").hidden = true;
+}
 
 function onConverterEvent(event) {
   switch (event.ev) {
@@ -1220,38 +1663,73 @@ function onConverterEvent(event) {
   }
 }
 
+// onRunState is about ONE converter. With several slots the others may well
+// carry on — so the run is only over when the dispatcher says so (onQueueState).
 function onRunState(runState) {
-  state.running = runState.running;
-  state.stopping = !!runState.stopping;
-  if (!runState.running) {
+  const slot = runState.slot || 1;
+  // Stopping belongs to the slot, not to the run: one converter being stopped
+  // says nothing about the others. Only the big button sets state.stopping.
+  if (runState.stopping) {
+    slotState(slot).stopping = true;
+    renderLanes();
+  }
+  if (runState.running) return;
+
+  const lane = state.slots[slot];
+  if (lane) {
+    lane.done = true;
+    // A file still marked as running never reported a result. In a tool run
+    // that is normal — those modes report no result at all — so it is simply
+    // closed off instead of looking like a fault.
+    if (lane.entry && lane.entry.status === "running") {
+      if (isToolRun()) markProcessed(lane.entry);
+      else {
+        lane.entry.status = "";
+        lane.entry.note = "no result reported";
+        // Nothing more will come for this file, so it counts as dealt with.
+        // Leaving it open would make the overall bar stall below 100 % on a
+        // batch that is over.
+        lane.entry.finished = true;
+      }
+    }
+    lane.entry = null;
+  }
+  updateOverall();
+  if (runState.error) {
+    showError(runState.error);
+    note("Could not run NVENCForge: " + runState.error);
+  } else if (runState.exitCode !== 0) {
+    note("NVENCForge ended with exit code " + runState.exitCode + ".");
+  }
+  renderQueue();
+  renderLanes();
+  updateButtons();
+}
+
+// onQueueState comes from the dispatcher and is the only place that knows
+// whether the whole batch is through: the slots that are working plus the jobs
+// still waiting for a free one.
+function onQueueState(queueState) {
+  state.active = queueState.active || 0;
+  state.pending = queueState.pending || 0;
+  const busy = state.active > 0 || state.pending > 0;
+  const wasRunning = state.running;
+  state.running = busy;
+
+  if (wasRunning && !busy) {
     // A dialog may still be standing there — the run it belonged to is over,
     // so there is nobody left to answer.
     closeQuestion();
     state.answerAllThisRun = false;
     state.stopClicks = 0;
-    state.current = null;
-    $("nowfile").textContent = "Idle.";
-    $("nowstage").textContent = "";
-    if (runState.error) {
-      showError(runState.error);
-      note("Could not run NVENCForge: " + runState.error);
-    } else if (runState.exitCode !== 0) {
-      note("NVENCForge ended with exit code " + runState.exitCode + ".");
-    } else {
-      note("NVENCForge finished.");
-    }
-    // Anything still marked as running never reported a result. In a tool run
-    // that is normal — those modes report no result at all — so the last file
-    // is simply closed off instead of looking like a fault.
-    state.queue.forEach((entry) => {
-      if (entry.status !== "running") return;
-      if (isToolRun()) markProcessed(entry);
-      else { entry.status = ""; entry.note = "no result reported"; }
-    });
-    renderQueue();
+    note("NVENCForge finished.");
+    showFinalSummary();
     // The INI is written by NVENCForge itself, so on a fresh installation it
     // only exists from the first run onwards — read it again now.
     refreshConfig();
+    // Files that turned up while this run was going are next in line. Without
+    // this they would sit in the queue until something else happened to start.
+    maybeStartWatchRun();
   }
   updateButtons();
 }
@@ -1286,6 +1764,37 @@ function showConverter(status) {
   state.forceDownload = false;
   if (status.note) note(status.note);
   updateButtons();
+  offerSetup();
+}
+
+// offerSetup takes care of the state a freshly downloaded NVENCForge.exe is in:
+// it has no configuration and no FFmpeg yet, because both only appear once it
+// has run. Until then the Settings page has nothing to show and the first
+// conversion would stop to fetch FFmpeg. Measured 2026-08-18: one run with a
+// file name that does not exist writes the INI and fetches FFmpeg.
+async function offerSetup() {
+  // Once per window at most: if it fails — no network for FFmpeg, say — the
+  // converter still looks unfinished, and retrying on every status refresh
+  // would turn that into an endless loop.
+  if (!state.converterFound || state.setupRunning || state.setupTried) return;
+  try {
+    if (!await api().NeedsSetup()) return;
+  } catch (err) {
+    return; // an older window without this call: nothing to do
+  }
+  state.setupRunning = true;
+  state.setupTried = true;
+  api().RunSetup();
+}
+
+// onSetupDone: the configuration exists now, so the Settings page can be filled
+// in — it read an empty file when the window started.
+function onSetupDone(ok) {
+  state.setupRunning = false;
+  if (!ok) return;
+  refreshConfig();
+  loadSettings();
+  api().GetConverterStatus().then(showConverter).catch(() => {});
 }
 
 /* ---------- settings from the INI ----------
@@ -1427,6 +1936,11 @@ const HELP = {
     title: "Shut down when finished",
     text: "Shuts the PC down once the last file in the queue is done.",
     now: "Default: off"
+  }),
+  parallel: () => ({
+    title: "How many videos at the same time",
+    text: "Starts several converters side by side, each on its own file. Measured on this machine with four 90-second clips: two at a time took 52 seconds instead of 72 — the quality analysis of one runs on the processor while the other one encodes on the graphics card. A third brought nothing more, the card is busy by then. The tool modes (Split, Join, DaVinci) always run one at a time; they only copy.",
+    now: "Measured here: 1 → 72 s · 2 → 52 s · 3 → 51 s"
   })
 };
 
@@ -1809,11 +2323,15 @@ function showPage(name) {
 }
 
 /* ---------- actions ---------- */
-function collectRequest() {
-  return {
-    mode: state.mode,
+// collectRequest reads the options as they stand. The three arguments are only
+// used by the watched folder: it converts whatever page is on show, with its
+// own list of files, and never shuts the machine down.
+function collectRequest(modeOverride, filesOverride, extra) {
+  const mode = modeOverride === undefined ? state.mode : modeOverride;
+  return Object.assign({
+    mode: mode,
     // Joining draws from its own list — the queue belongs to the other pages.
-    files: state.mode === "join" ? joinRunFiles() : state.queue.map((entry) => entry.path),
+    files: filesOverride || (mode === "join" ? joinRunFiles() : state.queue.map((entry) => entry.path)),
     codec: $("opt-codec").value,
     encoder: $("opt-encoder").value,
     container: $("opt-container").value,
@@ -1824,26 +2342,41 @@ function collectRequest() {
     fixedCQ: parseInt($("opt-cq").value, 10) || 0,
     maxBitrate: parseInt($("opt-bitrate").value, 10) || 0,
     keepSource: $("opt-keep").checked,
-    shutdown: $("opt-shutdown").checked
-  };
+    shutdown: $("opt-shutdown").checked,
+    // Only converting runs several at a time. Split, Join and DaVinci copy
+    // instead of encoding and ask about tracks — there is nothing to win and a
+    // second dialog to lose (the reasoning is in runargs.go, buildJobs).
+    parallel: mode === "" ? parallelSetting() : 1
+  }, extra || {});
 }
+
+function parallelSetting() { return parseInt($("opt-parallel").value, 10) || 1; }
 
 async function start() {
   showError("");
+  const request = collectRequest();
+  // Cleared once for the whole batch — not on every "run" event, since with
+  // several converters each one sends its own and would wipe out the others.
   resetProgress();
+  startBatch(request.files);
+  state.parallel = request.parallel;
   try {
-    await api().StartRun(collectRequest());
+    await api().StartRun(request);
   } catch (err) {
     showError(String(err));
     note("Start refused: " + err);
   }
 }
 async function stop() {
+  // Marked before asking Go, exactly like stopSlot: the button was clicked, so
+  // the window should say so at once instead of after the answer comes back.
+  state.stopClicks++;
+  state.stopping = true;
+  Object.values(state.slots).forEach((lane) => { if (!lane.done) lane.stopping = true; });
+  renderLanes();
+  updateButtons();
   try {
     await api().StopRun();
-    state.stopClicks++;
-    state.stopping = true;
-    updateButtons();
   } catch (err) {
     showError(String(err));
   }
@@ -1880,7 +2413,12 @@ async function download() {
 function wire() {
   $("btn-files").onclick = async () => { try { addItems(await api().PickFiles()); } catch (e) { showError(String(e)); } };
   $("btn-folder").onclick = async () => { try { addItems(await api().PickFolder()); } catch (e) { showError(String(e)); } };
-  $("btn-clear").onclick = () => { state.queue = []; afterQueueChange(); };
+  // Clearing the list or the log also wipes the progress display. It shows the
+  // last run until then, which is right while you are still reading it — but
+  // once you clear up, leaving old bars and a stale summary standing would be
+  // pretending a finished run is still current.
+  $("btn-clear").onclick = () => { state.queue = []; clearProgress(); afterQueueChange(); };
+  $("btn-log-copy").onclick = copyLog;
   $("btn-join-files").onclick = async () => {
     try {
       const picked = await api().PickJoinFiles();
@@ -1888,10 +2426,12 @@ function wire() {
     } catch (e) { showError(String(e)); }
   };
   $("btn-join-clear").onclick = () => { state.joinFiles = []; state.joinBasePath = ""; afterJoinChange(); };
+  $("btn-watch-pick").onclick = pickWatchFolder;
+  $("btn-watch-toggle").onclick = toggleWatch;
   $("btn-start").onclick = start;
   $("btn-stop").onclick = stop;
   $("btn-download").onclick = download;
-  $("btn-log-clear").onclick = () => { $("logbox").innerHTML = ""; };
+  $("btn-log-clear").onclick = () => { $("logbox").innerHTML = ""; state.lastLogSlot = 0; clearProgress(); };
   $("btn-settings-save").onclick = saveSettings;
   $("btn-settings-defaults").onclick = restoreDefaults;
 
@@ -1956,9 +2496,12 @@ function wire() {
   window.addEventListener("dragleave", () => dropZones.forEach((z) => z.classList.remove("hot")));
   window.addEventListener("drop", () => dropZones.forEach((z) => z.classList.remove("hot")));
 
+  window.runtime.EventsOn("watch:files", onWatchFiles);
   window.runtime.EventsOn("conv:event", onConverterEvent);
   window.runtime.EventsOn("conv:log", log);
   window.runtime.EventsOn("conv:state", onRunState);
+  window.runtime.EventsOn("conv:queue", onQueueState);
+  window.runtime.EventsOn("conv:setup", onSetupDone);
   window.runtime.EventsOn("conv:download", (info) => {
     if (!info.total) return;
     const done = (info.done / info.total * 100).toFixed(0);
@@ -1971,6 +2514,7 @@ async function boot() {
   showPage("convert");
   afterQueueChange();
   afterJoinChange();
+  showWatch(null);
   try {
     const info = await api().GetStartupInfo();
     showGPU(info.gpu);

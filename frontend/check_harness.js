@@ -16,7 +16,12 @@ function fakeElement(id) {
     id, textContent: "", innerHTML: "", value: "", checked: false, hidden: false,
     className: "", disabled: false, max: 0, placeholder: "", style: {}, dataset: {},
     children: [], scrollTop: 0, scrollHeight: 0,
-    classList: { add() {}, remove() {}, toggle() {}, contains: () => false }
+    classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
+    // Taking lines back is counted: that is how a check can see whether a
+    // redraw really deleted something — the log's own way of overwriting
+    // itself, and the one thing two converters can ruin for each other.
+    removed: 0,
+    removeChild() { store.removed++; }
   };
   return new Proxy(store, {
     get: (target, prop) => (prop in target ? target[prop] : () => fakeElement("child")),
@@ -68,7 +73,7 @@ function loadGui() {
   // Everything the window would hand to the Go side is recorded instead. That
   // is how a check can see WHICH answer a button really sends — the one thing
   // that decides whether the user gets the tracks they picked.
-  const calls = { answers: [], runs: [], joinSorts: [] };
+  const calls = { answers: [], answerSlots: [], runs: [], joinSorts: [], stops: [] };
   // Sorting the join list happens in Go (joinfiles.go) and is tested there.
   // Here only the answer is staged, so a check can see what the WINDOW does
   // with it — and, just as important, which paths it hands over.
@@ -79,11 +84,17 @@ function loadGui() {
     go: {
       main: {
         App: {
-          AnswerQuestion(text) { calls.answers.push(text); return Promise.resolve(); },
+          // The slot says WHICH converter asked — with several running, an
+          // answer sent to the wrong one would pull the wrong tracks.
+          AnswerQuestion(slot, text) { calls.answers.push(text); calls.answerSlots.push(slot); return Promise.resolve(); },
           StartRun(request) { calls.runs.push(request); return Promise.resolve(); },
-          StopRun() { return Promise.resolve(); },
+          StopRun() { calls.stops.push("all"); return Promise.resolve(); },
+          StopSlot(slot) { calls.stops.push(slot); return Promise.resolve(); },
           SortJoinFiles(paths) { calls.joinSorts.push(paths); return Promise.resolve(joinReply); },
-          PickJoinFiles() { return Promise.resolve(joinReply); }
+          PickJoinFiles() { return Promise.resolve(joinReply); },
+          StartWatching(folder) { return Promise.resolve({ watching: true, folder }); },
+          StopWatching() { return Promise.resolve({ watching: false, folder: "" }); },
+          PickWatchFolder() { return Promise.resolve(""); }
         }
       }
     }
@@ -94,9 +105,11 @@ function loadGui() {
     scriptText + "\n;return { onConverterEvent, state, applyConfig, refreshFromConfig, bitrateCapKey, HELP," +
     " settingModel, looksInvalid, settingHelp, editSetting, revertSetting, restoreDefaults," +
     " changedValues, defaultFor, noteGPUAdvice, renderSettings, showPage, log," +
-    " onQuestion, sendAnswer, askSelection, isExtraOption, isToolRun, collectRequest," +
+    " onQuestion, sendAnswer, askSelection, isExtraOption, isToolRun, collectRequest, resetProgress," +
     " runUsesQueue, updateButtons, afterJoinChange, addJoinPaths, joinBase, joinOfKind," +
-    " joinReady, joinRunFiles };"
+    " joinReady, joinRunFiles, onWatchFiles, maybeStartWatchRun, showWatch, toggleWatch, onQueueState," +
+    " startBatch, clearProgress, updateOverall, stopSlot, stop, renderLanes," +
+    " onRunState };"
   )(windowStub, documentStub);
 
   return {

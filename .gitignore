@@ -11,3 +11,6 @@ node_modules
 
 # Local safety copies made before edits.
 _backup/
+
+# Working memory of the assistant — never part of the public repo.
+_claude_memory/

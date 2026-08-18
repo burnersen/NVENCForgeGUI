@@ -4,7 +4,7 @@ import {main} from '../models';
 
 export function AddPaths(arg1:Array<string>):Promise<Array<main.QueueItem>>;
 
-export function AnswerQuestion(arg1:string):Promise<void>;
+export function AnswerQuestion(arg1:number,arg2:string):Promise<void>;
 
 export function DownloadConverter(arg1:boolean):Promise<main.DownloadResult>;
 
@@ -12,11 +12,15 @@ export function GetConfigView():Promise<main.ConfigView>;
 
 export function GetConverterStatus():Promise<main.ConverterStatus>;
 
+export function GetQueueStatus():Promise<main.QueueState>;
+
 export function GetSettingsFile():Promise<main.SettingsFile>;
 
 export function GetStartupInfo():Promise<main.StartupInfo>;
 
 export function IsRunning():Promise<boolean>;
+
+export function NeedsSetup():Promise<boolean>;
 
 export function PickFiles():Promise<Array<main.QueueItem>>;
 
@@ -24,10 +28,22 @@ export function PickFolder():Promise<Array<main.QueueItem>>;
 
 export function PickJoinFiles():Promise<Array<main.JoinFile>>;
 
+export function PickWatchFolder():Promise<string>;
+
+export function RunSetup():Promise<void>;
+
 export function SaveSettings(arg1:Record<string, string>):Promise<main.SaveResult>;
 
 export function SortJoinFiles(arg1:Array<string>):Promise<Array<main.JoinFile>>;
 
 export function StartRun(arg1:main.RunRequest):Promise<void>;
 
+export function StartWatching(arg1:string):Promise<main.WatchState>;
+
 export function StopRun():Promise<void>;
+
+export function StopSlot(arg1:number):Promise<void>;
+
+export function StopWatching():Promise<main.WatchState>;
+
+export function WatchStatus():Promise<main.WatchState>;

@@ -37,6 +37,10 @@ console.log("\nWhat is pre-ticked matches the converter's own default");
 // on every file without anyone asking for it, and nothing on screen would look
 // wrong. The converter itself never makes one unless it is asked to.
 created.length = 0;
+// The question from just above is still open — questions queue up now, because
+// with several converters two of them can ask at once. Clear it first, or this
+// one would only be put in line behind it and never drawn.
+gui.state.questions = [];
 gui.onQuestion(trackQuestion);
 const boxes = created.filter((el) => el.type === "checkbox");
 checker.check("one box per option", boxes.length, 3);
@@ -96,12 +100,22 @@ checker.check("first file is closed off", gui.state.queue[0].status, "processed"
 checker.contains("and says where to look", gui.state.queue[0].note, "log");
 checker.check("no success is claimed", gui.state.queue[0].note.includes("smaller"), false);
 
+// Each converter sends its own summary now, so the balance for the whole batch
+// is added up in the window and drawn when the dispatcher reports that nothing
+// is left — that is what onQueueState stands for here.
 console.log("\nThe summary does not report a tool run as “0 converted”");
 gui.onConverterEvent({ ev: "summary", files: 2, success: 0, skipped: 0, failed: 0, saved_mb: 0, elapsed_sec: 125 });
+gui.state.running = true;
+gui.onQueueState({ active: 0, pending: 0, limit: 1 });
 checker.contains("says what really happened", element("summary").textContent, "2 file(s) processed in 2 min 5 s");
 
+gui.resetProgress();
 gui.onConverterEvent({ ev: "run", mode: "convert", codec: "h265", encoder: "nvidia", files: 2, version: "1.18.0" });
-gui.onConverterEvent({ ev: "summary", files: 2, success: 2, skipped: 0, failed: 0, saved_mb: 40, elapsed_sec: 60 });
+gui.onConverterEvent({ ev: "result", index: 1, status: "success", name: "a.mkv", in_mb: 100, out_mb: 40, saved_mb: 60, saved_pct: 60 });
+gui.onConverterEvent({ ev: "result", index: 2, status: "success", name: "b.mkv", in_mb: 100, out_mb: 40, saved_mb: 60, saved_pct: 60 });
+gui.onConverterEvent({ ev: "summary", files: 2, success: 2, skipped: 0, failed: 0, saved_mb: 120, elapsed_sec: 60 });
+gui.state.running = true;
+gui.onQueueState({ active: 0, pending: 0, limit: 1 });
 checker.contains("a conversion still reports its savings", element("summary").textContent, "2 converted");
 
 console.log("\nThe page decides which mode the start button runs");

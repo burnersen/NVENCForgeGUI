@@ -16,14 +16,22 @@ import (
 
 // App hält den Zustand des Fensters.
 type App struct {
-	ctx    context.Context
-	runner *Runner
+	ctx        context.Context
+	dispatcher *Dispatcher
+	watcher    *FolderWatcher
 }
 
 // NewApp erzeugt die Anwendung.
 func NewApp() *App {
 	app := &App{}
-	app.runner = NewRunner(app.emit)
+	app.dispatcher = NewDispatcher(app.emit)
+	// Der Beobachter meldet nur, WAS er gefunden hat. Ob daraufhin ein Lauf
+	// beginnt, entscheidet die Oberfläche: Sie allein weiß, ob gerade schon
+	// konvertiert wird und mit welchen Einstellungen.
+	app.watcher = NewFolderWatcher(
+		func(items []QueueItem) { app.emit("watch:files", items) },
+		app.note,
+	)
 	return app
 }
 
@@ -45,7 +53,7 @@ func (a *App) startup(ctx context.Context) {
 // unsichtbar weiter. Lieber ein klarer Hinweis als ein Programm, das im
 // Hintergrund weiterrechnet, ohne dass es jemand sieht.
 func (a *App) beforeClose(ctx context.Context) bool {
-	if !a.runner.Running() {
+	if !a.dispatcher.Busy() {
 		return false
 	}
 	a.note("A conversion is still running — stop it first, then close the window.")
@@ -83,6 +91,39 @@ func (a *App) GetStartupInfo() StartupInfo {
 // GetConverterStatus prüft die Programmdatei erneut.
 func (a *App) GetConverterStatus() ConverterStatus {
 	return converterStatus()
+}
+
+// NeedsSetup meldet, ob dem Konverter noch seine Erstausstattung fehlt — also
+// INI und eigenes FFmpeg (die Begründung steht im Kopf von setup.go).
+func (a *App) NeedsSetup() bool {
+	return needsSetup(converterStatus())
+}
+
+// RunSetup lässt den Konverter einmal laufen, damit er sich einrichtet.
+//
+// Der Aufruf kehrt sofort zurück; die Ausgabe läuft ins Protokoll, und am Ende
+// meldet das Ereignis "conv:setup", ob es geklappt hat. Grund: Der
+// FFmpeg-Download dauert, und ein Fenster, das minutenlang nicht reagiert, sähe
+// abgestürzt aus.
+func (a *App) RunSetup() {
+	status := converterStatus()
+	if !status.Found {
+		a.note("NVENCForge.exe was not found — download it first.")
+		return
+	}
+	a.note("Setting NVENCForge up: it writes its configuration and fetches its own FFmpeg. This can take a minute.")
+	go func() {
+		err := runSetup(status, func(text string) {
+			a.emit("conv:log", LogLine{Text: text})
+		})
+		if err != nil {
+			a.note("Setup did not finish: " + err.Error())
+			a.emit("conv:setup", false)
+			return
+		}
+		a.note("NVENCForge is ready — its settings can be edited now.")
+		a.emit("conv:setup", true)
+	}()
 }
 
 // GetSettingsFile liefert alle Einstellungen für den Bereich "Settings" —
@@ -192,19 +233,67 @@ func (a *App) PickFolder() ([]QueueItem, error) {
 	return expandPaths([]string{folder}), nil
 }
 
-// IsRunning meldet, ob gerade konvertiert wird.
-func (a *App) IsRunning() bool {
-	return a.runner.Running()
+// WatchState ist das, was die Oberfläche über die Ordner-Beobachtung wissen
+// muss.
+type WatchState struct {
+	Watching bool   `json:"watching"`
+	Folder   string `json:"folder"`
 }
 
-// StartRun startet den Konverter mit den gewählten Einstellungen.
+// PickWatchFolder öffnet den Ordnerdialog für die Beobachtung. Er sammelt
+// nichts ein — der Ordner wird nur benannt.
+func (a *App) PickWatchFolder() (string, error) {
+	folder, err := wailsruntime.OpenDirectoryDialog(a.ctx, wailsruntime.OpenDialogOptions{
+		Title: "Choose the folder to watch",
+	})
+	if err != nil {
+		return "", fmt.Errorf("app.go: PickWatchFolder: %w", err)
+	}
+	return folder, nil
+}
+
+// StartWatching beginnt die Beobachtung eines Ordners.
+func (a *App) StartWatching(folder string) (WatchState, error) {
+	if err := a.watcher.Start(folder); err != nil {
+		return a.WatchStatus(), fmt.Errorf("app.go: StartWatching: %w", err)
+	}
+	a.note("Watching " + folder + " and its subfolders. New videos are converted once they stop growing.")
+	return a.WatchStatus(), nil
+}
+
+// StopWatching beendet die Beobachtung. Ein laufender Lauf bleibt davon
+// unberührt — abgebrochen wird nur über den Stop-Knopf.
+func (a *App) StopWatching() WatchState {
+	if a.watcher.Watching() {
+		a.note("Stopped watching. Files already in the queue stay there.")
+	}
+	a.watcher.Stop()
+	return a.WatchStatus()
+}
+
+// WatchStatus sagt, ob und was gerade beobachtet wird.
+func (a *App) WatchStatus() WatchState {
+	return WatchState{Watching: a.watcher.Watching(), Folder: a.watcher.Folder()}
+}
+
+// IsRunning meldet, ob noch etwas zu tun ist — laufend oder wartend.
+func (a *App) IsRunning() bool {
+	return a.dispatcher.Busy()
+}
+
+// GetQueueStatus liefert den Stand der Plätze (laufend, wartend, Obergrenze).
+func (a *App) GetQueueStatus() QueueState {
+	return a.dispatcher.QueueStatus()
+}
+
+// StartRun reiht die Arbeit ein und startet, was auf die freien Plätze passt.
 func (a *App) StartRun(request RunRequest) error {
 	status := converterStatus()
 	if !status.Found {
 		return errors.New("NVENCForge.exe was not found — download it first")
 	}
 
-	args, err := buildConverterArgs(request, status.EventChannel)
+	jobs, err := buildJobs(request, status.EventChannel)
 	if err != nil {
 		return err
 	}
@@ -215,20 +304,29 @@ func (a *App) StartRun(request RunRequest) error {
 	// Arbeitsverzeichnis ist der tools-Ordner: dort liegen die Programmdatei,
 	// ihre INI und ihr FFmpeg. Die Ergebnisse entstehen weiterhin neben den
 	// Quelldateien — darüber entscheidet der Konverter, nicht dieses Fenster.
-	return a.runner.Start(status.Path, filepath.Dir(status.Path), args)
+	return a.dispatcher.Submit(status.Path, filepath.Dir(status.Path), request.Parallel, jobs)
 }
 
-// StopRun löst den sauberen Abbruch aus.
+// StopRun löst den sauberen Abbruch aus: wartende Aufträge fallen weg, die
+// laufenden Konverter hören sauber auf.
 func (a *App) StopRun() error {
-	return a.runner.RequestStop()
+	return a.dispatcher.RequestStop()
+}
+
+// StopSlot hält nur einen einzelnen Konverter an. Die anderen laufen weiter,
+// und der nächste wartende Auftrag rückt auf den frei werdenden Platz nach.
+func (a *App) StopSlot(slot int) error {
+	return a.dispatcher.StopSlot(slot)
 }
 
 // AnswerQuestion beantwortet eine Rückfrage des Konverters.
 //
 // Die Oberfläche schickt genau die Zeile, die auch jemand an der Konsole
-// tippen würde: "1,3" für einzelne Spuren, leer für alle. Das Fenster darf
-// erst antworten, wenn ein question-Ereignis angekommen ist — nie im Voraus
-// (die Begründung steht bei Runner.Answer).
-func (a *App) AnswerQuestion(answer string) error {
-	return a.runner.Answer(answer)
+// tippen würde: "1,3" für einzelne Spuren, leer für alle. Dazu die Platznummer
+// aus dem Frage-Ereignis — laufen zwei Konverter, muss die Antwort zu genau
+// der Datei gehören, für die gefragt wurde. Das Fenster darf erst antworten,
+// wenn ein question-Ereignis angekommen ist, nie im Voraus (die Begründung
+// steht bei Runner.Answer).
+func (a *App) AnswerQuestion(slot int, answer string) error {
+	return a.dispatcher.Answer(slot, answer)
 }

@@ -180,7 +180,7 @@ gui.addJoinPaths([german.path]).then(() => {
   });
   checker.check("and none is marked as running", gui.state.queue[0].status, "");
   checker.check("the overall bar stays quiet", element("pct-all").textContent, "—");
-  checker.contains("the file is still named", element("nowfile").textContent, "film.NoSound.mkv");
+  checker.contains("the file is still named", gui.state.slots[1].name, "film.NoSound.mkv");
 
   console.log("\nSplitting still works the old way");
   gui.onConverterEvent({ ev: "run", mode: "split", version: "1.18.0" });

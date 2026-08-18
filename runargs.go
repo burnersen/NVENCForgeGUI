@@ -7,7 +7,10 @@
 // Vorgabe, die der Nutzer erwartet.
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"path/filepath"
+)
 
 // Erlaubte Werte der Auswahlfelder. Als Konstanten, damit ein Tippfehler beim
 // Vergleich auffällt statt still den Standardfall zu wählen.
@@ -44,15 +47,15 @@ const (
 	maxBitrateKbps = 200000
 )
 
+// modeJoin steht als Konstante da, weil dieser Modus als Einziger eine eigene
+// Prüfung hat — ein Tippfehler im Vergleich würde sie still überspringen.
+const modeJoin = "join"
+
 // modeFlags übersetzt die Modus-Bereiche der Oberfläche in ihr Flag.
 //
 // Diese Flags MÜSSEN das erste Argument sein: Der Konverter erkennt seinen
 // Betriebsmodus an os.Args[1] und sonst nirgends. -json fällt bei ihm schon
 // vorher aus der Liste und stört deshalb nicht.
-// modeJoin steht als Konstante da, weil dieser Modus als Einziger eine eigene
-// Prüfung hat — ein Tippfehler im Vergleich würde sie still überspringen.
-const modeJoin = "join"
-
 var modeFlags = map[string]string{
 	"davinci": "-davinci",
 	"split":   "-split",
@@ -61,7 +64,8 @@ var modeFlags = map[string]string{
 
 // RunRequest ist das, was die Oberfläche für einen Lauf schickt.
 type RunRequest struct {
-	Mode       string   `json:"mode"` // "" = konvertieren, sonst Schlüssel aus modeFlags
+	Mode       string   `json:"mode"`     // "" = konvertieren, sonst Schlüssel aus modeFlags
+	Parallel   int      `json:"parallel"` // gleichzeitige Läufe (1–3), 0 = einer
 	Files      []string `json:"files"`
 	Codec      string   `json:"codec"`      // "" oder "av1"
 	Encoder    string   `json:"encoder"`    // "" oder "cpu"
@@ -74,6 +78,45 @@ type RunRequest struct {
 	MaxBitrate int      `json:"maxBitrate"` // 0 = Wert aus der INI
 	KeepSource bool     `json:"keepSource"`
 	Shutdown   bool     `json:"shutdown"`
+}
+
+// buildJobs macht aus einer Anfrage die einzelnen Aufträge für den Verteiler.
+//
+// Beim KONVERTIEREN bekommt jede Datei ihren eigenen Prozess. Nur so können
+// mehrere gleichzeitig laufen, ohne dass zwei Konverter sich um dieselbe Datei
+// streiten — die Begründung samt Messung steht im Kopf von dispatcher.go.
+//
+// Die WERKZEUG-Modi bleiben ein einziger Auftrag mit allen Dateien:
+//   - Zusammenfügen ist von Natur aus ein Auftrag (ein Video plus Beigaben).
+//   - Zerlegen und DaVinci kopieren nur, statt zu rechnen; dort bremst die
+//     Festplatte, nicht die Grafikkarte — parallel gewönne man nichts.
+//   - Beide fragen nach Spuren. Zwei Dialoge gleichzeitig für zwei Dateien
+//     wären eine Zumutung, und eine falsch zugeordnete Antwort zöge die
+//     falschen Spuren heraus.
+func buildJobs(request RunRequest, eventChannel bool) ([]job, error) {
+	if request.Mode != "" {
+		args, err := buildConverterArgs(request, eventChannel)
+		if err != nil {
+			return nil, err
+		}
+		return []job{{label: request.Mode, args: args}}, nil
+	}
+
+	if len(request.Files) == 0 {
+		return nil, fmt.Errorf("runargs.go: buildJobs: the queue is empty")
+	}
+
+	jobs := make([]job, 0, len(request.Files))
+	for _, file := range request.Files {
+		single := request
+		single.Files = []string{file}
+		args, err := buildConverterArgs(single, eventChannel)
+		if err != nil {
+			return nil, err
+		}
+		jobs = append(jobs, job{label: filepath.Base(file), args: args})
+	}
+	return jobs, nil
 }
 
 // buildConverterArgs setzt die Befehlszeile zusammen.
