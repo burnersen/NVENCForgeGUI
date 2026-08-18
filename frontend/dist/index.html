@@ -492,18 +492,22 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
         <p class="lead">
           Takes each file in the queue apart for DaVinci Resolve: a silent
           picture file plus every audio track and every subtitle as its own
-          file, written next to the source.
+          file, written next to the source — each in a form Resolve can
+          actually open.
         </p>
         <details><summary>The details</summary>
         <ul class="notes">
-          <li>Nothing is re-encoded — the picture and the audio are copied as they are.</li>
+          <li>The picture is copied, never re-encoded — it only loses its sound.</li>
+          <li>Audio is re-encoded to AAC wherever DaVinci would struggle: AC3, E-AC3, DTS, TrueHD, Opus, Vorbis and FLAC, anything with a layout other than mono, stereo or 5.1, and anything above 48 kHz. Everything else is copied as it is.</li>
+          <li>Text subtitles become cleaned-up .srt files; picture subtitles (PGS) are copied unchanged as .sup.</li>
           <li>Your source file stays where it is and is not touched.</li>
           <li>Files with more than one track open a chooser, so you decide what gets pulled out.</li>
-          <li>Audio with more than two channels can additionally be written as a stereo mix — it is in the chooser as its own line.</li>
+          <li>Audio with more than two channels can additionally be written as a stereo mix — it is in the chooser as its own line, and “keep all” does not include it.</li>
         </ul></details>
         <div class="hint">
-          There are no options here: this mode copies, it does not encode.
-          What the Convert area is set to makes no difference.
+          There are no options here — what the Convert area is set to makes no
+          difference. This is the DaVinci-ready route, so it re-encodes audio
+          where it has to. Want an untouched 1:1 copy instead? Use Split.
         </div>
       </section>
 
