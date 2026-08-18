@@ -6,7 +6,10 @@
     "name": "burnersen"
   },
   "info": {
-    "productName": "NVENCForge",
+    "companyName": "burnersen",
+    "productName": "NVENCForgeGUI",
+    "productVersion": "0.9.1",
+    "copyright": "Copyright 2026 burnersen",
     "comments": "A window for NVENCForge"
   }
 }

@@ -20,21 +20,33 @@ var assets embed.FS
 // guiVersion ist die einzige Stelle, an der die Version dieses Fensters
 // steht. Angezeigt wird sie im Fensterkopf (Titelleiste) und in der
 // Kopfzeile der Oberfläche selbst (siehe StartupInfo in app.go).
-const guiVersion = "0.9.0"
+const guiVersion = "0.9.1"
+
+// singleInstanceID hält die Startsperre. Der Name muss auf dem Rechner
+// einmalig sein und darf sich nie ändern — sonst erkennt eine neue Ausgabe die
+// bereits laufende alte nicht mehr.
+const singleInstanceID = "NVENCForgeGUI-6f2c1a70-window"
 
 func main() {
 	// Muss vor dem Fenster passieren: ohne eigene Konsole gibt es später keinen
 	// sauberen Abbruch (siehe wincon.go).
 	setupHiddenConsole()
 
-	app := NewApp()
+	window, remembered := loadWindowState()
+	app := NewApp(window, remembered)
+
+	windowStart := options.Normal
+	if window.Maximised {
+		windowStart = options.Maximised
+	}
 
 	err := wails.Run(&options.App{
-		Title:     "NVENCForge v" + guiVersion,
-		Width:     1180,
-		Height:    860,
-		MinWidth:  920,
-		MinHeight: 640,
+		Title:            "NVENCForge v" + guiVersion,
+		Width:            window.Width,
+		Height:           window.Height,
+		MinWidth:         minWindowWidth,
+		MinHeight:        minWindowHeight,
+		WindowStartState: windowStart,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
@@ -53,6 +65,10 @@ func main() {
 		},
 		OnStartup:     app.startup,
 		OnBeforeClose: app.beforeClose,
+		SingleInstanceLock: &options.SingleInstanceLock{
+			UniqueId:               singleInstanceID,
+			OnSecondInstanceLaunch: app.onSecondInstance,
+		},
 		Bind: []any{
 			app,
 		},

@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/wailsapp/wails/v2/pkg/options"
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -19,11 +20,17 @@ type App struct {
 	ctx        context.Context
 	dispatcher *Dispatcher
 	watcher    *FolderWatcher
+
+	// window ist der beim Start geladene Fensterzustand. windowRemembered sagt,
+	// ob er aus der Merkdatei stammt — beim allerersten Start gibt es noch
+	// keinen Platz, den man wiederherstellen könnte.
+	window           windowState
+	windowRemembered bool
 }
 
-// NewApp erzeugt die Anwendung.
-func NewApp() *App {
-	app := &App{}
+// NewApp erzeugt die Anwendung mit dem Fensterzustand, mit dem sie startet.
+func NewApp(window windowState, windowRemembered bool) *App {
+	app := &App{window: window, windowRemembered: windowRemembered}
 	app.dispatcher = NewDispatcher(app.emit)
 	// Der Beobachter meldet nur, WAS er gefunden hat. Ob daraufhin ein Lauf
 	// beginnt, entscheidet die Oberfläche: Sie allein weiß, ob gerade schon
@@ -45,6 +52,49 @@ func NewApp() *App {
 // dort wo er wirkt.
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	a.restoreWindowPlace()
+}
+
+// restoreWindowPlace schiebt das Fenster auf seinen gemerkten Platz.
+//
+// Passt der Platz nicht mehr — abgezogener zweiter Bildschirm, geänderte
+// Auflösung —, bleibt es bei der Mitte, die Wails von sich aus wählt. Ein
+// Fenster außerhalb des Sichtbaren wäre von einem Absturz nicht zu
+// unterscheiden.
+func (a *App) restoreWindowPlace() {
+	if !a.windowRemembered || a.window.Maximised {
+		return
+	}
+	if !rectIsOnAScreen(a.window.X, a.window.Y, a.window.Width, a.window.Height) {
+		return
+	}
+	wailsruntime.WindowSetPosition(a.ctx, a.window.X, a.window.Y)
+}
+
+// rememberWindow schreibt Größe und Platz des Fensters weg.
+//
+// Ist das Fenster maximiert oder zum Symbol verkleinert, bleiben die Maße
+// unangetastet: Gespeichert würde sonst die Bildschirmgröße bzw. Unsinn, und
+// „verkleinern" hätte nach dem nächsten Start keine sinnvolle Größe mehr, zu
+// der es zurückkehren könnte.
+func (a *App) rememberWindow() {
+	if a.ctx == nil {
+		return
+	}
+	state, ok := loadWindowState()
+	if !ok {
+		state = defaultWindowState()
+	}
+	state.Maximised = wailsruntime.WindowIsMaximised(a.ctx)
+	if !state.Maximised && !wailsruntime.WindowIsMinimised(a.ctx) {
+		state.Width, state.Height = wailsruntime.WindowGetSize(a.ctx)
+		state.X, state.Y = wailsruntime.WindowGetPosition(a.ctx)
+	}
+	if err := saveWindowState(state); err != nil {
+		// Kein Grund, das Schließen aufzuhalten — es geht nur um Bequemlichkeit.
+		// Das Fenster öffnet beim nächsten Mal eben in Standardgröße.
+		a.note("Could not remember the window size: " + err.Error())
+	}
 }
 
 // beforeClose verhindert das Schließen, solange ein Lauf aktiv ist.
@@ -53,11 +103,28 @@ func (a *App) startup(ctx context.Context) {
 // unsichtbar weiter. Lieber ein klarer Hinweis als ein Programm, das im
 // Hintergrund weiterrechnet, ohne dass es jemand sieht.
 func (a *App) beforeClose(ctx context.Context) bool {
-	if !a.dispatcher.Busy() {
-		return false
+	if a.dispatcher.Busy() {
+		a.note("A conversion is still running — stop it first, then close the window.")
+		return true
 	}
-	a.note("A conversion is still running — stop it first, then close the window.")
-	return true
+	// Hier und nicht in OnShutdown: Das Fenster steht jetzt noch, seine Größe
+	// lässt sich also überhaupt noch erfragen.
+	a.rememberWindow()
+	return false
+}
+
+// onSecondInstance holt das bereits offene Fenster nach vorn, wenn das Programm
+// ein zweites Mal gestartet wird.
+//
+// Zwei Fenster wären kein harmloser Doppelstart: Beide würden denselben
+// überwachten Ordner abgrasen und sich um dieselben Dateien streiten.
+func (a *App) onSecondInstance(options.SecondInstanceData) {
+	if a.ctx == nil {
+		return
+	}
+	wailsruntime.WindowUnminimise(a.ctx)
+	wailsruntime.WindowShow(a.ctx)
+	a.note("NVENCForgeGUI is already open — this is that window.")
 }
 
 // note schreibt eine Meldung des Fensters selbst ins Protokoll. Die Vorsilbe

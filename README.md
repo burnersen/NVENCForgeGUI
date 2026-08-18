@@ -19,6 +19,7 @@ results, same settings file — just visible.
 - **The track chooser** — when a file has several audio tracks or subtitles, you tick what you want instead of typing numbers.
 - **Every setting explained.** The Settings page is built from `NVENCForge_Config.ini` itself: hover over anything and it tells you what it does, what is allowed, and what your file currently says.
 - **Stop one, or stop all.** Each converter has its own ✕; what is already encoded is kept as a playable preview.
+- **It stays where you put it.** Size and place are remembered between starts, and starting it a second time brings the open window forward instead of opening a rival that fights over the same files.
 
 ## Getting started
 
