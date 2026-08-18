@@ -44,8 +44,20 @@ const (
 	maxBitrateKbps = 200000
 )
 
+// modeFlags übersetzt die Modus-Bereiche der Oberfläche in ihr Flag.
+//
+// Diese Flags MÜSSEN das erste Argument sein: Der Konverter erkennt seinen
+// Betriebsmodus an os.Args[1] und sonst nirgends. -json fällt bei ihm schon
+// vorher aus der Liste und stört deshalb nicht.
+var modeFlags = map[string]string{
+	"davinci": "-davinci",
+	"split":   "-split",
+	"join":    "-join",
+}
+
 // RunRequest ist das, was die Oberfläche für einen Lauf schickt.
 type RunRequest struct {
+	Mode       string   `json:"mode"` // "" = konvertieren, sonst Schlüssel aus modeFlags
 	Files      []string `json:"files"`
 	Codec      string   `json:"codec"`      // "" oder "av1"
 	Encoder    string   `json:"encoder"`    // "" oder "cpu"
@@ -74,6 +86,19 @@ func buildConverterArgs(request RunRequest, eventChannel bool) ([]string, error)
 	if eventChannel {
 		args = append(args, "-json")
 	}
+
+	// Die Werkzeug-Modi kopieren nur — sie kennen weder Codec noch Qualität.
+	// Würde man ihnen "-av1" mitgeben, hielte der Konverter das für einen
+	// Dateinamen. Deshalb hier ein eigener, kurzer Weg statt eines Dutzends
+	// Ausnahmen weiter unten.
+	if request.Mode != "" {
+		flag, known := modeFlags[request.Mode]
+		if !known {
+			return nil, fmt.Errorf("runargs.go: buildConverterArgs: unknown mode %q", request.Mode)
+		}
+		return append(append(args, flag), request.Files...), nil
+	}
+
 	if request.Codec == codecAV1 {
 		args = append(args, "-av1")
 	}

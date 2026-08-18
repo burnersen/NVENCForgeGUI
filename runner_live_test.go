@@ -241,3 +241,117 @@ func containsIn(names []string, wanted string) bool {
 	}
 	return false
 }
+
+// waitForEvent wartet, bis ein Ereignis der gesuchten Art angekommen ist.
+//
+// Kurze Wartezeiten in der Schleife statt einer festen Pause: Die Frage kommt
+// je nach Datei nach einer halben oder nach zehn Sekunden, und beides soll den
+// Test weder verlangsamen noch scheitern lassen.
+func waitForEvent(t *testing.T, collector *liveCollector, kind string, timeout time.Duration) map[string]any {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		collector.mu.Lock()
+		for _, event := range collector.events {
+			if event["ev"] == kind {
+				collector.mu.Unlock()
+				return event
+			}
+		}
+		collector.mu.Unlock()
+		time.Sleep(200 * time.Millisecond)
+	}
+	return nil
+}
+
+// countFiles zählt die Dateien eines Ordners, deren Name auf die Endung passt.
+func countFiles(t *testing.T, dir, extension string) int {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("cannot read %s: %v", dir, err)
+	}
+	found := 0
+	for _, entry := range entries {
+		if strings.EqualFold(filepath.Ext(entry.Name()), extension) {
+			found++
+		}
+	}
+	return found
+}
+
+// TestLiveTrackQuestionIsAnswered prüft die ganze Kette an einem echten Video
+// mit mehreren Tonspuren: Der Konverter kündigt die Auswahl an, das Fenster
+// antwortet über die Eingabeleitung, und die Antwort wirkt sich wirklich aus.
+//
+// Der letzte Punkt ist der wichtige. Ein Dialog, der sich richtig anfühlt, aber
+// dessen Auswahl nirgends ankommt, wäre der schlimmste Fall: Man merkt es erst
+// an den fehlenden Dateien.
+func TestLiveTrackQuestionIsAnswered(t *testing.T) {
+	runner, collector, status := liveRunner(t)
+	video := liveSource(t, "NVENCFORGEGUI_LIVE_TRACKS")
+	workDir := filepath.Dir(video)
+
+	if err := runner.Start(status.Path, filepath.Dir(status.Path),
+		[]string{"-json", "-davinci", video}); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	question := waitForEvent(t, collector, "question", 2*time.Minute)
+	if question == nil {
+		collector.dump(t)
+		t.Fatal("no question event arrived — does this NVENCForge.exe know it?")
+	}
+	options, _ := question["options"].([]any)
+	if len(options) < 2 {
+		t.Fatalf("a question with %d options is not a choice", len(options))
+	}
+	if err := runner.Answer("1"); err != nil {
+		t.Fatalf("Answer: %v", err)
+	}
+
+	select {
+	case state := <-collector.finished:
+		if state.Error != "" {
+			collector.dump(t)
+			t.Fatalf("run failed: %s", state.Error)
+		}
+	case <-time.After(5 * time.Minute):
+		t.Fatal("the run did not finish within 5 minutes")
+	}
+
+	// Genau eine Tonspur war gewählt, also darf auch nur eine Tondatei
+	// dastehen. Ohne wirksame Antwort wären es alle.
+	if got := countFiles(t, workDir, ".m4a"); got != 1 {
+		t.Errorf("expected exactly 1 audio file for the answer \"1\", found %d", got)
+	}
+}
+
+// TestLiveStopReleasesAnOpenQuestion sichert den Fall ab, der sonst ein
+// hängendes Programm bedeutet: Es steht eine Frage offen, niemand antwortet,
+// und der Nutzer drückt Abbrechen. Das Abbruch-Signal allein erreicht die
+// wartende Lesestelle nicht — erst das Schließen der Eingabeleitung löst sie.
+func TestLiveStopReleasesAnOpenQuestion(t *testing.T) {
+	runner, collector, status := liveRunner(t)
+	video := liveSource(t, "NVENCFORGEGUI_LIVE_TRACKS")
+
+	if err := runner.Start(status.Path, filepath.Dir(status.Path),
+		[]string{"-json", "-davinci", video}); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if question := waitForEvent(t, collector, "question", 2*time.Minute); question == nil {
+		collector.dump(t)
+		t.Fatal("no question event arrived")
+	}
+
+	if err := runner.RequestStop(); err != nil {
+		t.Fatalf("RequestStop: %v", err)
+	}
+	select {
+	case <-collector.finished:
+		// Gut: Der Lauf hat sich gelöst.
+	case <-time.After(2 * time.Minute):
+		collector.dump(t)
+		t.Fatal("the run stayed stuck on the open question after Stop")
+	}
+}

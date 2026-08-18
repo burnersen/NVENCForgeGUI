@@ -4,6 +4,8 @@ import {main} from '../models';
 
 export function AddPaths(arg1:Array<string>):Promise<Array<main.QueueItem>>;
 
+export function AnswerQuestion(arg1:string):Promise<void>;
+
 export function DownloadConverter(arg1:boolean):Promise<main.DownloadResult>;
 
 export function GetConfigView():Promise<main.ConfigView>;

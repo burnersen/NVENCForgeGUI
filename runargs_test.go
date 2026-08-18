@@ -126,3 +126,61 @@ func TestEmptyQueueIsRefused(t *testing.T) {
 		t.Error("an empty queue must not start a run")
 	}
 }
+
+// ----------------------------------------------------------------------------
+// Die Werkzeug-Modi
+// ----------------------------------------------------------------------------
+
+// TestModeFlagComesFirst sichert die einzige Regel ab, an der ein Modus-Lauf
+// scheitern kann: Der Konverter erkennt seinen Modus AUSSCHLIESSLICH am ersten
+// Argument. Stünde -json davor oder eine Option dahinter, liefe still eine
+// normale Konvertierung an.
+func TestModeFlagComesFirst(t *testing.T) {
+	args, err := buildConverterArgs(
+		RunRequest{Mode: "davinci", Files: []string{`C:\a.mkv`}}, true)
+	if err != nil {
+		t.Fatalf("buildConverterArgs: %v", err)
+	}
+	if len(args) != 3 || args[0] != "-json" || args[1] != "-davinci" || args[2] != `C:\a.mkv` {
+		t.Fatalf("erwartet [-json -davinci Datei], bekommen %v", args)
+	}
+
+	// Ohne Datenkanal muss der Modus ganz vorn stehen.
+	args, err = buildConverterArgs(
+		RunRequest{Mode: "davinci", Files: []string{`C:\a.mkv`}}, false)
+	if err != nil {
+		t.Fatalf("buildConverterArgs: %v", err)
+	}
+	if args[0] != "-davinci" {
+		t.Fatalf("der Modus muss das erste Argument sein, bekommen %v", args)
+	}
+}
+
+// TestModeRunCarriesNoConversionOptions: Die Werkzeug-Modi kopieren nur. Eine
+// mitgeschickte Option würde vom Konverter für einen Dateinamen gehalten.
+func TestModeRunCarriesNoConversionOptions(t *testing.T) {
+	args, err := buildConverterArgs(RunRequest{
+		Mode:       "davinci",
+		Files:      []string{`C:\a.mkv`},
+		Codec:      codecAV1,
+		Encoder:    encoderCPU,
+		Container:  containerMP4,
+		Quality:    qualityFixed,
+		FixedCQ:    28,
+		MaxBitrate: 8000,
+		KeepSource: true,
+	}, false)
+	if err != nil {
+		t.Fatalf("buildConverterArgs: %v", err)
+	}
+	if len(args) != 2 {
+		t.Fatalf("erwartet nur Modus + Datei, bekommen %v", args)
+	}
+}
+
+func TestUnknownModeIsRefused(t *testing.T) {
+	if _, err := buildConverterArgs(
+		RunRequest{Mode: "nonsense", Files: []string{`C:\a.mkv`}}, false); err == nil {
+		t.Error("ein unbekannter Modus muss abgelehnt werden, statt still zu konvertieren")
+	}
+}

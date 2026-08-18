@@ -192,3 +192,13 @@ func (a *App) StartRun(request RunRequest) error {
 func (a *App) StopRun() error {
 	return a.runner.RequestStop()
 }
+
+// AnswerQuestion beantwortet eine Rückfrage des Konverters.
+//
+// Die Oberfläche schickt genau die Zeile, die auch jemand an der Konsole
+// tippen würde: "1,3" für einzelne Spuren, leer für alle. Das Fenster darf
+// erst antworten, wenn ein question-Ereignis angekommen ist — nie im Voraus
+// (die Begründung steht bei Runner.Answer).
+func (a *App) AnswerQuestion(answer string) error {
+	return a.runner.Answer(answer)
+}

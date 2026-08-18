@@ -125,6 +125,7 @@ main { flex: 1; min-width: 0; overflow-y: auto; padding: 16px 18px 22px; }
 .item .size { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12.5px; }
 .item .state { font-size: 12px; font-weight: 600; }
 .state.success { color: var(--ok); } .state.skipped { color: var(--muted); }
+.state.processed { color: var(--muted); }
 .state.failed { color: var(--bad); } .state.preview { color: var(--warn); }
 .state.running { color: var(--accent); }
 .idx { color: var(--muted); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
@@ -143,6 +144,9 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
 .checks { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 12px; }
 .check { display: flex; align-items: center; gap: 7px; font-size: 13px; }
 .hint { color: var(--muted); font-size: 11.5px; margin-top: 10px; }
+.lead { margin: 0 0 10px; }
+.notes { margin: 0; padding-left: 18px; color: var(--muted); font-size: 12.5px; }
+.notes li { margin: 3px 0; }
 
 /* ---------- help bubble ----------
    Shown while the mouse rests on a setting. It is placed with fixed
@@ -225,6 +229,32 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
 #logbox div.gui { color: var(--accent); }
 .spacer { flex: 1; }
 .err { color: var(--bad); font-size: 12.5px; }
+
+/* The track chooser. It lies over everything on purpose: the converter is
+   standing still until it gets an answer, so nothing else is worth clicking. */
+#ask {
+  position: fixed; inset: 0; z-index: 60; display: flex;
+  align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, .6);
+}
+#ask[hidden] { display: none; }
+.ask-box {
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 18px 20px; width: min(620px, 92vw); max-height: 86vh; overflow-y: auto;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, .55);
+}
+.ask-box h3 { margin: 0 0 4px; font-size: 15px; }
+.ask-file { color: var(--muted); font-size: 12px; margin-bottom: 12px; word-break: break-all; }
+/* The labels arrive as a terminal table (padded with spaces), so they only
+   line up in a fixed-width font with the spacing left alone. */
+.ask-option {
+  display: flex; align-items: center; gap: 9px; padding: 6px 8px;
+  border: 1px solid transparent; border-radius: 7px;
+  font: 12.5px/1.4 Consolas, "Cascadia Mono", monospace; white-space: pre;
+}
+.ask-option:hover { border-color: var(--line); background: #202027; }
+.ask-option.extra { color: var(--muted); }
+.ask-buttons { margin-top: 14px; }
 </style>
 </head>
 <body>
@@ -244,8 +274,8 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
   <div id="body">
     <nav>
       <button class="nav-item active" data-page="convert">Convert</button>
+      <button class="nav-item" data-page="davinci">DaVinci</button>
       <button class="nav-item" data-page="settings">Settings</button>
-      <button class="nav-item" disabled>DaVinci <span class="stage-tag">stage 5</span></button>
       <button class="nav-item" disabled>Split <span class="stage-tag">stage 5</span></button>
       <button class="nav-item" disabled>Join <span class="stage-tag">stage 5</span></button>
       <button class="nav-item" disabled>Watch folder <span class="stage-tag">stage 7</span></button>
@@ -254,7 +284,8 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
 
     <main>
     <div id="page-convert">
-      <section class="panel">
+      <div class="shared-slot" data-slot="queue"></div>
+      <section class="panel" id="panel-queue">
         <h2>Queue</h2>
         <div id="dropzone">
           <b>Drop video files or folders here</b>
@@ -338,11 +369,12 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
         <div class="hint">
           Hold the mouse over a setting to see what it does and what your NVENCForge_Config.ini has it set to.
           Anything left on “default” is not passed on — your INI applies.
-          MP4 keeps every track for now; the track chooser arrives in stage 5.
+          With MP4, files that have several tracks open a chooser — you decide what goes in.
         </div>
       </section>
 
-      <section class="panel">
+      <div class="shared-slot" data-slot="run"></div>
+      <section class="panel" id="panel-progress">
         <h2>Progress</h2>
         <div id="nowfile">Idle.</div>
         <div id="nowstage"></div>
@@ -377,7 +409,7 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
         </div>
       </section>
 
-      <section class="panel">
+      <section class="panel" id="panel-log">
         <h2>Log <span style="text-transform:none;letter-spacing:0">— the converter's own screen output</span></h2>
         <div id="logbox"></div>
         <div class="row" style="margin-top:8px">
@@ -385,6 +417,31 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
           <label class="check"><input type="checkbox" id="opt-autoscroll" checked /> Follow</label>
         </div>
       </section>
+    </div>
+
+    <div id="page-davinci" hidden>
+      <div class="shared-slot" data-slot="queue"></div>
+
+      <section class="panel">
+        <h2>What this does</h2>
+        <p class="lead">
+          Takes each file in the queue apart for DaVinci Resolve: a silent
+          picture file plus every audio track and every subtitle as its own
+          file, written next to the source.
+        </p>
+        <ul class="notes">
+          <li>Nothing is re-encoded — the picture and the audio are copied as they are.</li>
+          <li>Your source file stays where it is and is not touched.</li>
+          <li>Files with more than one track open a chooser, so you decide what gets pulled out.</li>
+          <li>Audio with more than two channels can additionally be written as a stereo mix — it is in the chooser as its own line.</li>
+        </ul>
+        <div class="hint">
+          There are no options here: this mode copies, it does not encode.
+          What the Convert area is set to makes no difference.
+        </div>
+      </section>
+
+      <div class="shared-slot" data-slot="run"></div>
     </div>
 
     <div id="page-settings" hidden>
@@ -416,6 +473,24 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
 </div>
 <div id="tip"></div>
 
+<!-- The track chooser. It only appears while the converter is really waiting
+     for an answer, and every button here sends one - there is deliberately no
+     way to close it without answering, because that would leave the run
+     standing still. -->
+<div id="ask" hidden>
+  <div class="ask-box">
+    <h3 id="ask-title">Which tracks do you want?</h3>
+    <div class="ask-file" id="ask-file"></div>
+    <div id="ask-options"></div>
+    <div class="row ask-buttons">
+      <button class="btn primary" id="btn-ask-ok">Use selection</button>
+      <button class="btn" id="btn-ask-all">Keep all tracks</button>
+      <button class="btn" id="btn-ask-always">Keep all, stop asking this run</button>
+    </div>
+    <div class="hint" id="ask-hint"></div>
+  </div>
+</div>
+
 <script>
 "use strict";
 
@@ -438,6 +513,9 @@ const state = {
   config: null,          // values read out of NVENCForge_Config.ini, null = not read (yet)
   cqTouched: false,      // true once the CQ box was edited by hand
   page: "convert",
+  mode: "",                 // what the start button will run: "" = convert, "davinci", …
+  runMode: "convert",       // what the running converter is doing: convert | davinci | split | join
+  answerAllThisRun: false,  // set by "stop asking": every further question gets "all tracks"
   settingsFile: null,    // the whole INI as parsed by the app
   edits: {},             // key -> value typed on the settings page, not saved yet
   gpuAdvice: {}          // key -> value the converter recommended for this card
@@ -646,14 +724,36 @@ function updateOverall(currentFraction) {
 /* ---------- converter events ---------- */
 function onRunStart(event) {
   resetProgress();
+  state.runMode = event.mode || "convert";
   state.queue.forEach((entry) => { entry.status = ""; entry.note = "queued"; });
-  note("Run started: " + event.mode + ", " + event.codec + " on " + event.encoder +
+  // The tool modes carry neither a codec nor a file count at this point — the
+  // count only exists once the folder has been read.
+  note(isToolRun()
+    ? "Run started: " + event.mode + ", NVENCForge " + event.version
+    : "Run started: " + event.mode + ", " + event.codec + " on " + event.encoder +
       ", " + event.files + " file(s), NVENCForge " + event.version);
   renderQueue();
 }
+
+// isToolRun tells the two kinds of run apart. It matters for the queue: only a
+// conversion reports a result per file. -davinci, -split and -join produce
+// several outputs per source and keep no such bookkeeping, so there the start
+// of the next file is the only reliable sign that the previous one is done.
+function isToolRun() { return state.runMode !== "convert"; }
+
+// markProcessed closes a queue entry that will never get a result event. It
+// deliberately does not claim success: whether every track really came out is
+// something only the log knows.
+function markProcessed(entry) {
+  entry.status = "processed";
+  entry.note = "processed — details in the log";
+}
 function onFileStart(event) {
   const entry = findEntry(event.path);
-  if (state.current) state.doneMB += state.current.sizeMB || 0;
+  if (state.current) {
+    state.doneMB += state.current.sizeMB || 0;
+    if (isToolRun() && state.current.status === "running") markProcessed(state.current);
+  }
   state.current = entry;
   state.byIndex[event.index] = entry;
   if (entry) {
@@ -722,13 +822,92 @@ function onSummary(event) {
   box.style.display = "block";
   const minutes = Math.floor(event.elapsed_sec / 60);
   const seconds = Math.round(event.elapsed_sec % 60);
-  box.textContent =
-    event.files + " file(s): " + event.success + " converted, " +
-    event.skipped + " skipped, " + event.failed + " not finished — " +
-    fmtMB(event.saved_mb) + " saved in " + minutes + " min " + seconds + " s.";
+  // A tool run has no success/failed counters and nothing was saved — showing
+  // "0 converted, 0 saved" would read like a failure instead of a finished job.
+  box.textContent = isToolRun()
+    ? event.files + " file(s) processed in " + minutes + " min " + seconds + " s."
+    : event.files + " file(s): " + event.success + " converted, " +
+      event.skipped + " skipped, " + event.failed + " not finished — " +
+      fmtMB(event.saved_mb) + " saved in " + minutes + " min " + seconds + " s.";
   setBar("bar-all", "pct-all", 100, true);
   $("nowstage").textContent = "";
 }
+
+/* ---------- the track chooser ----------
+   While a question is open the converter is standing still, so this dialog is
+   the one place in the window that MUST answer. Every button sends exactly one
+   line, and only after a question has arrived: two answers at once would both
+   land in the same buffer on the other side, and the next question would
+   silently fall back to "all tracks".
+   --------------------------------------------------------------------------- */
+
+// isExtraOption marks the stereo-mix lines. They are indented with an arrow
+// because they belong to the track above them — and unlike the real tracks
+// they are only written when asked for.
+function isExtraOption(label) { return String(label || "").trim().startsWith("↳"); }
+
+function onQuestion(event) {
+  // "stop asking" was clicked earlier in this run: answer straight away, so
+  // nothing stands still and no dialog flashes up.
+  if (state.answerAllThisRun) { sendAnswer(""); return; }
+
+  const options = event.options || [];
+  $("ask-file").textContent = event.file || "";
+
+  const box = $("ask-options");
+  box.innerHTML = "";
+  options.forEach((option) => {
+    const row = document.createElement("label");
+    row.className = "ask-option" + (isExtraOption(option.label) ? " extra" : "");
+    const tick = document.createElement("input");
+    tick.type = "checkbox";
+    tick.dataset.n = option.n;
+    // Pre-ticked exactly like the converter's own default: every real track,
+    // but no stereo mix.
+    tick.checked = !isExtraOption(option.label);
+    tick.onchange = updateAskButtons;
+    const text = document.createElement("span");
+    text.textContent = option.label;
+    row.appendChild(tick);
+    row.appendChild(text);
+    box.appendChild(row);
+  });
+
+  $("ask-hint").textContent = options.some((option) => isExtraOption(option.label))
+    ? "A stereo mix is written only when you tick it — “Keep all tracks” leaves it out."
+    : "“Keep all tracks” takes every track listed above.";
+  $("ask").hidden = false;
+  updateAskButtons();
+}
+
+// askSelection builds the answer line: the numbers of the ticked entries,
+// exactly as they are printed on screen.
+function askSelection() {
+  return Array.from(document.querySelectorAll("#ask-options input:checked"))
+    .map((tick) => tick.dataset.n)
+    .join(",");
+}
+
+function updateAskButtons() {
+  // Nothing ticked means "no valid selection" to the converter, and it would
+  // keep everything. A button that quietly does the opposite of what it says
+  // is worse than one that is greyed out.
+  $("btn-ask-ok").disabled = askSelection() === "";
+}
+
+async function sendAnswer(text) {
+  $("ask").hidden = true;
+  try {
+    await api().AnswerQuestion(text);
+  } catch (err) {
+    showError(String(err));
+    note("Could not send the answer: " + err);
+  }
+}
+
+// closeQuestion takes an open dialog away WITHOUT answering. Only correct once
+// the run is over anyway — then nobody is waiting for the line any more.
+function closeQuestion() { $("ask").hidden = true; }
 
 function onConverterEvent(event) {
   switch (event.ev) {
@@ -737,6 +916,7 @@ function onConverterEvent(event) {
     case "stage": onStage(event); break;
     case "progress": onProgress(event); break;
     case "result": onResult(event); break;
+    case "question": onQuestion(event); break;
     case "summary": onSummary(event); break;
     default: note("unknown event: " + JSON.stringify(event));
   }
@@ -746,6 +926,10 @@ function onRunState(runState) {
   state.running = runState.running;
   state.stopping = !!runState.stopping;
   if (!runState.running) {
+    // A dialog may still be standing there — the run it belonged to is over,
+    // so there is nobody left to answer.
+    closeQuestion();
+    state.answerAllThisRun = false;
     state.stopClicks = 0;
     state.current = null;
     $("nowfile").textContent = "Idle.";
@@ -758,9 +942,13 @@ function onRunState(runState) {
     } else {
       note("NVENCForge finished.");
     }
-    // Anything still marked as running never reported a result.
+    // Anything still marked as running never reported a result. In a tool run
+    // that is normal — those modes report no result at all — so the last file
+    // is simply closed off instead of looking like a fault.
     state.queue.forEach((entry) => {
-      if (entry.status === "running") { entry.status = ""; entry.note = "no result reported"; }
+      if (entry.status !== "running") return;
+      if (isToolRun()) markProcessed(entry);
+      else { entry.status = ""; entry.note = "no result reported"; }
     });
     renderQueue();
     // The INI is written by NVENCForge itself, so on a fresh installation it
@@ -1279,10 +1467,40 @@ function noteGPUAdvice(text) {
 }
 
 /* ---------- pages ---------- */
+
+// MODE_PAGES lists the pages that actually start the converter: which mode
+// they run and what their start button should say. Settings is not in here —
+// that page starts nothing.
+const MODE_PAGES = {
+  convert: { mode: "", start: "Start" },
+  davinci: { mode: "davinci", start: "Split for Resolve" }
+};
+const PAGES = ["convert", "davinci", "settings"];
+
 function showPage(name) {
   state.page = name;
-  $("page-convert").hidden = name !== "convert";
-  $("page-settings").hidden = name !== "settings";
+  PAGES.forEach((page) => { $("page-" + page).hidden = page !== name; });
+
+  // Queue, progress and log exist ONCE and move to whichever mode page is on
+  // show. A second copy would mean a second list to keep in step, while the
+  // run they describe is only ever a single one.
+  const page = $("page-" + name);
+  const queueSlot = page.querySelector('[data-slot="queue"]');
+  if (queueSlot) queueSlot.appendChild($("panel-queue"));
+  const runSlot = page.querySelector('[data-slot="run"]');
+  if (runSlot) {
+    runSlot.appendChild($("panel-progress"));
+    runSlot.appendChild($("panel-log"));
+  }
+
+  // The chosen mode survives a trip to the settings page: the start button
+  // travels with the panels and must not quietly change what it starts.
+  const mode = MODE_PAGES[name];
+  if (mode) {
+    state.mode = mode.mode;
+    $("btn-start").textContent = mode.start;
+  }
+
   hideTip();
   if (name === "settings" && (!state.settingsFile || !state.settingsFile.found)) loadSettings();
 }
@@ -1290,6 +1508,7 @@ function showPage(name) {
 /* ---------- actions ---------- */
 function collectRequest() {
   return {
+    mode: state.mode,
     files: state.queue.map((entry) => entry.path),
     codec: $("opt-codec").value,
     encoder: $("opt-encoder").value,
@@ -1365,6 +1584,10 @@ function wire() {
   $("btn-settings-save").onclick = saveSettings;
   $("btn-settings-defaults").onclick = restoreDefaults;
 
+  $("btn-ask-ok").onclick = () => sendAnswer(askSelection());
+  $("btn-ask-all").onclick = () => sendAnswer("");
+  $("btn-ask-always").onclick = () => { state.answerAllThisRun = true; sendAnswer(""); };
+
   document.querySelectorAll(".nav-item[data-page]").forEach((button) => {
     button.onclick = () => {
       document.querySelectorAll(".nav-item").forEach((other) => other.classList.remove("active"));
@@ -1427,6 +1650,7 @@ function wire() {
 
 async function boot() {
   wire();
+  showPage("convert");
   afterQueueChange();
   try {
     const info = await api().GetStartupInfo();

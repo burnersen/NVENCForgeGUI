@@ -73,6 +73,7 @@ type Runner struct {
 	cmd      *exec.Cmd
 	pid      int
 	stopping bool
+	input    io.WriteCloser
 	emit     func(name string, data ...any)
 }
 
@@ -112,6 +113,14 @@ func (r *Runner) Start(exePath, workDir string, args []string) error {
 		r.mu.Unlock()
 		return fmt.Errorf("runner.go: Start (StderrPipe): %w", err)
 	}
+	// Der Rückweg. Ohne ihn erbt der Konverter keine lesbare Eingabe und
+	// beantwortet seine eigene Spurauswahl sofort mit „alle Spuren" — der
+	// Auswahl-Dialog käme nie zum Zuge.
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		r.mu.Unlock()
+		return fmt.Errorf("runner.go: Start (StdinPipe): %w", err)
+	}
 
 	if err := cmd.Start(); err != nil {
 		r.mu.Unlock()
@@ -121,6 +130,7 @@ func (r *Runner) Start(exePath, workDir string, args []string) error {
 	r.cmd = cmd
 	r.pid = cmd.Process.Pid
 	r.stopping = false
+	r.input = stdin
 	r.mu.Unlock()
 
 	r.emit("conv:state", RunState{Running: true})
@@ -155,6 +165,10 @@ func (r *Runner) finish(waitErr error) {
 	r.cmd = nil
 	r.pid = 0
 	r.stopping = false
+	// cmd.Wait hat die Eingabeleitung bereits geschlossen; hier wird nur noch
+	// vergessen, dass es sie gab. Eine Antwort nach Laufende landet dann im
+	// klaren Fehler statt in einem geschlossenen Rohr.
+	r.input = nil
 	r.mu.Unlock()
 
 	state := RunState{Running: false, Stopping: wasStopping}
@@ -280,7 +294,18 @@ func (r *Runner) RequestStop() error {
 	}
 	alreadyStopping := r.stopping
 	r.stopping = true
+	input := r.input
+	r.input = nil
 	r.mu.Unlock()
+
+	// Ein offener Auswahl-Dialog würde den Konverter im Lesen festhalten: Das
+	// Abbruch-Signal erreicht ihn zwar, aber die Stelle, die auf die Antwort
+	// wartet, sieht es nicht. Die Eingabe zu schließen löst sie sofort — dort
+	// gilt dann die sichere Vorgabe (alle Spuren), und der Abbruch greift im
+	// nächsten Schritt.
+	if input != nil {
+		_ = input.Close()
+	}
 
 	if err := requestCleanStop(pid); err != nil {
 		return err
@@ -291,5 +316,34 @@ func (r *Runner) RequestStop() error {
 	}
 	r.emit("conv:log", LogLine{Text: note})
 	r.emit("conv:state", RunState{Running: true, Stopping: true})
+	return nil
+}
+
+// Answer beantwortet eine Rückfrage des Konverters — heute die Spurauswahl.
+//
+// Erwartet wird genau die Zeile, die auch ein Mensch tippen würde: "1,3" für
+// einzelne Nummern, leer für alle Spuren. Deshalb wird hier nichts umgeformt;
+// nur der Zeilenumbruch kommt dazu, ohne den die Gegenseite weiterwartet.
+//
+// WICHTIG (am 2026-08-18 gemessen): Es darf immer nur EINE Antwort unterwegs
+// sein, und erst nachdem die Frage angekündigt wurde. Jede Frage-Stelle des
+// Konverters liest mit einem eigenen Puffer — zwei Antworten hintereinander
+// landen beide im ersten davon, und die zweite Frage bekommt ihre nie zu
+// sehen. Sie läuft dann still in „alle Spuren" statt in die getroffene Wahl.
+func (r *Runner) Answer(text string) error {
+	r.mu.Lock()
+	input := r.input
+	r.mu.Unlock()
+	if input == nil {
+		return errors.New("nothing is waiting for an answer")
+	}
+
+	// Ein Zeilenumbruch mitten in der Antwort würde aus einer Antwort zwei
+	// machen — die zweite wäre genau die Antwort auf Vorrat, die oben
+	// beschrieben ist.
+	line := strings.NewReplacer("\r", " ", "\n", " ").Replace(text)
+	if _, err := io.WriteString(input, line+"\n"); err != nil {
+		return fmt.Errorf("runner.go: Answer: %w", err)
+	}
 	return nil
 }

@@ -41,7 +41,13 @@ function loadGui() {
       if (!elements.has(id)) elements.set(id, fakeElement(id));
       return elements.get(id);
     },
-    createElement: () => fakeElement("new"),
+    // Erzeugte Elemente werden mitgeschrieben: Nur so lässt sich prüfen, wie
+    // eine Liste ANKOMMT, die das Fenster erst zur Laufzeit zusammenbaut.
+    createElement: (tag) => {
+      const created = fakeElement("new-" + tag);
+      createdElements.push(created);
+      return created;
+    },
     createDocumentFragment: () => fakeElement("fragment"),
     createTextNode: (text) => fakeElement("text-" + text),
     // Same stand-in for the same selector, so a check can look at what the
@@ -50,23 +56,49 @@ function loadGui() {
       if (!elements.has(selector)) elements.set(selector, fakeElement(selector));
       return elements.get(selector);
     },
-    querySelectorAll: () => [],
+    // Lists can be prepared per selector (see setQueryAll below). Anything not
+    // prepared stays empty, which is what the older checks rely on.
+    querySelectorAll: (selector) => selectorLists.get(selector) || [],
     addEventListener() {},
     body: fakeElement("body")
   };
-  const windowStub = { addEventListener() {}, runtime: { OnFileDrop() {}, EventsOn() {} } };
+  const selectorLists = new Map();
+  const createdElements = [];
+
+  // Everything the window would hand to the Go side is recorded instead. That
+  // is how a check can see WHICH answer a button really sends — the one thing
+  // that decides whether the user gets the tracks they picked.
+  const calls = { answers: [], runs: [] };
+  const windowStub = {
+    addEventListener() {},
+    runtime: { OnFileDrop() {}, EventsOn() {} },
+    go: {
+      main: {
+        App: {
+          AnswerQuestion(text) { calls.answers.push(text); return Promise.resolve(); },
+          StartRun(request) { calls.runs.push(request); return Promise.resolve(); },
+          StopRun() { return Promise.resolve(); }
+        }
+      }
+    }
+  };
 
   const exported = new Function(
     "window", "document",
     scriptText + "\n;return { onConverterEvent, state, applyConfig, refreshFromConfig, bitrateCapKey, HELP," +
     " settingModel, looksInvalid, settingHelp, editSetting, revertSetting, restoreDefaults," +
-    " changedValues, defaultFor, noteGPUAdvice, renderSettings, showPage, log };"
+    " changedValues, defaultFor, noteGPUAdvice, renderSettings, showPage, log," +
+    " onQuestion, sendAnswer, askSelection, isExtraOption, isToolRun, collectRequest };"
   )(windowStub, documentStub);
 
   return {
     gui: exported,
     html,
-    element: (id) => documentStub.getElementById(id)
+    calls,
+    created: createdElements,
+    element: (id) => documentStub.getElementById(id),
+    // setQueryAll stellt die Ticks, die askSelection einsammelt.
+    setQueryAll: (selector, list) => selectorLists.set(selector, list)
   };
 }
 

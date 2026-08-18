@@ -109,3 +109,72 @@ func TestSplitLinesAndReturns(t *testing.T) {
 		t.Errorf("the last piece without a line ending must still arrive: %q", token)
 	}
 }
+
+// ----------------------------------------------------------------------------
+// Der Rückweg zum Konverter
+// ----------------------------------------------------------------------------
+
+// answerSink steht an der Stelle der Eingabeleitung und merkt sich, was
+// wirklich hindurchgeht.
+type answerSink struct {
+	written strings.Builder
+	closed  bool
+}
+
+func (s *answerSink) Write(p []byte) (int, error) { return s.written.Write(p) }
+
+func (s *answerSink) Close() error { s.closed = true; return nil }
+
+func TestAnswerSendsTheLineAPersonWouldType(t *testing.T) {
+	sink := &answerSink{}
+	runner := NewRunner(func(string, ...any) {})
+	runner.input = sink
+
+	if err := runner.Answer("1,3"); err != nil {
+		t.Fatalf("Answer: %v", err)
+	}
+	if got := sink.written.String(); got != "1,3\n" {
+		t.Errorf("erwartet %q, geschickt wurde %q", "1,3\n", got)
+	}
+}
+
+func TestAnswerSendsAnEmptyLineForAllTracks(t *testing.T) {
+	sink := &answerSink{}
+	runner := NewRunner(func(string, ...any) {})
+	runner.input = sink
+
+	if err := runner.Answer(""); err != nil {
+		t.Fatalf("Answer: %v", err)
+	}
+	if got := sink.written.String(); got != "\n" {
+		t.Errorf("erwartet eine leere Zeile, geschickt wurde %q", got)
+	}
+}
+
+// TestAnswerNeverSendsTwoLinesAtOnce sichert den am 2026-08-18 gemessenen
+// Fallstrick ab: Zwei Zeilen auf einmal beantworten NICHT zwei Fragen. Beide
+// landen im Puffer der ersten Frage-Stelle, die zweite Frage sieht ihre
+// Antwort nie und nimmt stillschweigend alle Spuren.
+func TestAnswerNeverSendsTwoLinesAtOnce(t *testing.T) {
+	sink := &answerSink{}
+	runner := NewRunner(func(string, ...any) {})
+	runner.input = sink
+
+	if err := runner.Answer("1\n3"); err != nil {
+		t.Fatalf("Answer: %v", err)
+	}
+	got := sink.written.String()
+	if strings.Count(got, "\n") != 1 {
+		t.Errorf("es darf genau ein Zeilenende hinausgehen, geschickt wurde %q", got)
+	}
+	if got != "1 3\n" {
+		t.Errorf("erwartet %q, geschickt wurde %q", "1 3\n", got)
+	}
+}
+
+func TestAnswerFailsWhenNothingIsRunning(t *testing.T) {
+	runner := NewRunner(func(string, ...any) {})
+	if err := runner.Answer("1"); err == nil {
+		t.Error("ohne laufenden Konverter muss die Antwort einen Fehler ergeben")
+	}
+}

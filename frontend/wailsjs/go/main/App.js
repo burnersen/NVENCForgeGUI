@@ -6,6 +6,10 @@ export function AddPaths(arg1) {
   return window['go']['main']['App']['AddPaths'](arg1);
 }
 
+export function AnswerQuestion(arg1) {
+  return window['go']['main']['App']['AnswerQuestion'](arg1);
+}
+
 export function DownloadConverter(arg1) {
   return window['go']['main']['App']['DownloadConverter'](arg1);
 }

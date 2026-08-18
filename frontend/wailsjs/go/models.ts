@@ -139,6 +139,7 @@ export namespace main {
 	    }
 	}
 	export class RunRequest {
+	    mode: string;
 	    files: string[];
 	    codec: string;
 	    encoder: string;
@@ -158,6 +159,7 @@ export namespace main {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.mode = source["mode"];
 	        this.files = source["files"];
 	        this.codec = source["codec"];
 	        this.encoder = source["encoder"];
