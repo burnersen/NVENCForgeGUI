@@ -22,7 +22,11 @@ export function PickFiles():Promise<Array<main.QueueItem>>;
 
 export function PickFolder():Promise<Array<main.QueueItem>>;
 
+export function PickJoinFiles():Promise<Array<main.JoinFile>>;
+
 export function SaveSettings(arg1:Record<string, string>):Promise<main.SaveResult>;
+
+export function SortJoinFiles(arg1:Array<string>):Promise<Array<main.JoinFile>>;
 
 export function StartRun(arg1:main.RunRequest):Promise<void>;
 

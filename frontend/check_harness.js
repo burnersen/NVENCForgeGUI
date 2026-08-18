@@ -68,7 +68,11 @@ function loadGui() {
   // Everything the window would hand to the Go side is recorded instead. That
   // is how a check can see WHICH answer a button really sends — the one thing
   // that decides whether the user gets the tracks they picked.
-  const calls = { answers: [], runs: [] };
+  const calls = { answers: [], runs: [], joinSorts: [] };
+  // Sorting the join list happens in Go (joinfiles.go) and is tested there.
+  // Here only the answer is staged, so a check can see what the WINDOW does
+  // with it — and, just as important, which paths it hands over.
+  let joinReply = [];
   const windowStub = {
     addEventListener() {},
     runtime: { OnFileDrop() {}, EventsOn() {} },
@@ -77,7 +81,9 @@ function loadGui() {
         App: {
           AnswerQuestion(text) { calls.answers.push(text); return Promise.resolve(); },
           StartRun(request) { calls.runs.push(request); return Promise.resolve(); },
-          StopRun() { return Promise.resolve(); }
+          StopRun() { return Promise.resolve(); },
+          SortJoinFiles(paths) { calls.joinSorts.push(paths); return Promise.resolve(joinReply); },
+          PickJoinFiles() { return Promise.resolve(joinReply); }
         }
       }
     }
@@ -88,7 +94,9 @@ function loadGui() {
     scriptText + "\n;return { onConverterEvent, state, applyConfig, refreshFromConfig, bitrateCapKey, HELP," +
     " settingModel, looksInvalid, settingHelp, editSetting, revertSetting, restoreDefaults," +
     " changedValues, defaultFor, noteGPUAdvice, renderSettings, showPage, log," +
-    " onQuestion, sendAnswer, askSelection, isExtraOption, isToolRun, collectRequest };"
+    " onQuestion, sendAnswer, askSelection, isExtraOption, isToolRun, collectRequest," +
+    " runUsesQueue, updateButtons, afterJoinChange, addJoinPaths, joinBase, joinOfKind," +
+    " joinReady, joinRunFiles };"
   )(windowStub, documentStub);
 
   return {
@@ -98,7 +106,9 @@ function loadGui() {
     created: createdElements,
     element: (id) => documentStub.getElementById(id),
     // setQueryAll stellt die Ticks, die askSelection einsammelt.
-    setQueryAll: (selector, list) => selectorLists.set(selector, list)
+    setQueryAll: (selector, list) => selectorLists.set(selector, list),
+    // setJoinReply legt fest, was die Go-Seite auf SortJoinFiles antworten soll.
+    setJoinReply: (files) => { joinReply = files; }
   };
 }
 

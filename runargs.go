@@ -49,10 +49,14 @@ const (
 // Diese Flags MÜSSEN das erste Argument sein: Der Konverter erkennt seinen
 // Betriebsmodus an os.Args[1] und sonst nirgends. -json fällt bei ihm schon
 // vorher aus der Liste und stört deshalb nicht.
+// modeJoin steht als Konstante da, weil dieser Modus als Einziger eine eigene
+// Prüfung hat — ein Tippfehler im Vergleich würde sie still überspringen.
+const modeJoin = "join"
+
 var modeFlags = map[string]string{
 	"davinci": "-davinci",
 	"split":   "-split",
-	"join":    "-join",
+	modeJoin:  "-join",
 }
 
 // RunRequest ist das, was die Oberfläche für einen Lauf schickt.
@@ -96,7 +100,18 @@ func buildConverterArgs(request RunRequest, eventChannel bool) ([]string, error)
 		if !known {
 			return nil, fmt.Errorf("runargs.go: buildConverterArgs: unknown mode %q", request.Mode)
 		}
-		return append(append(args, flag), request.Files...), nil
+		files := request.Files
+		// Zusammenfügen ist der einzige Modus, der eine bestimmte Zusammen-
+		// stellung braucht: genau EIN Bild plus mindestens eine Ton- oder
+		// Untertiteldatei, Bild zuerst (die Begründung steht bei joinArgOrder).
+		if request.Mode == modeJoin {
+			ordered, err := joinArgOrder(files)
+			if err != nil {
+				return nil, err
+			}
+			files = ordered
+		}
+		return append(append(args, flag), files...), nil
 	}
 
 	if request.Codec == codecAV1 {

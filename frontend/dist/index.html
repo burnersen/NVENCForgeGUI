@@ -105,15 +105,17 @@ main { flex: 1; min-width: 0; overflow-y: auto; padding: 16px 18px 22px; }
 .btn.danger:hover:not(:disabled) { border-color: var(--bad); }
 
 /* ---------- queue ---------- */
-#dropzone {
+/* The join area has a list of its own (it takes audio and subtitles too), but
+   it should look exactly like the queue — same rules, one place to change. */
+#dropzone, #join-dropzone {
   border: 1.5px dashed var(--line); border-radius: var(--radius);
   padding: 18px; text-align: center; color: var(--muted); margin-bottom: 10px;
 }
-#dropzone.hot { border-color: var(--accent); color: var(--accent); }
-#dropzone b { color: var(--text); display: block; margin-bottom: 3px; }
+#dropzone.hot, #join-dropzone.hot { border-color: var(--accent); color: var(--accent); }
+#dropzone b, #join-dropzone b { color: var(--text); display: block; margin-bottom: 3px; }
 
-#queue { max-height: 240px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; }
-#queue:empty { display: none; }
+#queue, #join-list { max-height: 240px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; }
+#queue:empty, #join-list:empty { display: none; }
 .item {
   display: grid; grid-template-columns: 22px 1fr auto auto 26px;
   align-items: center; gap: 10px; padding: 7px 10px; border-bottom: 1px solid var(--line);
@@ -131,6 +133,21 @@ main { flex: 1; min-width: 0; overflow-y: auto; padding: 16px 18px 22px; }
 .idx { color: var(--muted); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
 .x { background: none; border: none; color: var(--muted); font-size: 15px; line-height: 1; padding: 2px 6px; }
 .x:hover { color: var(--bad); }
+
+/* ---------- join list ---------- */
+.group-head {
+  padding: 6px 10px; font-size: 11px; font-weight: 700; letter-spacing: .05em;
+  text-transform: uppercase; color: var(--muted); background: var(--panel-2);
+  border-bottom: 1px solid var(--line);
+}
+.item.pickable { cursor: pointer; }
+.item.pickable:hover { background: rgba(255, 140, 26, .05); }
+.item.base { background: rgba(255, 140, 26, .08); }
+.item.dud .name { color: var(--muted); }
+.state.base { color: var(--accent); }
+.state.dud { color: var(--muted); font-weight: 500; }
+#join-result { margin-top: 12px; font-size: 13px; color: var(--text); }
+#join-result.waiting { color: var(--muted); }
 
 /* ---------- options ---------- */
 .options { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 12px; }
@@ -274,10 +291,10 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
   <div id="body">
     <nav>
       <button class="nav-item active" data-page="convert">Convert</button>
+      <button class="nav-item" data-page="split">Split</button>
+      <button class="nav-item" data-page="join">Join</button>
       <button class="nav-item" data-page="davinci">DaVinci</button>
       <button class="nav-item" data-page="settings">Settings</button>
-      <button class="nav-item" data-page="split">Split</button>
-      <button class="nav-item" disabled>Join <span class="stage-tag">stage 5</span></button>
       <button class="nav-item" disabled>Watch folder <span class="stage-tag">stage 7</span></button>
       <div class="nav-note">Greyed-out areas are not built yet.</div>
     </nav>
@@ -472,6 +489,49 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
       <div class="shared-slot" data-slot="run"></div>
     </div>
 
+    <!-- Join has a list of its own instead of the shared queue: it takes audio
+         and subtitle files as well, and one run builds exactly one file. -->
+    <div id="page-join" hidden>
+      <section class="panel" id="panel-join">
+        <h2>Files to join</h2>
+        <div id="join-dropzone">
+          <b>Drop the video file plus its audio and subtitle files here</b>
+          They are sorted by extension. Dropping a folder adds the files inside it.
+        </div>
+        <div id="join-list"></div>
+        <div class="row" style="margin-top:10px">
+          <button class="btn" id="btn-join-files">Add files…</button>
+          <button class="btn" id="btn-join-clear">Clear</button>
+          <div class="spacer"></div>
+          <span class="hint" id="join-info" style="margin:0"></span>
+        </div>
+        <div id="join-result"></div>
+      </section>
+
+      <section class="panel">
+        <h2>What this does</h2>
+        <p class="lead">
+          Builds one new MKV out of separate parts: a video file plus the
+          audio and subtitle files you drop next to it. Every stream is copied
+          exactly as it is — nothing is re-encoded.
+        </p>
+        <ul class="notes">
+          <li>The audio files you add <b>replace</b> the sound of the video file. Add subtitles only, and the video keeps its own sound.</li>
+          <li>Subtitles already inside the video file are never carried over — add them as files.</li>
+          <li>Your files stay where they are; the result is always a new file next to the video file.</li>
+          <li>One job per run: exactly one video file, plus at least one audio or subtitle file.</li>
+          <li>A <b>.sub</b> only works together with its <b>.idx</b> of the same name — drop both.</li>
+          <li>The converter names the result itself: it tidies the base name (spaces become dots) and falls back to <b>.joined2.mkv</b> if that name is already taken.</li>
+        </ul>
+        <div class="hint">
+          The video can be <b>.mkv .mp4 .m4v .mov</b> — other formats
+          cannot be used as a base here.
+        </div>
+      </section>
+
+      <div class="shared-slot" data-slot="run"></div>
+    </div>
+
     <div id="page-settings" hidden>
       <section class="panel">
         <h2>Settings <span style="text-transform:none;letter-spacing:0">— NVENCForge_Config.ini</span></h2>
@@ -540,6 +600,8 @@ const state = {
   forceDownload: false,  // set after a download was held back on purpose
   config: null,          // values read out of NVENCForge_Config.ini, null = not read (yet)
   cqTouched: false,      // true once the CQ box was edited by hand
+  joinFiles: [],      // the join area's own list, sorted by Go (joinfiles.go)
+  joinBasePath: "",   // path of the video file the join is built on
   page: "convert",
   mode: "",                 // what the start button will run: "" = convert, "davinci", …
   runMode: "convert",       // what the running converter is doing: convert | davinci | split | join
@@ -718,14 +780,204 @@ function findEntry(path) {
   return state.queue.find((e) => e.path.toLowerCase() === wanted) || null;
 }
 
+/* ---------- join list ----------
+   The join area keeps a list of its own. The queue on the other pages takes
+   video files only, while joining needs audio and subtitle files as well — and
+   one run builds exactly one file, so a queue would promise a batch that this
+   mode cannot do.
+
+   Which file is video, audio or subtitle is decided in Go (joinfiles.go), by
+   the same rules the converter itself uses. Doing it here in the window would
+   mean a second set of extension lists that quietly drifts apart from his. */
+const JOIN_GROUPS = [
+  { kind: "video", title: "Video" },
+  { kind: "audio", title: "Audio" },
+  { kind: "subtitle", title: "Subtitles" },
+  { kind: "companion", title: "Comes along" },
+  { kind: "unusable", title: "Not used" }
+];
+
+function joinOfKind(kind) { return state.joinFiles.filter((file) => file.kind === kind); }
+
+// joinBase is the video the result is built on. With several of them in the
+// list the user picks one; until then the first one stands in, so the result
+// line is never empty when it could say something.
+function joinBase() {
+  const videos = joinOfKind("video");
+  if (!videos.length) return null;
+  return videos.find((file) => file.path === state.joinBasePath) || videos[0];
+}
+
+// joinRunFiles is what actually goes to the converter: the chosen video plus
+// every audio and subtitle file. Files the converter cannot use stay behind —
+// passing one along would make him refuse the whole run.
+function joinRunFiles() {
+  const base = joinBase();
+  if (!base) return [];
+  return [base.path].concat(joinOfKind("audio").map((f) => f.path),
+                            joinOfKind("subtitle").map((f) => f.path));
+}
+
+// joinReady says whether a run can start. A missing file is a stopper on
+// purpose: the converter would look for it, give up and leave the window
+// waiting for a summary that never comes.
+function joinReady() {
+  const base = joinBase();
+  if (!base || base.missing) return false;
+  const extras = joinOfKind("audio").concat(joinOfKind("subtitle"));
+  if (!extras.length) return false;
+  return !extras.some((file) => file.missing);
+}
+
+async function setJoinPaths(paths) {
+  try {
+    state.joinFiles = await api().SortJoinFiles(paths);
+  } catch (err) {
+    showError(String(err));
+    return;
+  }
+  afterJoinChange();
+}
+
+// addJoinPaths hands the WHOLE list to Go, not just the new files: whether a
+// .sub can be used depends on the .idx lying next to it, and that one may only
+// arrive with the second drop.
+async function addJoinPaths(paths) {
+  const known = state.joinFiles.map((file) => file.path);
+  await setJoinPaths(known.concat(paths));
+}
+
+function joinRow(file, base) {
+  const row = document.createElement("div");
+  const isBase = base && file.path === base.path;
+  row.className = "item"
+    + (file.kind === "video" ? " pickable" : "")
+    + (isBase ? " base" : "")
+    + (file.kind === "unusable" ? " dud" : "");
+
+  const mark = document.createElement("div");
+  mark.className = "idx";
+  mark.textContent = file.kind === "video" ? (isBase ? "●" : "○") : "";
+
+  const name = document.createElement("div");
+  name.className = "name";
+  name.textContent = file.name;
+  name.title = file.path;
+  const sub = document.createElement("div");
+  sub.className = "sub";
+  sub.textContent = file.missing ? "file not found" : (file.note || file.folder);
+  name.appendChild(sub);
+
+  const size = document.createElement("div");
+  size.className = "size";
+  size.textContent = fmtMB(file.sizeMB);
+
+  const status = document.createElement("div");
+  status.className = "state " + joinStateClass(file, isBase);
+  status.textContent = joinStateText(file, isBase);
+
+  const remove = document.createElement("button");
+  remove.className = "x";
+  remove.textContent = "✕";
+  remove.title = "Remove from the list";
+  remove.disabled = state.running;
+  remove.onclick = (event) => {
+    event.stopPropagation();
+    setJoinPaths(state.joinFiles.filter((other) => other.path !== file.path).map((other) => other.path));
+  };
+
+  if (file.kind === "video" && !state.running) {
+    row.onclick = () => { state.joinBasePath = file.path; afterJoinChange(); };
+  }
+
+  row.append(mark, name, size, status, remove);
+  return row;
+}
+function joinStateClass(file, isBase) {
+  if (file.kind === "unusable") return "dud";
+  if (file.kind === "companion") return "dud";
+  return isBase ? "base" : "";
+}
+function joinStateText(file, isBase) {
+  if (file.kind === "unusable") return "not used";
+  if (file.kind === "companion") return "with its .idx";
+  if (file.kind !== "video") return "";
+  return isBase ? "video" : "use this instead";
+}
+
+function renderJoin() {
+  const box = $("join-list");
+  box.innerHTML = "";
+  const base = joinBase();
+  JOIN_GROUPS.forEach((group) => {
+    const files = joinOfKind(group.kind);
+    if (!files.length) return;
+    const head = document.createElement("div");
+    head.className = "group-head";
+    head.textContent = group.title + " (" + files.length + ")";
+    box.appendChild(head);
+    files.forEach((file) => box.appendChild(joinRow(file, base)));
+  });
+}
+
+// renderJoinResult says what the run will produce. It deliberately does NOT
+// spell out the file name: the converter builds it from the base name with his
+// own tidying rules (measured 2026-08-18: "Big Buck Bunny.NoSound.mkv" comes
+// back as "Big.Buck.Bunny.joined.mkv"), and a name guessed here would sooner or
+// later be a promise the converter does not keep.
+function renderJoinResult() {
+  const box = $("join-result");
+  const base = joinBase();
+  const audio = joinOfKind("audio").length;
+  const subtitles = joinOfKind("subtitle").length;
+
+  if (!base) {
+    box.className = "waiting";
+    box.textContent = "Add one video file — that is what the result is built on.";
+    return;
+  }
+  if (!audio && !subtitles) {
+    box.className = "waiting";
+    box.textContent = "Add at least one audio or subtitle file to go with " + base.name + ".";
+    return;
+  }
+  box.className = "";
+  const parts = ["video"];
+  if (audio) parts.push(audio + (audio === 1 ? " audio track" : " audio tracks"));
+  if (subtitles) parts.push(subtitles + (subtitles === 1 ? " subtitle" : " subtitles"));
+  const several = joinOfKind("video").length > 1
+    ? "  ·  " + base.name + " is the video — click another one to switch."
+    : "";
+  box.textContent = "→ a new \".joined.mkv\" next to " + base.name
+    + "  ·  " + parts.join(" + ") + several;
+}
+
+function afterJoinChange() {
+  const total = state.joinFiles.reduce((sum, file) => sum + (file.sizeMB || 0), 0);
+  $("join-info").textContent = state.joinFiles.length
+    ? state.joinFiles.length + " file(s), " + fmtMB(total)
+    : "";
+  renderJoin();
+  renderJoinResult();
+  updateButtons();
+}
+
 /* ---------- buttons ---------- */
 function updateButtons() {
-  const canStart = !state.running && state.queue.length > 0 && state.converterFound;
+  // The join page has its own list and its own conditions: one video file
+  // plus at least one audio or subtitle file. Started with anything else, the
+  // converter says nothing at all in his data channel — he sends his "run"
+  // event and ends without a word (measured 2026-08-18). A locked button is
+  // the only honest answer to that.
+  const hasWork = state.page === "join" ? joinReady() : state.queue.length > 0;
+  const canStart = !state.running && hasWork && state.converterFound;
   $("btn-start").disabled = !canStart;
   $("btn-stop").disabled = !state.running;
   $("btn-files").disabled = state.running;
   $("btn-folder").disabled = state.running;
   $("btn-clear").disabled = state.running || state.queue.length === 0;
+  $("btn-join-files").disabled = state.running;
+  $("btn-join-clear").disabled = state.running || state.joinFiles.length === 0;
   $("stop-hint").textContent = state.stopping
     ? "Stopping — click again to quit immediately."
     : (state.running ? "Keeps what is already encoded as a playable preview." : "");
@@ -743,6 +995,10 @@ function resetProgress() {
   $("nowstage").textContent = "";
 }
 function updateOverall(currentFraction) {
+  // A join run is not fed by the queue (see runUsesQueue), so measuring it
+  // against the queue's total size would show a bar for files nobody is
+  // touching. One job per run means there is no overall progress to show.
+  if (!runUsesQueue()) { setBar("bar-all", "pct-all", 0, false); return; }
   if (state.totalMB <= 0) { setBar("bar-all", "pct-all", 0, false); return; }
   const currentMB = state.current ? (state.current.sizeMB || 0) : 0;
   const value = (state.doneMB + currentMB * currentFraction) / state.totalMB * 100;
@@ -753,7 +1009,7 @@ function updateOverall(currentFraction) {
 function onRunStart(event) {
   resetProgress();
   state.runMode = event.mode || "convert";
-  state.queue.forEach((entry) => { entry.status = ""; entry.note = "queued"; });
+  if (runUsesQueue()) state.queue.forEach((entry) => { entry.status = ""; entry.note = "queued"; });
   // The tool modes carry neither a codec nor a file count at this point — the
   // count only exists once the folder has been read.
   note(isToolRun()
@@ -769,6 +1025,12 @@ function onRunStart(event) {
 // of the next file is the only reliable sign that the previous one is done.
 function isToolRun() { return state.runMode !== "convert"; }
 
+// runUsesQueue: joining is the one mode whose files do not come from the queue
+// — it has its own list. Without this, queue entries left over from another
+// page would be marked as if they were part of this run, and the file the
+// converter names would light up in a list it never came from.
+function runUsesQueue() { return state.runMode !== "join"; }
+
 // markProcessed closes a queue entry that will never get a result event. It
 // deliberately does not claim success: whether every track really came out is
 // something only the log knows.
@@ -777,7 +1039,7 @@ function markProcessed(entry) {
   entry.note = "processed — details in the log";
 }
 function onFileStart(event) {
-  const entry = findEntry(event.path);
+  const entry = runUsesQueue() ? findEntry(event.path) : null;
   if (state.current) {
     state.doneMB += state.current.sizeMB || 0;
     if (isToolRun() && state.current.status === "running") markProcessed(state.current);
@@ -858,6 +1120,14 @@ function onSummary(event) {
       event.skipped + " skipped, " + event.failed + " not finished — " +
       fmtMB(event.saved_mb) + " saved in " + minutes + " min " + seconds + " s.";
   setBar("bar-all", "pct-all", 100, true);
+  // The file bar has to be closed off here as well. A conversion fills it when
+  // the file's result arrives — but the tool modes report no result at all, so
+  // nobody ever did. The percentage comes from ffmpeg's timestamps and stops a
+  // little short (measured on a finished join: 95.6 %), which then stood next
+  // to an overall bar at 100 % and looked like something was left undone.
+  // A stopped run keeps its last value on purpose: there the rest really was
+  // not written.
+  if (isToolRun() && !state.stopping) setBar("bar-file", "pct-file", 100, true);
   $("nowstage").textContent = "";
 }
 
@@ -1502,9 +1772,10 @@ function noteGPUAdvice(text) {
 const MODE_PAGES = {
   convert: { mode: "", start: "Start" },
   davinci: { mode: "davinci", start: "Split for Resolve" },
-  split: { mode: "split", start: "Split losslessly" }
+  split: { mode: "split", start: "Split losslessly" },
+  join: { mode: "join", start: "Join into one MKV" }
 };
-const PAGES = ["convert", "davinci", "split", "settings"];
+const PAGES = ["convert", "davinci", "split", "join", "settings"];
 
 function showPage(name) {
   state.page = name;
@@ -1531,6 +1802,9 @@ function showPage(name) {
   }
 
   hideTip();
+  // Each page has its own condition for starting (the queue on most, the join
+  // list on one), so the button is re-judged on every switch.
+  updateButtons();
   if (name === "settings" && (!state.settingsFile || !state.settingsFile.found)) loadSettings();
 }
 
@@ -1538,7 +1812,8 @@ function showPage(name) {
 function collectRequest() {
   return {
     mode: state.mode,
-    files: state.queue.map((entry) => entry.path),
+    // Joining draws from its own list — the queue belongs to the other pages.
+    files: state.mode === "join" ? joinRunFiles() : state.queue.map((entry) => entry.path),
     codec: $("opt-codec").value,
     encoder: $("opt-encoder").value,
     container: $("opt-container").value,
@@ -1606,6 +1881,13 @@ function wire() {
   $("btn-files").onclick = async () => { try { addItems(await api().PickFiles()); } catch (e) { showError(String(e)); } };
   $("btn-folder").onclick = async () => { try { addItems(await api().PickFolder()); } catch (e) { showError(String(e)); } };
   $("btn-clear").onclick = () => { state.queue = []; afterQueueChange(); };
+  $("btn-join-files").onclick = async () => {
+    try {
+      const picked = await api().PickJoinFiles();
+      if (picked && picked.length) await addJoinPaths(picked.map((file) => file.path));
+    } catch (e) { showError(String(e)); }
+  };
+  $("btn-join-clear").onclick = () => { state.joinFiles = []; state.joinBasePath = ""; afterJoinChange(); };
   $("btn-start").onclick = start;
   $("btn-stop").onclick = stop;
   $("btn-download").onclick = download;
@@ -1653,19 +1935,26 @@ function wire() {
   // hears about it. The second argument false means "the whole window takes
   // files", not just one marked element.
   const zone = $("dropzone");
+  const joinZone = $("join-dropzone");
   window.runtime.OnFileDrop(async (x, y, paths) => {
     zone.classList.remove("hot");
+    joinZone.classList.remove("hot");
     if (!paths || !paths.length) return;
     try {
-      addItems(await api().AddPaths(paths));
+      // Whichever page is on show catches the files. Everything dropped on the
+      // join page goes into its own list — putting it in the queue would send
+      // audio files to a list that only ever runs videos.
+      if (state.page === "join") await addJoinPaths(paths);
+      else addItems(await api().AddPaths(paths));
     } catch (err) {
       showError(String(err));
     }
   }, false);
 
-  window.addEventListener("dragover", (e) => { e.preventDefault(); zone.classList.add("hot"); });
-  window.addEventListener("dragleave", () => zone.classList.remove("hot"));
-  window.addEventListener("drop", () => zone.classList.remove("hot"));
+  const dropZones = [zone, joinZone];
+  window.addEventListener("dragover", (e) => { e.preventDefault(); dropZones.forEach((z) => z.classList.add("hot")); });
+  window.addEventListener("dragleave", () => dropZones.forEach((z) => z.classList.remove("hot")));
+  window.addEventListener("drop", () => dropZones.forEach((z) => z.classList.remove("hot")));
 
   window.runtime.EventsOn("conv:event", onConverterEvent);
   window.runtime.EventsOn("conv:log", log);
@@ -1681,6 +1970,7 @@ async function boot() {
   wire();
   showPage("convert");
   afterQueueChange();
+  afterJoinChange();
   try {
     const info = await api().GetStartupInfo();
     showGPU(info.gpu);

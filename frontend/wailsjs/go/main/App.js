@@ -42,8 +42,16 @@ export function PickFolder() {
   return window['go']['main']['App']['PickFolder']();
 }
 
+export function PickJoinFiles() {
+  return window['go']['main']['App']['PickJoinFiles']();
+}
+
 export function SaveSettings(arg1) {
   return window['go']['main']['App']['SaveSettings'](arg1);
+}
+
+export function SortJoinFiles(arg1) {
+  return window['go']['main']['App']['SortJoinFiles'](arg1);
 }
 
 export function StartRun(arg1) {

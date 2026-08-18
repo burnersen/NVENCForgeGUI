@@ -118,6 +118,30 @@ export namespace main {
 	        this.note = source["note"];
 	    }
 	}
+	export class JoinFile {
+	    path: string;
+	    name: string;
+	    folder: string;
+	    kind: string;
+	    note: string;
+	    sizeMB: number;
+	    missing: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new JoinFile(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.name = source["name"];
+	        this.folder = source["folder"];
+	        this.kind = source["kind"];
+	        this.note = source["note"];
+	        this.sizeMB = source["sizeMB"];
+	        this.missing = source["missing"];
+	    }
+	}
 	export class QueueItem {
 	    path: string;
 	    name: string;

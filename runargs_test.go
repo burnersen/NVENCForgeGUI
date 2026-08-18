@@ -185,6 +185,38 @@ func TestUnknownModeIsRefused(t *testing.T) {
 	}
 }
 
+// TestJoinBuildsTheMeasuredCommandLine bildet genau den Aufruf ab, der am
+// 2026-08-18 von Hand am echten Konverter (v1.18.0) durchlief und aus den
+// Teilen wieder eine vollständige Datei gemacht hat:
+//
+//	NVENCForge.exe -json -join probe.NoSound.mkv probe.ger.m4a probe.und.srt
+//
+// Damit ist der Weg vom Fenster bis zur Befehlszeile an einem belegten Fall
+// festgenagelt statt nur an ausgedachten Pfaden.
+func TestJoinBuildsTheMeasuredCommandLine(t *testing.T) {
+	args, err := buildConverterArgs(RunRequest{
+		Mode: "join",
+		Files: []string{
+			`C:\v\probe.NoSound.mkv`, `C:\v\probe.ger.m4a`, `C:\v\probe.und.srt`,
+		},
+	}, true)
+	if err != nil {
+		t.Fatalf("buildConverterArgs: %v", err)
+	}
+	want := []string{
+		"-json", "-join",
+		`C:\v\probe.NoSound.mkv`, `C:\v\probe.ger.m4a`, `C:\v\probe.und.srt`,
+	}
+	if len(args) != len(want) {
+		t.Fatalf("erwartet %v, bekommen %v", want, args)
+	}
+	for i := range want {
+		if args[i] != want[i] {
+			t.Fatalf("erwartet %v, bekommen %v", want, args)
+		}
+	}
+}
+
 // TestEveryModeGetsItsOwnFlag: Der Konverter erkennt seinen Betriebsmodus nur
 // an os.Args[1]. Ein vertauschtes Flag würde deshalb nicht auffallen, sondern
 // still den falschen Modus starten — statt einer 1:1-Kopie liefe dann eine
@@ -195,17 +227,30 @@ func TestEveryModeGetsItsOwnFlag(t *testing.T) {
 		"split":   "-split",
 		"join":    "-join",
 	}
+	// Zusammenfügen ist der einzige Modus mit einer Bedingung an die Dateien:
+	// ein Bild plus mindestens eine Ton- oder Untertiteldatei.
+	files := map[string][]string{
+		"davinci": {`C:\a.mkv`},
+		"split":   {`C:\a.mkv`},
+		"join":    {`C:\a.mkv`, `C:\a.ger.m4a`},
+	}
 	if len(modeFlags) != len(expected) {
 		t.Fatalf("modeFlags kennt %d Modi, geprüft werden %d", len(modeFlags), len(expected))
 	}
 	for mode, flag := range expected {
 		args, err := buildConverterArgs(
-			RunRequest{Mode: mode, Files: []string{`C:\a.mkv`}}, false)
+			RunRequest{Mode: mode, Files: files[mode]}, false)
 		if err != nil {
 			t.Fatalf("%s: buildConverterArgs: %v", mode, err)
 		}
-		if len(args) != 2 || args[0] != flag || args[1] != `C:\a.mkv` {
-			t.Fatalf("%s: erwartet [%s Datei], bekommen %v", mode, flag, args)
+		want := append([]string{flag}, files[mode]...)
+		if len(args) != len(want) {
+			t.Fatalf("%s: erwartet %v, bekommen %v", mode, want, args)
+		}
+		for i := range want {
+			if args[i] != want[i] {
+				t.Fatalf("%s: erwartet %v, bekommen %v", mode, want, args)
+			}
 		}
 	}
 }

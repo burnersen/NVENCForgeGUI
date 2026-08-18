@@ -83,4 +83,29 @@ gui.onConverterEvent(resultEvent(1, "skipped", queue[0], { in_mb: 0, out_mb: 0, 
 check("skipped -> file bar       ", fileBar(), "100.0 %");
 check("skipped -> overall        ", overallBar(), "100.0 %");
 
+// The tool modes (davinci, split, join) send NO result event at all, so nothing
+// ever filled the file bar: it kept the last percentage ffmpeg reported — 95.6 %
+// on a finished join, measured 2026-08-18 — while the overall bar sat at 100 %.
+// That read as "something was left undone" on a job that had gone through.
+console.log("\n=== a tool run has no result event: the summary closes the bar ===");
+const toolSummary = { ev: "summary", files: 1, success: 0, skipped: 0, failed: 0, saved_mb: 0, elapsed_sec: 12 };
+gui.state.queue = [];
+gui.state.stopping = false;
+gui.onConverterEvent({ ev: "run", mode: "join", version: "test" });
+gui.onConverterEvent({ ev: "file", index: 1, total: 1, name: "film.NoSound.mkv", path: "X:\\test\\film.NoSound.mkv", in_mb: 14 });
+gui.onConverterEvent({ ev: "progress", pct: 95.6, est_mb: 15 });
+check("last progress falls short ", fileBar(), "95.6 %");
+gui.onConverterEvent(toolSummary);
+check("summary closes the bar    ", fileBar(), "100.0 %");
+
+// A run that was stopped keeps its last value: there the rest really was not
+// written, and a full bar would claim otherwise.
+gui.onConverterEvent({ ev: "run", mode: "split", version: "test" });
+gui.onConverterEvent({ ev: "file", index: 1, total: 1, name: "film.mkv", path: "X:\\test\\film.mkv", in_mb: 14 });
+gui.onConverterEvent({ ev: "progress", pct: 31.5, est_mb: 5 });
+gui.state.stopping = true;
+gui.onConverterEvent(toolSummary);
+check("stopped tool run stays    ", fileBar(), "31.5 %");
+gui.state.stopping = false;
+
 finish();

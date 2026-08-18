@@ -148,6 +148,36 @@ func (a *App) PickFiles() ([]QueueItem, error) {
 	return expandPaths(paths), nil
 }
 
+// SortJoinFiles ordnet die Ablage des Bereichs "Join" neu ein.
+//
+// Die Oberfläche schickt IMMER alle Pfade, die dort liegen — die bereits
+// vorhandenen und die neu hinzugekommenen. Grund: Ob eine .sub verwendbar ist,
+// entscheidet sich erst im Zusammenhang mit der gleichnamigen .idx (die
+// ausführliche Begründung steht bei classifyJoinFiles).
+func (a *App) SortJoinFiles(paths []string) []JoinFile {
+	return classifyJoinFiles(paths)
+}
+
+// PickJoinFiles öffnet den Dateidialog für die Join-Ablage. Eigene Filter,
+// weil hier auch Ton- und Untertiteldateien gesucht werden.
+func (a *App) PickJoinFiles() ([]JoinFile, error) {
+	video, audio, subtitle := joinFilterPatterns()
+	paths, err := wailsruntime.OpenMultipleFilesDialog(a.ctx, wailsruntime.OpenDialogOptions{
+		Title: "Add video, audio and subtitle files",
+		Filters: []wailsruntime.FileFilter{
+			{DisplayName: "Everything that can be joined", Pattern: video + ";" + audio + ";" + subtitle},
+			{DisplayName: "Video files", Pattern: video},
+			{DisplayName: "Audio files", Pattern: audio},
+			{DisplayName: "Subtitle files", Pattern: subtitle},
+			{DisplayName: "All files", Pattern: "*.*"},
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("app.go: PickJoinFiles: %w", err)
+	}
+	return classifyJoinFiles(paths), nil
+}
+
 // PickFolder öffnet den Ordnerdialog und sammelt alles darin ein.
 func (a *App) PickFolder() ([]QueueItem, error) {
 	folder, err := wailsruntime.OpenDirectoryDialog(a.ctx, wailsruntime.OpenDialogOptions{
