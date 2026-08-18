@@ -184,3 +184,28 @@ func TestUnknownModeIsRefused(t *testing.T) {
 		t.Error("ein unbekannter Modus muss abgelehnt werden, statt still zu konvertieren")
 	}
 }
+
+// TestEveryModeGetsItsOwnFlag: Der Konverter erkennt seinen Betriebsmodus nur
+// an os.Args[1]. Ein vertauschtes Flag würde deshalb nicht auffallen, sondern
+// still den falschen Modus starten — statt einer 1:1-Kopie liefe dann eine
+// Neukodierung. Alle Modus-Seiten der Oberfläche werden hier zusammen geprüft.
+func TestEveryModeGetsItsOwnFlag(t *testing.T) {
+	expected := map[string]string{
+		"davinci": "-davinci",
+		"split":   "-split",
+		"join":    "-join",
+	}
+	if len(modeFlags) != len(expected) {
+		t.Fatalf("modeFlags kennt %d Modi, geprüft werden %d", len(modeFlags), len(expected))
+	}
+	for mode, flag := range expected {
+		args, err := buildConverterArgs(
+			RunRequest{Mode: mode, Files: []string{`C:\a.mkv`}}, false)
+		if err != nil {
+			t.Fatalf("%s: buildConverterArgs: %v", mode, err)
+		}
+		if len(args) != 2 || args[0] != flag || args[1] != `C:\a.mkv` {
+			t.Fatalf("%s: erwartet [%s Datei], bekommen %v", mode, flag, args)
+		}
+	}
+}

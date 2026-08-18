@@ -276,7 +276,7 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
       <button class="nav-item active" data-page="convert">Convert</button>
       <button class="nav-item" data-page="davinci">DaVinci</button>
       <button class="nav-item" data-page="settings">Settings</button>
-      <button class="nav-item" disabled>Split <span class="stage-tag">stage 5</span></button>
+      <button class="nav-item" data-page="split">Split</button>
       <button class="nav-item" disabled>Join <span class="stage-tag">stage 5</span></button>
       <button class="nav-item" disabled>Watch folder <span class="stage-tag">stage 7</span></button>
       <div class="nav-note">Greyed-out areas are not built yet.</div>
@@ -438,6 +438,34 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
         <div class="hint">
           There are no options here: this mode copies, it does not encode.
           What the Convert area is set to makes no difference.
+        </div>
+      </section>
+
+      <div class="shared-slot" data-slot="run"></div>
+    </div>
+
+    <div id="page-split" hidden>
+      <div class="shared-slot" data-slot="queue"></div>
+
+      <section class="panel">
+        <h2>What this does</h2>
+        <p class="lead">
+          Takes each file in the queue apart into its raw parts — a silent
+          picture, every audio track and every subtitle as its own file, written
+          next to the source. Nothing is re-encoded and nothing is cleaned up,
+          so Join can put it back together unchanged.
+        </p>
+        <ul class="notes">
+          <li>Every track is copied exactly as it is: audio keeps its own format (.ac3, .dts, .eac3, .m4a, .flac …), subtitles stay untouched.</li>
+          <li>The silent picture keeps the source container — an MP4 stays an MP4, everything else becomes MKV.</li>
+          <li>Your source file stays where it is and is not touched.</li>
+          <li>Files with more than one track open a chooser, so you decide what gets pulled out.</li>
+          <li>No stereo mix here: a downmix would be a re-encode, and this mode never re-encodes.</li>
+        </ul>
+        <div class="hint">
+          Not sure which one? <b>DaVinci</b> makes the parts ready for Resolve
+          — audio as AAC, subtitles cleaned. <b>Split</b> keeps everything bit
+          for bit as it was.
         </div>
       </section>
 
@@ -1473,9 +1501,10 @@ function noteGPUAdvice(text) {
 // that page starts nothing.
 const MODE_PAGES = {
   convert: { mode: "", start: "Start" },
-  davinci: { mode: "davinci", start: "Split for Resolve" }
+  davinci: { mode: "davinci", start: "Split for Resolve" },
+  split: { mode: "split", start: "Split losslessly" }
 };
-const PAGES = ["convert", "davinci", "settings"];
+const PAGES = ["convert", "davinci", "split", "settings"];
 
 function showPage(name) {
   state.page = name;
