@@ -1,5 +1,6 @@
 # NVENCForgeGUI
 
+[![CI](https://github.com/burnersen/NVENCForgeGUI/actions/workflows/ci.yml/badge.svg)](https://github.com/burnersen/NVENCForgeGUI/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial-blue)](LICENSE.md)
 
 **A window for [NVENCForge](https://github.com/burnersen/NVENCForge) — for everyone who would rather click than type.**
@@ -108,6 +109,11 @@ code is wrong is worth nothing.
 
 The live tests (`NVENCFORGEGUI_LIVE=1`) go further and start the real converter
 on a real file.
+
+Everything above except the live tests runs on GitHub for every push, on a
+Windows machine — see the CI badge at the top. It cannot convert anything up
+there, having neither a graphics card nor FFmpeg, but it does prove the
+window still builds and still behaves.
 
 </details>
 

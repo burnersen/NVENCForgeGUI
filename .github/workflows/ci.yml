@@ -1,0 +1,88 @@
+# Runs on Windows because it has to. This program is a window built on Wails
+# and the WebView2 runtime; its sources import windows-only packages, so on a
+# Linux runner Go would find nothing to build and every step below would
+# report success without having checked a single line.
+#
+# What this can and cannot prove: it proves the program still builds and that
+# its logic still behaves - including the window's own script, which is
+# checked without a browser. It cannot convert anything: the runner has no
+# NVIDIA card, no FFmpeg and no NVENCForge.exe. Those tests exist and are
+# gated behind NVENCFORGEGUI_LIVE=1, which is deliberately never set here.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # There is no npm and no build step - the interface is one HTML file.
+      # Node is here only to run the *_check.js files further down.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # gofmt -l prints the offenders and then exits 0, so on its own it can
+      # never fail a build. Turning its output into the verdict is the whole
+      # point of this step.
+      - name: gofmt
+        run: |
+          $unformatted = gofmt -l .
+          if ($unformatted) {
+            Write-Host "::error::These files are not gofmt-clean:"
+            $unformatted | ForEach-Object { Write-Host "  $_" }
+            exit 1
+          }
+          Write-Host "All sources are gofmt-clean."
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test ./...
+
+      - name: go build
+        run: go build ./...
+
+      # The window's own script, run without a browser: every wrong label,
+      # every bar that overstates what the converter reported, every answer
+      # sent back to the wrong converter shows up here instead of costing a
+      # full conversion to notice.
+      #
+      # The guard on an empty list is not paranoia: if the checks were ever
+      # renamed or dropped, a bare loop would sail through green while
+      # checking nothing at all - the one failure mode a test suite must
+      # never have.
+      - name: window checks
+        run: |
+          $checks = Get-ChildItem -Path frontend\*_check.js | Sort-Object Name
+          if (-not $checks) {
+            Write-Host "::error::No frontend\*_check.js found - nothing was checked."
+            exit 1
+          }
+          Write-Host "Running $($checks.Count) window checks."
+          $failed = @()
+          foreach ($check in $checks) {
+            Write-Host "--- $($check.Name)"
+            node $check.FullName
+            if ($LASTEXITCODE -ne 0) { $failed += $check.Name }
+          }
+          if ($failed) {
+            Write-Host "::error::These window checks failed:"
+            $failed | ForEach-Object { Write-Host "  $_" }
+            exit 1
+          }
+          Write-Host "All window checks passed."

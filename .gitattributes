@@ -19,3 +19,7 @@ go.sum   text eol=lf
 *.png    binary
 *.ico    binary
 *.exe    binary
+
+# Workflow files: LF, so the PowerShell blocks inside them stay one file
+# on every machine.
+*.yml    text eol=lf
