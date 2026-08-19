@@ -9,7 +9,7 @@
 const { loadGui, createChecker } = require("./check_harness");
 
 const { gui, element } = loadGui();
-const { check, finish } = createChecker();
+const { check, contains, finish } = createChecker();
 
 // Each converter has its own lane now, so the file bar is read from the slot
 // the events came from. Slot 1 unless a check says otherwise.
@@ -122,5 +122,46 @@ gui.state.stopping = true;
 gui.onConverterEvent(toolSummary);
 check("stopped tool run stays    ", fileBar(), "31.5 %");
 gui.state.stopping = false;
+
+
+console.log("\n=== a finished run clears its own list ===");
+// A list left standing after a finished run is an invitation to press Start
+// again and convert the lot a second time.
+function afterRun(entries, opts) {
+  gui.state.queue = entries;
+  gui.state.stopping = (opts && opts.stopped) || false;
+  gui.state.tally = { files: entries.length, success: entries.length, skipped: 0,
+                      failed: (opts && opts.failed) || 0, savedMB: 100, seconds: 30 };
+  gui.state.runMode = "convert";
+  gui.state.running = true;
+  gui.onQueueState({ active: 0, pending: 0, limit: 2, watchActive: 0, watchPending: 0 });
+  return gui.state.queue.length;
+}
+
+const allDone = [
+  { path: "C:\\a.mkv", name: "a.mkv", sizeMB: 10, status: "success", note: "done", finished: true },
+  { path: "C:\\b.mkv", name: "b.mkv", sizeMB: 10, status: "success", note: "done", finished: true }
+];
+check("a clean run empties the list ", afterRun(allDone.map((e) => Object.assign({}, e))), 0);
+// The result itself has to survive - otherwise nobody can see what happened.
+contains("the summary stays           ", element("summary").textContent, "converted");
+
+// A stopped run keeps its list: it is the one place that still says which file
+// it was, and which ones never got their turn.
+const stopped = allDone.map((e) => Object.assign({}, e));
+check("a stopped run keeps it      ", afterRun(stopped, { stopped: true }), 2);
+
+// So does a run with a file that did not make it.
+const withFailure = [
+  { path: "C:\\a.mkv", name: "a.mkv", sizeMB: 10, status: "success", note: "done", finished: true },
+  { path: "C:\\b.mkv", name: "b.mkv", sizeMB: 10, status: "failed", note: "failed", finished: true }
+];
+check("a failed file keeps it      ", afterRun(withFailure, { failed: 1 }), 2);
+
+// And one whose file never reported at all - the quiet kind of failure.
+const silent = [
+  { path: "C:\\a.mkv", name: "a.mkv", sizeMB: 10, status: "", note: "no result reported", finished: true }
+];
+check("a silent one keeps it too   ", afterRun(silent), 1);
 
 finish();

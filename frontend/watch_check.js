@@ -189,4 +189,28 @@ gui.updateButtons();
 checker.check("the box is out of reach", element("opt-shutdown").disabled, true);
 checker.check("and cleared", element("opt-shutdown").checked, false);
 
+
+console.log("\nClear takes the folder path with it");
+// The path says which folder someone was working through. Once they are done
+// with it, that is nobody's business - which is why Clear is not just "empty
+// the log".
+reset();
+gui.state.watch = { folder: "D:\\Privat\\Serien", active: false };
+gui.state.watchTally = { files: 3, success: 3, skipped: 0, failed: 0, savedMB: 900, seconds: 60 };
+gui.showWatch(null);
+gui.clearWatchArea();
+checker.check("the folder is forgotten  ", gui.state.watch.folder, "");
+checker.check("the display says so      ", element("watch-folder").textContent, "No folder chosen yet.");
+checker.check("the running total is gone", gui.state.watchTally.files, 0);
+checker.check("and its line with it     ", element("watch-summary").textContent, "");
+
+// While the order is still standing, the path stays: it is still moving
+// originals about, and a window that no longer says where would be hiding
+// something that is still happening.
+reset();
+gui.state.watch = { folder: "D:\\Privat\\Serien", active: true };
+gui.showWatch(null);
+gui.clearWatchArea();
+checker.check("while watching it stays  ", gui.state.watch.folder, "D:\\Privat\\Serien");
+
 checker.finish();

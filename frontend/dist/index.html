@@ -795,7 +795,7 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
         <div id="watch-logbox"></div>
         <div class="row" style="margin-top:8px">
           <button class="btn" id="btn-watch-log-copy">Copy log</button>
-          <button class="btn" id="btn-watch-log-clear">Clear log</button>
+          <button class="btn" id="btn-watch-log-clear" title="Clears the log, the running total and the folder path">Clear</button>
           <label class="check"><input type="checkbox" id="watch-autoscroll" checked /> Follow</label>
           <span class="hint" id="watch-log-copied" style="margin:0"></span>
         </div>
@@ -1908,6 +1908,33 @@ function showFinalSummary() {
   if (!state.stopping) setBar("bar-all", "pct-all", 100, true);
 }
 
+// clearWatchArea wipes the page back to the state of a fresh start: the log,
+// the running total, and the folder path itself. The path is the point — it
+// says which folder someone was working through, and that is nobody's business
+// once they are done with it.
+//
+// The one exception: while the folder is actually being watched, the path
+// stays. A standing order is still moving originals about; a window that no
+// longer says where would be hiding something that is still happening.
+function clearWatchArea() {
+  $("watch-logbox").innerHTML = "";
+  state.lastWatchLogSlot = 0;
+  state.watchTally = { files: 0, success: 0, skipped: 0, failed: 0, savedMB: 0, seconds: 0 };
+  renderWatchSummary();
+  showWatchError("");
+
+  if (state.watch.active) {
+    watchNote("Cleared. The folder stays named while watching is still on.");
+    return;
+  }
+  state.watch.folder = "";
+  state.watchPending = [];
+  state.slots[WATCH_SLOT] = undefined;
+  delete state.slots[WATCH_SLOT];
+  renderLanes();
+  showWatch(null);
+}
+
 // renderWatchSummary keeps a running total instead of a final one. A standing
 // order has no end to report on, so what is worth saying is how much it has
 // taken off the disk since it was switched on.
@@ -2125,8 +2152,39 @@ function onQueueState(queueState) {
     // The INI is written by NVENCForge itself, so on a fresh installation it
     // only exists from the first run onwards — read it again now.
     refreshConfig();
+    // A list left standing after a finished run is an invitation to press
+    // Start again and convert everything a second time. It is cleared away —
+    // but only when the run really went through, because after a stop or a
+    // failure the list is the one place that still says which file it was.
+    if (runWentThroughCleanly()) clearFinishedList();
   }
   updateButtons();
+}
+
+// runWentThroughCleanly: did every file get where it was going? A stopped run
+// does not count, nor does one with a file that failed or never reported.
+function runWentThroughCleanly() {
+  if (state.stopping) return false;
+  if (state.tally.failed) return false;
+  return !state.queue.some((entry) =>
+    entry.status === "failed" || entry.note === "no result reported");
+}
+
+// clearFinishedList empties the list the finished run was working from — the
+// queue on most pages, the join list on the Join page. Bars, summary and log
+// stay exactly as they are: the question "what did it just do?" still has to
+// have an answer on screen.
+function clearFinishedList() {
+  if (isJoinMode(state.runMode)) {
+    state.joinFiles = [];
+    state.joinBasePath = "";
+    afterJoinChange();
+  } else {
+    state.queue = [];
+    state.byIndex = {};
+    afterQueueChange();
+  }
+  note("List cleared — that run is done. What it did stays in the summary and the log.");
 }
 
 /* ---------- status badges ---------- */
@@ -3093,7 +3151,7 @@ function wire() {
   $("wopt-quality").onchange = (e) => { $("wfield-cq").hidden = e.target.value !== "fixed"; };
   $("wopt-encoder").onchange = updateButtons;
   $("btn-watch-log-copy").onclick = () => copyOneLog("watch-logbox", "watch-log-copied");
-  $("btn-watch-log-clear").onclick = () => { $("watch-logbox").innerHTML = ""; state.lastWatchLogSlot = 0; };
+  $("btn-watch-log-clear").onclick = clearWatchArea;
   $("btn-start").onclick = start;
   $("btn-stop").onclick = stop;
   $("btn-download").onclick = download;
