@@ -130,7 +130,7 @@ function loadGui() {
 
   const exported = new Function(
     "window", "document",
-    scriptText + "\n;return { onConverterEvent, state, applyConfig, refreshFromConfig, bitrateCapKey, HELP," +
+    scriptText + "\n;return { wire, onConverterEvent, state, applyConfig, refreshFromConfig, bitrateCapKey, HELP," +
     " settingModel, looksInvalid, settingHelp, editSetting, revertSetting, restoreDefaults," +
     " changedValues, defaultFor, noteGPUAdvice, renderSettings, showPage, log," +
     " onQuestion, sendAnswer, askSelection, isExtraOption, isToolRun, collectRequest, resetProgress," +

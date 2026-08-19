@@ -3125,8 +3125,6 @@ function wire() {
     button.onclick = () => showPage(button.dataset.page);
   });
 
-  // From the watched folder straight to the options it will use.
-  $("btn-watch-options").onclick = () => showPage("convert");
 
   $("opt-quality").onchange = (e) => { $("field-cq").hidden = e.target.value !== "fixed"; };
   $("opt-codec").onchange = (e) => {

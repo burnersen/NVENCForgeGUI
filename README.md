@@ -100,6 +100,7 @@ node frontend\watch_check.js
 node frontend\parallel_check.js
 node frontend\srt_check.js
 node frontend\theme_check.js
+node frontend\wiring_check.js
 ```
 
 The `*_check.js` files run the window's own script without a browser and check
