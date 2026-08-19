@@ -31,6 +31,19 @@ const guiVersion = "0.9.4"
 // bereits laufende alte nicht mehr.
 const singleInstanceID = "NVENCForgeGUI-6f2c1a70-window"
 
+// startBackground nennt die Farbe, mit der das Fenster aufgeht, bevor die
+// Oberfläche gezeichnet ist.
+//
+// Ohne das blitzt bei heller Stimmung für einen Augenblick der dunkle Grund
+// auf — ein Zucken, das wie ein Fehler aussieht. Die Werte sind dieselben wie
+// --bg in index.html; stehen sie dort anders, blitzt es wieder.
+func startBackground(theme string) *options.RGBA {
+	if normaliseTheme(theme) == themeLight {
+		return &options.RGBA{R: 242, G: 242, B: 245, A: 1}
+	}
+	return &options.RGBA{R: 18, G: 18, B: 20, A: 1}
+}
+
 func main() {
 	// Muss vor dem Fenster passieren: ohne eigene Konsole gibt es später keinen
 	// sauberen Abbruch (siehe wincon.go).
@@ -54,7 +67,7 @@ func main() {
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		BackgroundColour: &options.RGBA{R: 18, G: 18, B: 20, A: 1},
+		BackgroundColour: startBackground(window.Theme),
 		DragAndDrop: &options.DragAndDrop{
 			EnableFileDrop: true,
 			// DisableWebViewDrop darf hier NICHT gesetzt werden: Es schaltet

@@ -41,18 +41,39 @@ const (
 	maxWindowExtent = 20000
 )
 
+// Die beiden Farbstimmungen der Oberfläche. Sie stehen hier und nicht in der
+// Fensterseite, weil sie in der Merkdatei landen: ein Wert, den beide Seiten
+// gleich schreiben müssen, gehört an eine Stelle.
+const (
+	themeDark  = "dark"
+	themeLight = "light"
+)
+
 // windowState ist der gemerkte Zustand des Fensters.
 type windowState struct {
-	Width     int  `json:"width"`
-	Height    int  `json:"height"`
-	X         int  `json:"x"`
-	Y         int  `json:"y"`
-	Maximised bool `json:"maximised"`
+	Width     int    `json:"width"`
+	Height    int    `json:"height"`
+	X         int    `json:"x"`
+	Y         int    `json:"y"`
+	Maximised bool   `json:"maximised"`
+	Theme     string `json:"theme"`
 }
 
 // defaultWindowState liefert den Zustand für den allerersten Start.
 func defaultWindowState() windowState {
-	return windowState{Width: defaultWindowWidth, Height: defaultWindowHeight}
+	return windowState{Width: defaultWindowWidth, Height: defaultWindowHeight, Theme: themeDark}
+}
+
+// normaliseTheme lässt nur die beiden bekannten Werte durch.
+//
+// Alles andere — leeres Feld einer alten Merkdatei, Tippfehler von Hand,
+// halb geschriebene Datei — wird zur dunklen Stimmung, mit der das Fenster
+// seit jeher aufgeht.
+func normaliseTheme(theme string) string {
+	if theme == themeLight {
+		return themeLight
+	}
+	return themeDark
 }
 
 // sizeIsSensible prüft die gemerkten Maße, bevor ihnen jemand vertraut.
@@ -93,8 +114,14 @@ func loadWindowState() (windowState, bool) {
 	if err := json.Unmarshal(raw, &state); err != nil {
 		return defaultWindowState(), false
 	}
+	state.Theme = normaliseTheme(state.Theme)
 	if !state.sizeIsSensible() {
-		return defaultWindowState(), false
+		// Die Farbstimmung überlebt eine unbrauchbare Größe: Sie hat mit den
+		// Maßen nichts zu tun, und sie wegzuwerfen hieße, den Nutzer nach
+		// einer verunglückten Merkdatei zweimal zu bestrafen.
+		fallback := defaultWindowState()
+		fallback.Theme = state.Theme
+		return fallback, false
 	}
 	return state, true
 }
@@ -113,6 +140,20 @@ func saveWindowState(state windowState) error {
 		return fmt.Errorf("windowstate.go: saveWindowState (WriteFile): %w", err)
 	}
 	return nil
+}
+
+// saveTheme merkt sich die gewählte Farbstimmung, ohne alles andere anzufassen.
+//
+// Der Zustand wird frisch gelesen statt aus dem Gedächtnis genommen: Größe und
+// Platz stehen erst beim Schließen fest, und ein hier weggeschriebener
+// veralteter Wert würde sie überschreiben.
+func saveTheme(theme string) error {
+	state, ok := loadWindowState()
+	if !ok {
+		state = defaultWindowState()
+	}
+	state.Theme = normaliseTheme(theme)
+	return saveWindowState(state)
 }
 
 // procMonitorFromRect beantwortet die Frage „liegt dieser Bereich auf einem

@@ -166,6 +166,25 @@ func (a *App) GetStartupInfo() StartupInfo {
 	}
 }
 
+// GetTheme nennt die zuletzt gewählte Farbstimmung.
+//
+// Bewusst ein eigener, winziger Aufruf und nicht Teil von GetStartupInfo:
+// Der Startbericht befragt die Grafikkarte und braucht dafür spürbar Zeit.
+// Die Oberfläche muss aber schon vor dem ersten Bild wissen, welche Farben
+// sie malen soll — sonst blitzt bei heller Stimmung kurz der dunkle Grund auf.
+func (a *App) GetTheme() string {
+	return normaliseTheme(a.window.Theme)
+}
+
+// SaveTheme merkt sich die gewählte Farbstimmung sofort.
+//
+// Sofort und nicht erst beim Schließen: Wer umschaltet und das Fenster danach
+// über den Aufgabenmanager verliert, soll seine Wahl trotzdem wiederfinden.
+func (a *App) SaveTheme(theme string) error {
+	a.window.Theme = normaliseTheme(theme)
+	return saveTheme(a.window.Theme)
+}
+
 // GetConverterStatus prüft die Programmdatei erneut.
 func (a *App) GetConverterStatus() ConverterStatus {
 	return converterStatus()

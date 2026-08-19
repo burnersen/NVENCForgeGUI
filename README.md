@@ -22,6 +22,7 @@ results, same settings file — just visible.
 - **The track chooser** — when a file has several audio tracks or subtitles, you tick what you want instead of typing numbers.
 - **Every setting explained.** The Settings page is built from `NVENCForge_Config.ini` itself: hover over anything and it tells you what it does, what is allowed, and what your file currently says. The subtitle cleaner's phrase list is editable there too, instead of in a text editor.
 - **Stop one, or stop all.** Each converter has its own ✕; what is already encoded is kept as a playable preview.
+- **Day or night.** A switch at the bottom left turns the window light or dark, and it remembers which you chose. The log keeps its dark ground either way — the colours in there come from the converter itself and are meant for one.
 - **It stays where you put it.** Size and place are remembered between starts, and starting it a second time brings the open window forward instead of opening a rival that fights over the same files.
 
 ## Getting started
@@ -98,6 +99,7 @@ node frontend\join_check.js
 node frontend\watch_check.js
 node frontend\parallel_check.js
 node frontend\srt_check.js
+node frontend\theme_check.js
 ```
 
 The `*_check.js` files run the window's own script without a browser and check

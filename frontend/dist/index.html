@@ -28,7 +28,51 @@
   --ok: #4ec97a;
   --warn: #e8b53c;
   --bad: #ef6b6b;
+  /* Colours that used to sit hard-coded further down. They are named here so
+     the light theme can answer them; the values are exactly what they were. */
+  --on-accent: #17130c;
+  --danger-line: #5a2a2a;
+  --danger-text: #ffb3b3;
+  --wash: rgba(255, 140, 26, .08);
+  --wash-mid: rgba(255, 140, 26, .07);
+  --wash-soft: rgba(255, 140, 26, .05);
+  --shadow: rgba(0, 0, 0, .45);
+  --shadow-strong: rgba(0, 0, 0, .55);
+  --overlay: rgba(0, 0, 0, .6);
+  --hover-2: #202027;
   --radius: 10px;
+}
+
+/* The day theme. Only names get new values — every rule below works off those
+   names, so nothing else has to know which theme is running.
+
+   Two things are deliberately NOT lightened. The log box shows a real terminal
+   picture whose colours come from the converter itself and are meant for a
+   dark ground; turning it white would make the converter's own yellows and
+   greens unreadable. And the orange is a shade deeper here than at night:
+   #ff8c1a on white is too pale to read, #c25e00 is not. */
+html[data-theme="light"] {
+  --bg: #f2f2f5;
+  --panel: #ffffff;
+  --panel-2: #ebebf0;
+  --line: #d7d7de;
+  --text: #1b1b20;
+  --muted: #63636e;
+  --accent: #c25e00;
+  --accent-dim: #e8a35e;
+  --ok: #17804a;
+  --warn: #8a6108;
+  --bad: #bf3b3b;
+  --on-accent: #ffffff;
+  --danger-line: #e3b0b0;
+  --danger-text: #a32828;
+  --wash: rgba(194, 94, 0, .10);
+  --wash-mid: rgba(194, 94, 0, .09);
+  --wash-soft: rgba(194, 94, 0, .06);
+  --shadow: rgba(24, 24, 30, .16);
+  --shadow-strong: rgba(24, 24, 30, .24);
+  --overlay: rgba(20, 20, 26, .38);
+  --hover-2: #e2e2e9;
 }
 * { box-sizing: border-box; }
 html, body {
@@ -42,6 +86,13 @@ html, body {
 }
 button { font: inherit; color: inherit; cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .45; }
+
+/* The window stays blank for the blink it takes to learn which theme was last
+   chosen — otherwise a day user would get a dark flash on every start.
+   applyTheme sets data-theme in every case, dark included, so this can never
+   leave the window hidden as long as the script runs at all. */
+body { opacity: 0; }
+html[data-theme] body { opacity: 1; transition: opacity .12s ease; }
 
 /* ---------- frame ---------- */
 #shell { display: flex; flex-direction: column; height: 100%; }
@@ -118,9 +169,9 @@ details > .notes { margin-top: 6px; }
   border-radius: 8px; padding: 8px 14px;
 }
 .btn:hover:not(:disabled) { border-color: var(--accent-dim); }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: #17130c; font-weight: 600; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
 .btn.primary:hover:not(:disabled) { filter: brightness(1.08); }
-.btn.danger { border-color: #5a2a2a; color: #ffb3b3; }
+.btn.danger { border-color: var(--danger-line); color: var(--danger-text); }
 .btn.danger:hover:not(:disabled) { border-color: var(--bad); }
 
 /* ---------- queue ---------- */
@@ -140,7 +191,7 @@ details > .notes { margin-top: 6px; }
   align-items: center; gap: 10px; padding: 7px 10px; border-bottom: 1px solid var(--line);
 }
 .item:last-child { border-bottom: none; }
-.item.active { background: rgba(255, 140, 26, .08); }
+.item.active { background: var(--wash); }
 .item .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .item .sub { color: var(--muted); font-size: 11.5px; }
 .item .size { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12.5px; }
@@ -160,8 +211,8 @@ details > .notes { margin-top: 6px; }
   border-bottom: 1px solid var(--line);
 }
 .item.pickable { cursor: pointer; }
-.item.pickable:hover { background: rgba(255, 140, 26, .05); }
-.item.base { background: rgba(255, 140, 26, .08); }
+.item.pickable:hover { background: var(--wash-soft); }
+.item.base { background: var(--wash); }
 .item.dud .name { color: var(--muted); }
 .state.base { color: var(--accent); }
 .state.dud { color: var(--muted); font-weight: 500; }
@@ -194,7 +245,7 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
   background: var(--panel-2); color: var(--text);
   border: 1px solid var(--accent-dim); border-radius: 8px;
   padding: 9px 11px; font-size: 12.5px; line-height: 1.45;
-  box-shadow: 0 8px 22px rgba(0, 0, 0, .45); pointer-events: none;
+  box-shadow: 0 8px 22px var(--shadow); pointer-events: none;
 }
 #tip b { color: var(--accent); }
 #tip .now { display: block; margin-top: 6px; color: var(--muted); font-size: 11.5px; }
@@ -211,7 +262,7 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
 }
 .setting:last-child { border-bottom: none; }
 .setting > .name { font-size: 12.5px; cursor: help; overflow-wrap: anywhere; }
-.setting.changed { background: rgba(255, 140, 26, .07); }
+.setting.changed { background: var(--wash-mid); }
 .setting.changed > .name { color: var(--accent); }
 .setting.invalid input, .setting.invalid select { border-color: var(--warn); }
 .setting .std { color: var(--muted); font-size: 11.5px; }
@@ -267,6 +318,7 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
 /* ---------- log ----------
    The converter draws a real terminal picture. Its colours are kept and shown
    as they are meant to look; only the cursor commands are removed. */
+/* Its ground stays dark in the day theme too — see the note on the palette. */
 #logbox {
   background: #0d0d0f; border: 1px solid var(--line); border-radius: 8px;
   padding: 8px 10px; height: 220px; overflow-y: auto;
@@ -283,13 +335,13 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
 #ask {
   position: fixed; inset: 0; z-index: 60; display: flex;
   align-items: center; justify-content: center;
-  background: rgba(0, 0, 0, .6);
+  background: var(--overlay);
 }
 #ask[hidden] { display: none; }
 .ask-box {
   background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
   padding: 18px 20px; width: min(620px, 92vw); max-height: 86vh; overflow-y: auto;
-  box-shadow: 0 18px 40px rgba(0, 0, 0, .55);
+  box-shadow: 0 18px 40px var(--shadow-strong);
 }
 .ask-box h3 { margin: 0 0 4px; font-size: 15px; }
 .ask-slot { color: var(--muted); font-size: 12px; font-weight: 400; text-transform: none; letter-spacing: 0; }
@@ -301,9 +353,29 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
   border: 1px solid transparent; border-radius: 7px;
   font: 12.5px/1.4 Consolas, "Cascadia Mono", monospace; white-space: pre;
 }
-.ask-option:hover { border-color: var(--line); background: #202027; }
+.ask-option:hover { border-color: var(--line); background: var(--hover-2); }
 .ask-option.extra { color: var(--muted); }
 .ask-buttons { margin-top: 14px; }
+
+/* ---------- day / night ----------
+   Bottom left, below everything that does real work: easy to find, impossible
+   to hit by accident while clicking through the pages. Both halves are always
+   visible and the one that is ON carries the accent — a glance says which
+   theme is running, not merely which one could be picked. */
+.theme-switch {
+  margin-top: auto; display: flex; gap: 3px; padding: 3px;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px;
+}
+.theme-switch button {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 6px 0; border: 1px solid transparent; border-radius: 999px;
+  background: none; color: var(--muted); font-size: 12px;
+}
+.theme-switch button:hover { color: var(--text); }
+.theme-switch button[aria-pressed="true"] {
+  background: var(--panel); border-color: var(--accent-dim); color: var(--accent);
+}
+.theme-switch svg { width: 14px; height: 14px; flex: 0 0 auto; }
 </style>
 </head>
 <body>
@@ -327,6 +399,25 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
       <button class="nav-item" data-page="join">Join</button>
       <button class="nav-item" data-page="davinci">DaVinci</button>
       <button class="nav-item" data-page="settings">Settings</button>
+
+      <!-- Day or night. The icons are drawn here rather than taken from the
+           emoji font: an emoji sun arrives in its own colours on every machine
+           and would be the one thing on this page that ignores the theme. -->
+      <div class="theme-switch" role="group" aria-label="Colour theme">
+        <button id="theme-light" type="button" aria-pressed="false" title="Day colours">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="4.1" />
+            <path d="M12 2.4v2.3M12 19.3v2.3M2.4 12h2.3M19.3 12h2.3M5.2 5.2l1.6 1.6M17.2 17.2l1.6 1.6M18.8 5.2l-1.6 1.6M6.8 17.2l-1.6 1.6" />
+          </svg>
+          Day
+        </button>
+        <button id="theme-dark" type="button" aria-pressed="true" title="Night colours">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true">
+            <path d="M20.6 14.6A8.6 8.6 0 0 1 9.4 3.4a8.6 8.6 0 1 0 11.2 11.2z" />
+          </svg>
+          Night
+        </button>
+      </div>
     </nav>
 
     <main>
@@ -710,6 +801,7 @@ const state = {
   runMode: "convert",       // what the running converter is doing: convert | davinci | split | join
   answerAllThisRun: false,  // set by "stop asking": every further question gets "all tracks"
   settingsFile: null,    // the whole INI as parsed by the app
+  theme: "dark",         // day or night, as last chosen; see applyTheme
   edits: {},             // key -> value typed on the settings page, not saved yet
   gpuAdvice: {},         // key -> value the converter recommended for this card
   // The subtitle cleaner's phrase list. saved holds what is in the file, so
@@ -2617,6 +2709,32 @@ async function download() {
 }
 
 /* ---------- wiring ---------- */
+/* ---------- day / night ----------
+   The chosen theme lives on the Go side, in the same file that already
+   remembers the window's size and place. Browser storage would have worked
+   too, but it lands in a WebView2 folder somewhere else on the disk — and
+   this program promises that deleting its folder leaves nothing behind. */
+const THEMES = ["dark", "light"];
+
+// applyTheme puts a theme on screen. It never talks to the Go side, so it is
+// also the safe thing to call when nothing could be loaded.
+function applyTheme(theme) {
+  const wanted = THEMES.includes(theme) ? theme : "dark";
+  state.theme = wanted;
+  document.documentElement.dataset.theme = wanted;
+  $("theme-light").setAttribute("aria-pressed", String(wanted === "light"));
+  $("theme-dark").setAttribute("aria-pressed", String(wanted === "dark"));
+}
+
+// chooseTheme is the click. The screen changes first and is never held up by
+// the writing: a theme that could not be remembered is still the theme you
+// are looking at, and saying so in the log is honest without being in the way.
+function chooseTheme(theme) {
+  if (theme === state.theme) return;
+  applyTheme(theme);
+  api().SaveTheme(theme).catch((err) => note("could not remember the theme: " + err));
+}
+
 function wire() {
   $("btn-files").onclick = async () => { try { addItems(await api().PickFiles()); } catch (e) { showError(String(e)); } };
   $("btn-folder").onclick = async () => { try { addItems(await api().PickFolder()); } catch (e) { showError(String(e)); } };
@@ -2652,6 +2770,9 @@ function wire() {
       addSRTPhrase();
     }
   };
+
+  $("theme-light").onclick = () => chooseTheme("light");
+  $("theme-dark").onclick = () => chooseTheme("dark");
 
   $("btn-ask-ok").onclick = () => sendAnswer(askSelection());
   $("btn-ask-all").onclick = () => sendAnswer("");
@@ -2728,6 +2849,15 @@ function wire() {
 }
 
 async function boot() {
+  // Before anything else, and on its own call rather than out of the startup
+  // report: that report asks the graphics card about itself, which can take a
+  // moment — long enough for a day user to watch the window flash dark first.
+  try {
+    applyTheme(await api().GetTheme());
+  } catch (err) {
+    applyTheme("dark");
+  }
+
   wire();
   showPage("convert");
   afterQueueChange();

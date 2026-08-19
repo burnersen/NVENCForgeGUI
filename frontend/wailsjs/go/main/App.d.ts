@@ -20,6 +20,8 @@ export function GetSettingsFile():Promise<main.SettingsFile>;
 
 export function GetStartupInfo():Promise<main.StartupInfo>;
 
+export function GetTheme():Promise<string>;
+
 export function IsRunning():Promise<boolean>;
 
 export function NeedsSetup():Promise<boolean>;
@@ -37,6 +39,8 @@ export function RunSetup():Promise<void>;
 export function SaveSRTCleaner(arg1:Array<main.SRTPhrase>):Promise<main.SaveResult>;
 
 export function SaveSettings(arg1:Record<string, string>):Promise<main.SaveResult>;
+
+export function SaveTheme(arg1:string):Promise<void>;
 
 export function SortJoinFiles(arg1:Array<string>):Promise<Array<main.JoinFile>>;
 

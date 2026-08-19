@@ -76,7 +76,7 @@ func TestSaveAndLoadWindowStateRoundTrip(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Remove(path) })
 
-	want := windowState{Width: 1400, Height: 900, X: 120, Y: 60, Maximised: true}
+	want := windowState{Width: 1400, Height: 900, X: 120, Y: 60, Maximised: true, Theme: themeLight}
 	if err := saveWindowState(want); err != nil {
 		t.Fatalf("saveWindowState: %v", err)
 	}
@@ -156,5 +156,70 @@ func TestVersionMatchesWailsConfig(t *testing.T) {
 	}
 	if strings.TrimSpace(guiVersion) == "" {
 		t.Error("guiVersion ist leer")
+	}
+}
+
+// Ab hier: die gemerkte Farbstimmung.
+
+// TestLoadWindowStateFillsInMissingTheme: Eine Merkdatei aus der Zeit vor dem
+// Umschalter hat kein Feld dafür. Sie darf deshalb nicht als kaputt gelten —
+// das Fenster geht dann eben dunkel auf, wie es das immer getan hat.
+func TestLoadWindowStateFillsInMissingTheme(t *testing.T) {
+	writeStateFile(t, `{"width":1400,"height":900,"x":10,"y":10}`)
+
+	state, ok := loadWindowState()
+	if !ok {
+		t.Fatal("eine Merkdatei ohne Farbstimmung muss trotzdem gelten")
+	}
+	if state.Theme != themeDark {
+		t.Errorf("Farbstimmung %q, erwartet %q", state.Theme, themeDark)
+	}
+}
+
+// TestLoadWindowStateRejectsUnknownTheme: Von Hand hineingeschriebener Unsinn
+// darf nicht bis in die Oberfläche durchschlagen.
+func TestLoadWindowStateRejectsUnknownTheme(t *testing.T) {
+	writeStateFile(t, `{"width":1400,"height":900,"x":10,"y":10,"theme":"neon"}`)
+
+	state, _ := loadWindowState()
+	if state.Theme != themeDark {
+		t.Errorf("Farbstimmung %q, erwartet %q", state.Theme, themeDark)
+	}
+}
+
+// TestLoadWindowStateKeepsThemeDespiteBadSize: Die beiden Angaben haben nichts
+// miteinander zu tun. Eine unsinnige Größe wirft die Maße weg — die Wahl der
+// Farbstimmung zu verlieren wäre eine zweite Strafe für denselben Schaden.
+func TestLoadWindowStateKeepsThemeDespiteBadSize(t *testing.T) {
+	writeStateFile(t, `{"width":10,"height":10,"x":10,"y":10,"theme":"light"}`)
+
+	state, ok := loadWindowState()
+	if ok {
+		t.Fatal("ein Fenster von 10x10 darf nicht angenommen werden")
+	}
+	if state.Theme != themeLight {
+		t.Errorf("Farbstimmung %q, erwartet %q", state.Theme, themeLight)
+	}
+	if state.Width != defaultWindowWidth {
+		t.Errorf("Breite %d, erwartet die Standardbreite %d", state.Width, defaultWindowWidth)
+	}
+}
+
+// TestSaveThemeLeavesTheRestAlone: Der Umschalter darf nicht nebenbei Größe
+// und Platz überschreiben — die stehen erst beim Schließen fest.
+func TestSaveThemeLeavesTheRestAlone(t *testing.T) {
+	writeStateFile(t, `{"width":1400,"height":900,"x":120,"y":60,"maximised":true,"theme":"dark"}`)
+
+	if err := saveTheme(themeLight); err != nil {
+		t.Fatalf("saveTheme: %v", err)
+	}
+
+	state, ok := loadWindowState()
+	if !ok {
+		t.Fatal("gerade geschriebener Zustand wurde nicht angenommen")
+	}
+	want := windowState{Width: 1400, Height: 900, X: 120, Y: 60, Maximised: true, Theme: themeLight}
+	if state != want {
+		t.Errorf("zurückgelesen %+v, erwartet %+v", state, want)
 	}
 }

@@ -38,6 +38,10 @@ export function GetStartupInfo() {
   return window['go']['main']['App']['GetStartupInfo']();
 }
 
+export function GetTheme() {
+  return window['go']['main']['App']['GetTheme']();
+}
+
 export function IsRunning() {
   return window['go']['main']['App']['IsRunning']();
 }
@@ -72,6 +76,10 @@ export function SaveSRTCleaner(arg1) {
 
 export function SaveSettings(arg1) {
   return window['go']['main']['App']['SaveSettings'](arg1);
+}
+
+export function SaveTheme(arg1) {
+  return window['go']['main']['App']['SaveTheme'](arg1);
 }
 
 export function SortJoinFiles(arg1) {

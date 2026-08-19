@@ -21,7 +21,13 @@ function fakeElement(id) {
     // redraw really deleted something — the log's own way of overwriting
     // itself, and the one thing two converters can ruin for each other.
     removed: 0,
-    removeChild() { store.removed++; }
+    removeChild() { store.removed++; },
+    // Attributes are kept rather than swallowed: whether a button says it is
+    // switched on is the only thing that tells the user which theme is
+    // running, and a stand-in that forgets it could not check that.
+    attrs: {},
+    setAttribute(name, value) { store.attrs[name] = value; },
+    getAttribute(name) { return store.attrs[name]; }
   };
   return new Proxy(store, {
     get: (target, prop) => (prop in target ? target[prop] : () => fakeElement("child")),
@@ -65,7 +71,11 @@ function loadGui() {
     // prepared stays empty, which is what the older checks rely on.
     querySelectorAll: (selector) => selectorLists.get(selector) || [],
     addEventListener() {},
-    body: fakeElement("body")
+    body: fakeElement("body"),
+    // applyTheme writes the chosen theme onto <html>. It goes through
+    // getElementById so that a check asking for "html" gets the very same
+    // stand-in — two separate ones would look fine and prove nothing.
+    get documentElement() { return documentStub.getElementById("html"); }
   };
   const selectorLists = new Map();
   const createdElements = [];
@@ -73,7 +83,7 @@ function loadGui() {
   // Everything the window would hand to the Go side is recorded instead. That
   // is how a check can see WHICH answer a button really sends — the one thing
   // that decides whether the user gets the tracks they picked.
-  const calls = { answers: [], answerSlots: [], runs: [], joinSorts: [], stops: [], srtSaves: [] };
+  const calls = { answers: [], answerSlots: [], runs: [], joinSorts: [], stops: [], srtSaves: [], themes: [] };
   // What GetSRTCleaner should answer; set per check with setSRTReply.
   let srtReply = { found: false, path: "", note: "not set", phrases: [] };
   // Sorting the join list happens in Go (joinfiles.go) and is tested there.
@@ -100,6 +110,10 @@ function loadGui() {
           // The phrase list of the subtitle cleaner. What the window SENDS is
           // recorded: a phrase that changes on its way to the file would strip
           // something other than the list on screen promises.
+          // Which theme is written down decides what the window looks like on
+          // the NEXT start — a wrong value here is invisible until then.
+          GetTheme() { return Promise.resolve("dark"); },
+          SaveTheme(theme) { calls.themes.push(theme); return Promise.resolve(); },
           GetSRTCleaner() { return Promise.resolve(srtReply); },
           SaveSRTCleaner(phrases) {
             calls.srtSaves.push(phrases);
@@ -120,7 +134,7 @@ function loadGui() {
     " joinReady, joinRunFiles, onWatchFiles, maybeStartWatchRun, showWatch, toggleWatch, onQueueState," +
     " startBatch, clearProgress, updateOverall, stopSlot, stop, renderLanes," +
     " loadSRTCleaner, renderSRTCleaner, addSRTPhrase, saveSRTPhrases, srtSignature," +
-    " joinMode, isJoinMode, applyJoinMode, JOIN_MODES," +
+    " joinMode, isJoinMode, applyJoinMode, JOIN_MODES, applyTheme, chooseTheme, THEMES," +
     " onRunState };"
   )(windowStub, documentStub);
 
