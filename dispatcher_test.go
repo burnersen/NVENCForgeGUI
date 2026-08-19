@@ -130,7 +130,7 @@ func TestDispatcherRunsUpToTheLimit(t *testing.T) {
 	var maxSeen int
 	dispatcher := NewDispatcher(func(name string, data ...any) {})
 	watch := func() {
-		if active := dispatcher.QueueStatus().Active; active > maxSeen {
+		if active := dispatcher.QueueStatus().Areas[areaConvert].Active; active > maxSeen {
 			maxSeen = active
 		}
 	}
@@ -152,8 +152,8 @@ func TestDispatcherRunsUpToTheLimit(t *testing.T) {
 	if maxSeen > 2 {
 		t.Errorf("es liefen %d Konverter gleichzeitig, erlaubt waren 2", maxSeen)
 	}
-	if status := dispatcher.QueueStatus(); status.Pending != 0 {
-		t.Errorf("es warten noch %d Aufträge", status.Pending)
+	if status := dispatcher.QueueStatus(); status.Areas[areaConvert].Pending != 0 {
+		t.Errorf("es warten noch %d Aufträge", status.Areas[areaConvert].Pending)
 	}
 }
 
@@ -174,7 +174,7 @@ func TestDispatcherStopClearsWhatIsWaiting(t *testing.T) {
 	if err := dispatcher.RequestStop(); err != nil {
 		t.Logf("RequestStop meldete: %v", err) // ein bereits beendeter Prozess ist kein Fehler
 	}
-	if pending := dispatcher.QueueStatus().Pending; pending != 0 {
+	if pending := dispatcher.QueueStatus().Areas[areaConvert].Pending; pending != 0 {
 		t.Errorf("nach dem Abbruch warten noch %d Aufträge", pending)
 	}
 	waitFor(t, "nach dem Abbruch läuft nichts mehr", func() bool { return !dispatcher.Busy() })
@@ -194,13 +194,13 @@ func TestStopSlotLeavesTheRestAlone(t *testing.T) {
 	if err := dispatcher.Submit(exe, filepath.Dir(exe), areaConvert, 2, false, jobs); err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
-	waitFor(t, "beide Plätze laufen", func() bool { return dispatcher.QueueStatus().Active == 2 })
+	waitFor(t, "beide Plätze laufen", func() bool { return dispatcher.QueueStatus().Areas[areaConvert].Active == 2 })
 
-	before := dispatcher.QueueStatus().Pending
+	before := dispatcher.QueueStatus().Areas[areaConvert].Pending
 	if err := dispatcher.StopSlot(1); err != nil {
 		t.Logf("StopSlot meldete: %v", err) // ein gerade beendeter Prozess ist kein Fehler
 	}
-	if after := dispatcher.QueueStatus().Pending; after != before {
+	if after := dispatcher.QueueStatus().Areas[areaConvert].Pending; after != before {
 		t.Errorf("der Vorrat wurde angetastet: %d statt %d", after, before)
 	}
 	// Der Stapel muss weiterlaufen und zu Ende kommen.
@@ -243,14 +243,14 @@ func countingDispatcher(highest *int, perArea map[string]int) *Dispatcher {
 	var dispatcher *Dispatcher
 	dispatcher = NewDispatcher(func(string, ...any) {
 		status := dispatcher.QueueStatus()
-		if total := status.Active + status.WatchActive; total > *highest {
+		if total := status.Areas[areaConvert].Active + status.Areas[areaWatch].Active; total > *highest {
 			*highest = total
 		}
-		if status.Active > perArea[areaConvert] {
-			perArea[areaConvert] = status.Active
+		if status.Areas[areaConvert].Active > perArea[areaConvert] {
+			perArea[areaConvert] = status.Areas[areaConvert].Active
 		}
-		if status.WatchActive > perArea[areaWatch] {
-			perArea[areaWatch] = status.WatchActive
+		if status.Areas[areaWatch].Active > perArea[areaWatch] {
+			perArea[areaWatch] = status.Areas[areaWatch].Active
 		}
 	})
 	return dispatcher
@@ -283,7 +283,7 @@ func TestBothAreasRunSideBySide(t *testing.T) {
 
 	waitFor(t, "beide Bereiche laufen gleichzeitig", func() bool {
 		status := dispatcher.QueueStatus()
-		return status.Active > 0 && status.WatchActive > 0
+		return status.Areas[areaConvert].Active > 0 && status.Areas[areaWatch].Active > 0
 	})
 	waitFor(t, "alles läuft durch", func() bool { return !dispatcher.Busy() })
 
@@ -365,7 +365,7 @@ func TestWaitingConvertJobsDoNotBlockTheWatchedFolder(t *testing.T) {
 
 	waitFor(t, "der Fund startet, obwohl noch Dateien warten", func() bool {
 		status := dispatcher.QueueStatus()
-		return status.WatchActive == 1 && status.Pending > 0
+		return status.Areas[areaWatch].Active == 1 && status.Areas[areaConvert].Pending > 0
 	})
 	waitFor(t, "alles läuft durch", func() bool { return !dispatcher.Busy() })
 }
@@ -387,7 +387,7 @@ func TestStoppingOneAreaLeavesTheOtherAlone(t *testing.T) {
 
 	waitFor(t, "beide Bereiche laufen", func() bool {
 		status := dispatcher.QueueStatus()
-		return status.Active > 0 && status.WatchActive > 0
+		return status.Areas[areaConvert].Active > 0 && status.Areas[areaWatch].Active > 0
 	})
 
 	if err := dispatcher.RequestStopArea(areaConvert); err != nil {
@@ -397,10 +397,10 @@ func TestStoppingOneAreaLeavesTheOtherAlone(t *testing.T) {
 	// Die wartenden Aufträge des abgebrochenen Bereichs sind weg, die des
 	// anderen nicht — und der beobachtete Ordner arbeitet weiter.
 	waitFor(t, "der abgebrochene Bereich ist leer", func() bool {
-		return dispatcher.QueueStatus().Pending == 0
+		return dispatcher.QueueStatus().Areas[areaConvert].Pending == 0
 	})
-	if status := dispatcher.QueueStatus(); status.WatchActive != 1 {
-		t.Errorf("der beobachtete Ordner wurde mit angehalten (WatchActive %d)", status.WatchActive)
+	if status := dispatcher.QueueStatus(); status.Areas[areaWatch].Active != 1 {
+		t.Errorf("der beobachtete Ordner wurde mit angehalten (WatchActive %d)", status.Areas[areaWatch].Active)
 	}
 
 	waitFor(t, "der Rest läuft aus", func() bool { return !dispatcher.Busy() })
@@ -428,5 +428,110 @@ func TestAreaOfSlot(t *testing.T) {
 	}
 	if got := areaOfSlot(watchSlot); got != areaWatch {
 		t.Errorf("Platz %d gehört zu %q, erwartet %q", watchSlot, got, areaWatch)
+	}
+}
+
+// TestToolAreasRunBesideTheCard: Zerlegen und Zusammenfügen kopieren nur
+// Spuren — dort ist die Festplatte die Grenze, nicht die Karte. Sie stehen
+// deshalb NEBEN der gemeinsamen Obergrenze und nicht dahinter: Ein voll
+// ausgelastetes Umwandeln darf ein Zerlegen nicht aufhalten.
+func TestToolAreasRunBesideTheCard(t *testing.T) {
+	exe, args := shortJob(t)
+
+	dispatcher := NewDispatcher(func(string, ...any) {})
+
+	// Drei Umwandlungen: die Karte ist damit voll.
+	if err := dispatcher.Submit(exe, filepath.Dir(exe), areaConvert, 3, false, jobsFor(3, args)); err != nil {
+		t.Fatalf("Submit (convert): %v", err)
+	}
+	if err := dispatcher.Submit(exe, filepath.Dir(exe), areaSplit, 1, false, jobsFor(1, args)); err != nil {
+		t.Fatalf("Submit (split): %v", err)
+	}
+	if err := dispatcher.Submit(exe, filepath.Dir(exe), areaJoin, 1, false, jobsFor(1, args)); err != nil {
+		t.Fatalf("Submit (join): %v", err)
+	}
+
+	waitFor(t, "Zerlegen und Zusammenfügen laufen neben dem vollen Umwandeln", func() bool {
+		status := dispatcher.QueueStatus()
+		return status.Areas[areaConvert].Active == maxTotalSlots &&
+			status.Areas[areaSplit].Active == 1 &&
+			status.Areas[areaJoin].Active == 1
+	})
+	waitFor(t, "alles läuft durch", func() bool { return !dispatcher.Busy() })
+}
+
+// TestToolAreasStayAtOne: Ein Platz je Werkzeug-Bereich. Zwei Spurauswahl-
+// Dialoge gleichzeitig aus demselben Bereich wären eine Zumutung, und schneller
+// wird es davon auch nicht.
+func TestToolAreasStayAtOne(t *testing.T) {
+	exe, args := shortJob(t)
+
+	highest := map[string]int{}
+	var dispatcher *Dispatcher
+	dispatcher = NewDispatcher(func(string, ...any) {
+		status := dispatcher.QueueStatus()
+		for _, area := range []string{areaSplit, areaJoin} {
+			if status.Areas[area].Active > highest[area] {
+				highest[area] = status.Areas[area].Active
+			}
+		}
+	})
+
+	for _, area := range []string{areaSplit, areaJoin} {
+		if err := dispatcher.Submit(exe, filepath.Dir(exe), area, 3, false, jobsFor(3, args)); err != nil {
+			t.Fatalf("Submit (%s): %v", area, err)
+		}
+	}
+	waitFor(t, "alles läuft durch", func() bool { return !dispatcher.Busy() })
+
+	for _, area := range []string{areaSplit, areaJoin} {
+		if highest[area] != 1 {
+			t.Errorf("%s lief %dfach gleichzeitig, erlaubt ist genau einer", area, highest[area])
+		}
+	}
+}
+
+// TestCPUCapDoesNotReachIntoTheToolAreas: Der Prozessor-Deckel schützt die
+// Kerne der Umwandlung. Ein Zerlegen daneben kopiert bloß und darf davon nicht
+// ausgebremst werden.
+func TestCPUCapDoesNotReachIntoTheToolAreas(t *testing.T) {
+	exe, args := shortJob(t)
+
+	dispatcher := NewDispatcher(func(string, ...any) {})
+	if err := dispatcher.Submit(exe, filepath.Dir(exe), areaConvert, 3, true, jobsFor(2, args)); err != nil {
+		t.Fatalf("Submit (convert, CPU): %v", err)
+	}
+	if err := dispatcher.Submit(exe, filepath.Dir(exe), areaSplit, 1, false, jobsFor(1, args)); err != nil {
+		t.Fatalf("Submit (split): %v", err)
+	}
+
+	waitFor(t, "das Zerlegen läuft trotz Prozessor-Deckel", func() bool {
+		status := dispatcher.QueueStatus()
+		return status.Areas[areaConvert].Active == maxTotalSlotsCPU && status.Areas[areaSplit].Active == 1
+	})
+	waitFor(t, "alles läuft durch", func() bool { return !dispatcher.Busy() })
+}
+
+// TestEveryAreaHasItsOwnSlot: Die Fensterseite ordnet jede Meldung allein
+// anhand der Platznummer einem Bereich zu. Zwei Bereiche auf derselben Nummer
+// hiessen: Meldungen im falschen Protokoll.
+func TestEveryAreaHasItsOwnSlot(t *testing.T) {
+	seen := map[string]int{}
+	for slot := 1; slot <= joinSlot; slot++ {
+		seen[areaOfSlot(slot)]++
+	}
+	if seen[areaConvert] != maxConvertSlots {
+		t.Errorf("Umwandeln hat %d Plätze, erwartet %d", seen[areaConvert], maxConvertSlots)
+	}
+	for _, area := range []string{areaWatch, areaSplit, areaJoin} {
+		if seen[area] != 1 {
+			t.Errorf("%s hat %d Plätze, erwartet genau einen", area, seen[area])
+		}
+	}
+	// Und jeder Bereich, den die Oberfläche kennt, kommt auch wirklich vor.
+	for _, area := range areas {
+		if seen[area] == 0 {
+			t.Errorf("für %q gibt es gar keinen Platz", area)
+		}
 	}
 }

@@ -31,7 +31,20 @@ import (
 const (
 	areaConvert = "convert"
 	areaWatch   = "watch"
+	areaSplit   = "split"
+	areaJoin    = "join"
 )
+
+// areas nennt sie in der Reihenfolge, in der die Oberfläche sie zeigt.
+var areas = []string{areaConvert, areaSplit, areaJoin, areaWatch}
+
+// Nur diese beiden nehmen die Grafikkarte in Anspruch und teilen sich deshalb
+// die gemeinsame Obergrenze. Zerlegen und Zusammenfügen kopieren bloß Spuren —
+// dort ist die Festplatte die Grenze, nicht die Karte —, also stehen sie
+// daneben und nicht dahinter.
+func usesTheCard(area string) bool {
+	return area == areaConvert || area == areaWatch
+}
 
 // Die Platzvergabe.
 //
@@ -43,6 +56,8 @@ const (
 const (
 	maxConvertSlots = 3
 	watchSlot       = 4
+	splitSlot       = 5
+	joinSlot        = 6
 )
 
 // Wie viele Konverter überhaupt gleichzeitig laufen dürfen, über beide Bereiche
@@ -64,20 +79,26 @@ type job struct {
 	area  string   // aus welchem Bereich er kommt (areaConvert / areaWatch)
 }
 
-// QueueState sagt der Oberfläche, wie es um die Plätze steht.
-//
-// Active/Pending/Limit meinen den Bereich „von Hand umwandeln"; der beobachtete
-// Ordner wird getrennt gezählt. TotalLimit ist die gemeinsame Obergrenze und
-// erklärt der Oberfläche, warum sie beim Umwandeln vielleicht weniger anbieten
-// darf, als der Nutzer eingestellt hat.
-type QueueState struct {
-	Active  int `json:"active"`  // laufende Konverter im Bereich Umwandeln
+// AreaState ist der Stand EINES Bereichs.
+type AreaState struct {
+	Active  int `json:"active"`  // laufende Konverter dort
 	Pending int `json:"pending"` // Aufträge dort, die noch warten
 	Limit   int `json:"limit"`   // wie viele davon gleichzeitig laufen dürfen
+}
 
-	WatchActive  int `json:"watchActive"`  // läuft der beobachtete Ordner gerade?
-	WatchPending int `json:"watchPending"` // wie viele Funde warten dort noch
-	TotalLimit   int `json:"totalLimit"`   // Obergrenze über beide Bereiche
+// QueueState sagt der Oberfläche, wie es um die Plätze steht — für jeden
+// Bereich einzeln.
+//
+// Eine Karte statt einzelner Felder je Bereich: Die Oberfläche zeigt jeden
+// Bereich für sich, und ein fünfter Bereich hieße sonst wieder drei neue
+// Felder, die überall mitgeschleppt werden müssen.
+//
+// TotalLimit ist die gemeinsame Obergrenze der Bereiche, die die Karte
+// belegen. Sie erklärt der Oberfläche, warum sie beim Umwandeln vielleicht
+// weniger anbieten darf, als der Nutzer eingestellt hat.
+type QueueState struct {
+	Areas      map[string]AreaState `json:"areas"`
+	TotalLimit int                  `json:"totalLimit"`
 }
 
 // Dispatcher verwaltet die Plätze und reicht wartende Aufträge nach.
@@ -99,16 +120,24 @@ func NewDispatcher(emit func(name string, data ...any)) *Dispatcher {
 	for slot := 1; slot <= maxConvertSlots; slot++ {
 		dispatcher.runners = append(dispatcher.runners, NewRunner(slot, dispatcher.forward))
 	}
-	dispatcher.runners = append(dispatcher.runners, NewRunner(watchSlot, dispatcher.forward))
+	for _, slot := range []int{watchSlot, splitSlot, joinSlot} {
+		dispatcher.runners = append(dispatcher.runners, NewRunner(slot, dispatcher.forward))
+	}
 	return dispatcher
 }
 
 // areaOfSlot sagt, wohin ein Platz gehört. Die Fensterseite rechnet genauso.
 func areaOfSlot(slot int) string {
-	if slot == watchSlot {
+	switch slot {
+	case watchSlot:
 		return areaWatch
+	case splitSlot:
+		return areaSplit
+	case joinSlot:
+		return areaJoin
+	default:
+		return areaConvert
 	}
-	return areaConvert
 }
 
 // forward reicht jede Meldung eines Läufers an die Oberfläche weiter — und
@@ -138,7 +167,7 @@ func (d *Dispatcher) Submit(exePath, workDir, area string, limit int, usesCPU bo
 	if len(jobs) == 0 {
 		return fmt.Errorf("dispatcher.go: Submit: nothing to do")
 	}
-	if area != areaConvert && area != areaWatch {
+	if !knownArea(area) {
 		return fmt.Errorf("dispatcher.go: Submit: unknown area %q", area)
 	}
 
@@ -175,14 +204,25 @@ func clampSlots(limit int) int {
 	return limit
 }
 
-// totalLimit nennt die gemeinsame Obergrenze. Nur mit gehaltener Sperre
-// aufrufen.
+// knownArea weist einen vertippten Bereich ab, statt ihn still als
+// „Umwandeln" durchgehen zu lassen.
+func knownArea(area string) bool {
+	for _, known := range areas {
+		if known == area {
+			return true
+		}
+	}
+	return false
+}
+
+// totalLimit nennt die gemeinsame Obergrenze der Bereiche, die die Karte
+// belegen. Nur mit gehaltener Sperre aufrufen.
 //
-// Es genügt, dass EIN Bereich auf der CPU rechnet: Der Deckel schützt die
-// Kerne, und die teilen sich beide Bereiche.
+// Es genügt, dass EINER von ihnen auf der CPU rechnet: Der Deckel schützt die
+// Kerne, und die teilen sich alle.
 func (d *Dispatcher) totalLimit() int {
-	for _, cpu := range d.usesCPU {
-		if cpu {
+	for area, cpu := range d.usesCPU {
+		if cpu && usesTheCard(area) {
 			return maxTotalSlotsCPU
 		}
 	}
@@ -191,11 +231,27 @@ func (d *Dispatcher) totalLimit() int {
 
 // limitOf nennt die Obergrenze eines einzelnen Bereichs. Nur mit gehaltener
 // Sperre aufrufen.
+//
+// Alles außer dem Umwandeln von Hand hat genau einen Platz: Der beobachtete
+// Ordner soll im Hintergrund bleiben, und Zerlegen wie Zusammenfügen fragen
+// nach Spuren — zwei solche Fragen gleichzeitig wären eine Zumutung.
 func (d *Dispatcher) limitOf(area string) int {
-	if area == areaWatch {
-		return 1
+	if area == areaConvert {
+		return d.limit
 	}
-	return d.limit
+	return 1
+}
+
+// cardCount zählt die Läufe, die gerade die Karte belegen. Nur mit gehaltener
+// Sperre aufrufen.
+func (d *Dispatcher) cardCount() int {
+	active := 0
+	for _, runner := range d.runners {
+		if runner.Running() && usesTheCard(areaOfSlot(runner.Slot())) {
+			active++
+		}
+	}
+	return active
 }
 
 // fill startet wartende Aufträge, solange Plätze frei sind.
@@ -207,7 +263,7 @@ func (d *Dispatcher) limitOf(area string) int {
 func (d *Dispatcher) fill() {
 	for {
 		d.mu.Lock()
-		if len(d.pending) == 0 || d.activeCount() >= d.totalLimit() {
+		if len(d.pending) == 0 {
 			d.mu.Unlock()
 			return
 		}
@@ -236,6 +292,12 @@ func (d *Dispatcher) fill() {
 func (d *Dispatcher) nextStartable() (int, *Runner) {
 	for index, waiting := range d.pending {
 		if d.activeIn(waiting.area) >= d.limitOf(waiting.area) {
+			continue
+		}
+		// Die gemeinsame Obergrenze bremst nur die Bereiche, die wirklich die
+		// Karte belegen. Ein Zerlegen daneben kopiert bloß Spuren und darf
+		// nicht warten, bis ein Stapel durch ist.
+		if usesTheCard(waiting.area) && d.cardCount() >= d.totalLimit() {
 			continue
 		}
 		if runner := d.freeRunnerFor(waiting.area); runner != nil {
@@ -303,20 +365,31 @@ func (d *Dispatcher) announceQueue() {
 func (d *Dispatcher) QueueStatus() QueueState {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	return QueueState{
-		Active:       d.activeIn(areaConvert),
-		Pending:      d.pendingIn(areaConvert),
-		Limit:        d.limit,
-		WatchActive:  d.activeIn(areaWatch),
-		WatchPending: d.pendingIn(areaWatch),
-		TotalLimit:   d.totalLimit(),
+	state := QueueState{Areas: make(map[string]AreaState, len(areas)), TotalLimit: d.totalLimit()}
+	for _, area := range areas {
+		state.Areas[area] = AreaState{
+			Active:  d.activeIn(area),
+			Pending: d.pendingIn(area),
+			Limit:   d.limitOf(area),
+		}
 	}
+	return state
 }
 
-// Busy sagt, ob überhaupt noch etwas zu tun ist — laufend oder wartend.
+// BusyIn sagt, ob in einem Bereich noch etwas zu tun ist.
+func (d *Dispatcher) BusyIn(area string) bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.activeIn(area) > 0 || d.pendingIn(area) > 0
+}
+
+// Busy sagt, ob überhaupt noch etwas zu tun ist — laufend oder wartend, in
+// welchem Bereich auch immer. Das Fenster fragt danach, bevor es sich
+// schließen lässt.
 func (d *Dispatcher) Busy() bool {
-	status := d.QueueStatus()
-	return status.Active > 0 || status.Pending > 0
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.activeCount() > 0 || len(d.pending) > 0
 }
 
 // RequestStop hält alles an: Erst den Vorrat leeren, dann die laufenden

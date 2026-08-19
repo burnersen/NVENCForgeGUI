@@ -134,7 +134,7 @@ function afterRun(entries, opts) {
                       failed: (opts && opts.failed) || 0, savedMB: 100, seconds: 30 };
   gui.state.runMode = "convert";
   gui.state.running = true;
-  gui.onQueueState({ active: 0, pending: 0, limit: 2, watchActive: 0, watchPending: 0 });
+  gui.onQueueState({ areas: { convert: { active: 0, pending: 0, limit: 2 }, watch: { active: 0, pending: 0, limit: 1 } }, totalLimit: 3 });
   return gui.state.queue.length;
 }
 

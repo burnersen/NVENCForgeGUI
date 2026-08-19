@@ -93,7 +93,7 @@ checker.contains("and b.mkv kept its own", queue[1].note, "70 % smaller");
 console.log("\nThe balance counts every converter, not just the last one");
 gui.onConverterEvent({ ev: "summary", slot: 1, files: 1, success: 1, skipped: 0, failed: 0, saved_mb: 60, elapsed_sec: 30 });
 gui.onConverterEvent({ ev: "summary", slot: 2, files: 1, success: 1, skipped: 0, failed: 0, saved_mb: 70, elapsed_sec: 40 });
-gui.onQueueState({ active: 0, pending: 0, limit: 2 });
+gui.onQueueState({ areas: { convert: { active: 0, pending: 0, limit: 2 }, watch: { active: 0, pending: 0, limit: 1 } }, totalLimit: 3 });
 const summary = element("summary").textContent;
 checker.contains("both files counted", summary, "2 file(s)");
 checker.contains("both successes", summary, "2 converted");
@@ -139,7 +139,7 @@ overall();
 gui.onConverterEvent({ ev: "result", slot: 1, index: 1, status: "success", name: "gross.mkv", in_mb: 432, out_mb: 226, saved_mb: 206, saved_pct: 48 });
 gui.onConverterEvent({ ev: "summary", slot: 1, files: 1, success: 1, skipped: 0, failed: 0, saved_mb: 206, elapsed_sec: 149 });
 gui.onRunState({ running: false, exitCode: 0, slot: 1 });
-gui.onQueueState({ active: 0, pending: 0, limit: 2 });
+gui.onQueueState({ areas: { convert: { active: 0, pending: 0, limit: 2 }, watch: { active: 0, pending: 0, limit: 1 } }, totalLimit: 3 });
 const atTheEnd = overall();
 checker.check("everything done means 100 %", atTheEnd, 100);
 
@@ -173,9 +173,9 @@ gui.onRunState({ running: false, exitCode: 0, slot: 1 });
 checker.check("still running", gui.state.running, true);
 // Only the dispatcher knows whether anything is left — a slot going quiet says
 // nothing about the jobs still waiting for a free one.
-gui.onQueueState({ active: 1, pending: 3, limit: 2 });
+gui.onQueueState({ areas: { convert: { active: 1, pending: 3, limit: 2 }, watch: { active: 0, pending: 0, limit: 1 } }, totalLimit: 3 });
 checker.check("and it stays that way while jobs wait", gui.state.running, true);
-gui.onQueueState({ active: 0, pending: 0, limit: 2 });
+gui.onQueueState({ areas: { convert: { active: 0, pending: 0, limit: 2 }, watch: { active: 0, pending: 0, limit: 1 } }, totalLimit: 3 });
 checker.check("now it is over", gui.state.running, false);
 
 console.log("\nOne converter can be stopped without taking the batch down");

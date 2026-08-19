@@ -113,14 +113,14 @@ checker.check("the second one waits", calls.runs.length, 1);
 checker.check("it is on the waiting list", gui.state.watchPending.length, 1);
 // Its own end is what starts the next find — and only its own. A batch
 // finishing on the other page must not reach in here.
-gui.onQueueState({ active: 0, pending: 0, limit: 2, watchActive: 1, watchPending: 0 });
+gui.onQueueState({ areas: { convert: { active: 0, pending: 0, limit: 2 }, watch: { active: 1, pending: 0, limit: 1 } }, totalLimit: 3 });
 checker.check("the other area finishing changes nothing", calls.runs.length, 1);
-gui.onQueueState({ active: 0, pending: 0, limit: 2, watchActive: 0, watchPending: 0 });
+gui.onQueueState({ areas: { convert: { active: 0, pending: 0, limit: 2 }, watch: { active: 0, pending: 0, limit: 1 } }, totalLimit: 3 });
 checker.check("its own end starts the next", calls.runs.length, 2);
 checker.check("with the file that waited", lastRun().files[0], "D:\\Downloads\\zweite.mkv");
 checker.check("and only that one", lastRun().files.length, 1);
 checker.check("the waiting list is empty", gui.state.watchPending.length, 0);
-gui.onQueueState({ active: 0, pending: 0, limit: 2, watchActive: 0, watchPending: 0 });
+gui.onQueueState({ areas: { convert: { active: 0, pending: 0, limit: 2 }, watch: { active: 0, pending: 0, limit: 1 } }, totalLimit: 3 });
 checker.check("nothing starts on an empty list", calls.runs.length, 2);
 
 console.log("\nNothing is converted twice");
@@ -138,7 +138,7 @@ gui.onWatchFiles([found("wartet.mkv")]);
 checker.check("it is waiting", gui.state.watchPending.length, 1);
 gui.state.watch.active = false;
 gui.state.watchPending = [];
-gui.onQueueState({ active: 0, pending: 0, limit: 2, watchActive: 0, watchPending: 0 });
+gui.onQueueState({ areas: { convert: { active: 0, pending: 0, limit: 2 }, watch: { active: 0, pending: 0, limit: 1 } }, totalLimit: 3 });
 checker.check("after switching off nothing starts", calls.runs.length, 0);
 
 console.log("\nIts messages land in ITS log");

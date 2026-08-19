@@ -2121,14 +2121,21 @@ function onRunState(runState) {
 // whether the whole batch is through: the slots that are working plus the jobs
 // still waiting for a free one.
 function onQueueState(queueState) {
-  state.active = queueState.active || 0;
-  state.pending = queueState.pending || 0;
+  // The dispatcher reports every area separately now. Reading it through one
+  // helper keeps a missing area from turning into "undefined is not a number"
+  // halfway down.
+  const areaOf = (name) => (queueState.areas && queueState.areas[name]) || { active: 0, pending: 0, limit: 1 };
+  const convert = areaOf("convert");
+  const watch = areaOf("watch");
+
+  state.active = convert.active;
+  state.pending = convert.pending;
   state.totalLimit = queueState.totalLimit || 3;
 
   // The watched folder is followed separately, because it starts and finishes
   // on its own schedule. Its end is not the batch's end and must not close a
   // dialog or write a final summary over there.
-  const watchBusy = (queueState.watchActive || 0) > 0 || (queueState.watchPending || 0) > 0;
+  const watchBusy = watch.active > 0 || watch.pending > 0;
   const watchWas = state.watchRunning;
   state.watchRunning = watchBusy;
   if (watchWas && !watchBusy) {

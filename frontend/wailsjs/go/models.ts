@@ -1,5 +1,21 @@
 export namespace main {
 	
+	export class AreaState {
+	    active: number;
+	    pending: number;
+	    limit: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new AreaState(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.active = source["active"];
+	        this.pending = source["pending"];
+	        this.limit = source["limit"];
+	    }
+	}
 	export class ConfigView {
 	    found: boolean;
 	    path: string;
@@ -165,11 +181,7 @@ export namespace main {
 	    }
 	}
 	export class QueueState {
-	    active: number;
-	    pending: number;
-	    limit: number;
-	    watchActive: number;
-	    watchPending: number;
+	    areas: Record<string, AreaState>;
 	    totalLimit: number;
 	
 	    static createFrom(source: any = {}) {
@@ -178,13 +190,27 @@ export namespace main {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.active = source["active"];
-	        this.pending = source["pending"];
-	        this.limit = source["limit"];
-	        this.watchActive = source["watchActive"];
-	        this.watchPending = source["watchPending"];
+	        this.areas = this.convertValues(source["areas"], AreaState, true);
 	        this.totalLimit = source["totalLimit"];
 	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class RunRequest {
 	    area: string;

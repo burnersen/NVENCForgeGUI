@@ -106,7 +106,7 @@ checker.check("no success is claimed", gui.state.queue[0].note.includes("smaller
 console.log("\nThe summary does not report a tool run as “0 converted”");
 gui.onConverterEvent({ ev: "summary", files: 2, success: 0, skipped: 0, failed: 0, saved_mb: 0, elapsed_sec: 125 });
 gui.state.running = true;
-gui.onQueueState({ active: 0, pending: 0, limit: 1 });
+gui.onQueueState({ areas: { convert: { active: 0, pending: 0, limit: 1 }, watch: { active: 0, pending: 0, limit: 1 } }, totalLimit: 3 });
 checker.contains("says what really happened", element("summary").textContent, "2 file(s) processed in 2 min 5 s");
 
 gui.resetProgress();
@@ -115,7 +115,7 @@ gui.onConverterEvent({ ev: "result", index: 1, status: "success", name: "a.mkv",
 gui.onConverterEvent({ ev: "result", index: 2, status: "success", name: "b.mkv", in_mb: 100, out_mb: 40, saved_mb: 60, saved_pct: 60 });
 gui.onConverterEvent({ ev: "summary", files: 2, success: 2, skipped: 0, failed: 0, saved_mb: 120, elapsed_sec: 60 });
 gui.state.running = true;
-gui.onQueueState({ active: 0, pending: 0, limit: 1 });
+gui.onQueueState({ areas: { convert: { active: 0, pending: 0, limit: 1 }, watch: { active: 0, pending: 0, limit: 1 } }, totalLimit: 3 });
 checker.contains("a conversion still reports its savings", element("summary").textContent, "2 converted");
 
 console.log("\nThe page decides which mode the start button runs");
