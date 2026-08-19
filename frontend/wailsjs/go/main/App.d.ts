@@ -52,6 +52,8 @@ export function StopRun():Promise<void>;
 
 export function StopSlot(arg1:number):Promise<void>;
 
+export function StopWatchRun():Promise<void>;
+
 export function StopWatching():Promise<main.WatchState>;
 
 export function WatchStatus():Promise<main.WatchState>;

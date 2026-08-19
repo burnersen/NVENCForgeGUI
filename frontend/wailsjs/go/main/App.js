@@ -102,6 +102,10 @@ export function StopSlot(arg1) {
   return window['go']['main']['App']['StopSlot'](arg1);
 }
 
+export function StopWatchRun() {
+  return window['go']['main']['App']['StopWatchRun']();
+}
+
 export function StopWatching() {
   return window['go']['main']['App']['StopWatching']();
 }

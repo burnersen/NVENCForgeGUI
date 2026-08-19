@@ -507,6 +507,9 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
               <option value="2" selected>2 videos</option>
               <option value="3">3 videos</option>
             </select>
+            <!-- Filled in when a choice here is not available: a watched folder
+                 holding a slot, or the processor mode capping the total. -->
+            <span class="hint" id="parallel-note" style="margin:4px 0 0"></span>
           </div>
         </div>
         <div class="checks">
@@ -680,28 +683,123 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
           <span class="hint" id="watch-folder" style="margin:0">No folder chosen yet.</span>
           <div class="spacer"></div>
           <span class="hint" id="watch-state" style="margin:0"></span>
-          <button class="btn primary" id="btn-watch-toggle" disabled>Start watching</button>
-        </div>
-
-        <div class="hint">
-          Converted with the options on the <b>Convert</b> page — codec,
-          encoder, container, quality, all of them.
-          <button class="linkish" id="btn-watch-options">show me those</button>
+          <button class="btn primary" id="btn-watch-start" disabled>Start watching</button>
+          <button class="btn" id="btn-watch-stop" disabled>Stop watching</button>
         </div>
 
         <details>
           <summary>What happens while this is on</summary>
           <ul class="notes">
-            <li>Every video that turns up in that folder — or in any folder inside it — is converted on its own, with the options from the Convert page.</li>
+            <li>Every video that turns up in that folder — or in any folder inside it — is converted on its own, with the options set below.</li>
             <li>A file is only picked up once it has stopped growing for 30 seconds, so a download that is still running is left alone.</li>
             <li>What is already in the folder when you switch on is taken along. Finished results and their sources are skipped, and so is the <b>originals</b> folder.</li>
             <li>Watching only lasts while this window is open — closing it ends the standing order.</li>
             <li>The results are written into an <b>output</b> folder next to their sources, and your originals are moved wherever your INI says. The watched folder will look different afterwards.</li>
+            <li>One video at a time here, whatever the Convert page is set to. This runs in the background, and the card still has to be free for the work you start by hand.</li>
           </ul>
         </details>
       </section>
 
-      <div class="shared-slot" data-slot="run"></div>
+      <!-- Its own options, not a view of the Convert page's. The point of the
+           separation: the downloads folder can be turned into AV1 in the
+           background while you convert something else to H.265 by hand. -->
+      <section class="panel">
+        <h2>Options for the watched folder</h2>
+        <div class="options">
+          <div class="field">
+            <label for="wopt-codec">Codec</label>
+            <select id="wopt-codec">
+              <option value="">H.265 (default)</option>
+              <option value="av1">AV1</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="wopt-encoder">Encoder</label>
+            <select id="wopt-encoder">
+              <option value="">GPU / NVENC (default)</option>
+              <option value="cpu">CPU (no NVIDIA card needed)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="wopt-container">Container</label>
+            <select id="wopt-container">
+              <option value="">MKV (default)</option>
+              <option value="mp4">MP4</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="wopt-resolution">Resolution</label>
+            <select id="wopt-resolution">
+              <option value="">Downscale if needed (default)</option>
+              <option value="original">Keep original resolution</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="wopt-audio">Audio</label>
+            <select id="wopt-audio">
+              <option value="">AAC where needed (default)</option>
+              <option value="copy">Copy 1:1 — original audio</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="wopt-bitdepth">Bit depth</label>
+            <select id="wopt-bitdepth">
+              <option value="">10 bit (default)</option>
+              <option value="8">8 bit (older devices)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="wopt-quality">Quality</label>
+            <select id="wopt-quality">
+              <option value="auto">Auto CQ on</option>
+              <option value="fixed">Fixed CQ</option>
+            </select>
+          </div>
+          <div class="field" id="wfield-cq" hidden>
+            <label for="wopt-cq">Fixed CQ</label>
+            <input type="number" id="wopt-cq" value="26" min="1" max="51" />
+          </div>
+          <div class="field">
+            <label for="wopt-bitrate">Max bitrate (kbit/s)</label>
+            <input type="number" id="wopt-bitrate" value="" min="100" max="200000" placeholder="as configured" />
+          </div>
+        </div>
+        <div class="checks">
+          <label class="check"><input type="checkbox" id="wopt-keep" /> Keep the source file where it is</label>
+        </div>
+        <div class="hint">
+          No “shut down when finished” here: a standing order that switches the
+          machine off after the first video would never convert the second one.
+          What each setting does is explained on the <b>Convert</b> page — the
+          words are the same, only the choice is separate.
+        </div>
+      </section>
+
+      <!-- Its own progress and its own log. Sharing them with the Convert page
+           was the actual complaint: a folder quietly working in the background
+           kept overwriting the display of the batch you were watching. -->
+      <section class="panel" id="panel-watch-progress">
+        <h2>Progress</h2>
+        <div id="watch-lanes"><div class="lane-idle">Nothing running.</div></div>
+        <div id="watch-summary"></div>
+        <div class="row" style="margin-top:12px">
+          <button class="btn danger" id="btn-watch-stop-run" disabled>Stop this file</button>
+          <span class="hint" style="margin:0" id="watch-run-hint"></span>
+          <div class="spacer"></div>
+          <span class="err" id="watch-error"></span>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-watch-log">
+        <h2>Log <span style="text-transform:none;letter-spacing:0">— only what the watched folder does</span></h2>
+        <div id="watch-logbox"></div>
+        <div class="row" style="margin-top:8px">
+          <button class="btn" id="btn-watch-log-copy">Copy log</button>
+          <button class="btn" id="btn-watch-log-clear">Clear log</button>
+          <label class="check"><input type="checkbox" id="watch-autoscroll" checked /> Follow</label>
+          <span class="hint" id="watch-log-copied" style="margin:0"></span>
+        </div>
+      </section>
     </div>
 
     <div id="page-settings" hidden>
@@ -808,6 +906,13 @@ const state = {
   cqTouched: false,      // true once the CQ box was edited by hand
   watch: { folder: "", active: false },
   watchPending: [],   // paths the watcher found that have not run yet
+  // The watched folder keeps its own books. It runs beside a batch started by
+  // hand, so mixing the two would mean a bar that jumps and a balance that
+  // counts files nobody put in the list.
+  watchRunning: false,
+  watchStopping: false,
+  watchTally: { files: 0, success: 0, skipped: 0, failed: 0, savedMB: 0, seconds: 0 },
+  lastWatchLogSlot: 0,
   joinFiles: [],      // the join area's own list, sorted by Go (joinfiles.go)
   joinBasePath: "",   // path of the video file the join is built on
   page: "convert",
@@ -822,6 +927,12 @@ const state = {
   // the Save button can tell a real change from a round trip.
   srt: { view: null, phrases: [], saved: "" }
 };
+
+// The converter on this slot is the watched folder's. Slots 1..3 belong to
+// converting by hand. The same split exists on the Go side (dispatcher.go) and
+// the two must agree: it is the only thing that tells a message where to go.
+const WATCH_SLOT = 4;
+const isWatchSlot = (slot) => Number(slot) === WATCH_SLOT;
 
 const MAX_LOG_LINES = 400;
 const $ = (id) => document.getElementById(id);
@@ -900,19 +1011,25 @@ function renderTerminalText(raw) {
 }
 
 function log(line) {
-  const box = $("logbox");
   const entry = typeof line === "string" ? { text: line, back: 0 } : line;
   const slot = entry.slot || 0;
+  // Two logs, told apart by the slot alone. This is the whole separation the
+  // window needed: a folder working quietly in the background used to redraw
+  // its lines into the log of the batch you were reading.
+  const watched = isWatchSlot(slot);
+  const box = $(watched ? "watch-logbox" : "logbox");
+  const lastSlot = watched ? state.lastWatchLogSlot : state.lastLogSlot;
 
   // A redraw first takes back what it overwrites — but only its OWN lines.
   // With two converters writing at once, a redraw from one of them would
   // otherwise delete the other one's lines, and the log would eat itself.
-  const back = slot === state.lastLogSlot ? (entry.back || 0) : 0;
+  const back = slot === lastSlot ? (entry.back || 0) : 0;
   for (let i = 0; i < back && box.lastElementChild; i++) {
     box.removeChild(box.lastElementChild);
   }
   if (!entry.text) return;
-  state.lastLogSlot = slot;
+  if (watched) state.lastWatchLogSlot = slot;
+  else state.lastLogSlot = slot;
   noteGPUAdvice(entry.text);
 
   const row = document.createElement("div");
@@ -921,7 +1038,8 @@ function log(line) {
     row.textContent = entry.text;
   } else {
     // Which converter said it — only worth showing when more than one can talk.
-    if (slot > 0 && state.parallel > 1) {
+    // Never in the watched folder's log: only one converter writes there.
+    if (slot > 0 && !watched && state.parallel > 1) {
       const tag = document.createElement("span");
       tag.className = "log-slot";
       tag.textContent = "[" + slot + "] ";
@@ -931,8 +1049,12 @@ function log(line) {
   }
   box.appendChild(row);
   while (box.childElementCount > MAX_LOG_LINES) box.removeChild(box.firstChild);
-  if ($("opt-autoscroll").checked) box.scrollTop = box.scrollHeight;
+  if ($(watched ? "watch-autoscroll" : "opt-autoscroll").checked) box.scrollTop = box.scrollHeight;
 }
+
+// watchNote is what the window has to say about the watched folder. Same shape
+// as note(), but it lands in the other log.
+function watchNote(t) { log({ text: "[gui] " + t, back: 0, slot: WATCH_SLOT }); }
 
 // note is what the window itself has to say, never the converter.
 function note(text) { log({ text: "[gui] " + text, back: 0 }); }
@@ -1194,38 +1316,39 @@ function afterJoinChange() {
 // watchPending holds what the watcher reported and what has not run yet. The
 // queue itself is not enough: after a run its entries stay on show as a record,
 // and starting them again would hand the converter files that are already done.
+// onWatchFiles takes in what the folder turned up. The finds do NOT go into
+// the queue on the Convert page: that list is what you dropped in yourself,
+// and a folder quietly filling it was the very thing that made the two areas
+// impossible to tell apart.
 function onWatchFiles(items) {
   if (!items || !items.length) return;
-  addItems(items);
   const known = new Set(state.watchPending.map((path) => path.toLowerCase()));
   items.forEach((item) => {
     if (known.has(item.path.toLowerCase())) return;
     known.add(item.path.toLowerCase());
     state.watchPending.push(item.path);
   });
-  note(items.length + " new file(s) in the watched folder.");
+  watchNote(items.length + " new file(s) in the watched folder.");
   maybeStartWatchRun();
 }
 
-// maybeStartWatchRun starts the waiting files as ONE run. Files arriving while
-// that run is going wait for the next one — the converter takes its file list
-// at startup and cannot be extended halfway through.
+// maybeStartWatchRun hands the next find to the converter. It waits only for
+// the watched folder's OWN slot - a batch running by hand no longer holds it
+// up, and one find at a time keeps that slot honest.
 function maybeStartWatchRun() {
-  if (!state.watch.active || state.running || !state.watchPending.length) return;
-  const files = state.watchPending;
-  state.watchPending = [];
-  showError("");
-  resetProgress();
-  startBatch(files);
-  state.parallel = parallelSetting();
-  // Always the converting mode, whatever page is on show — and never with
-  // "shut down when finished": a standing order that switches the machine off
-  // after the first video would be a nasty surprise.
-  api().StartRun(collectRequest("", files, { shutdown: false })).catch((err) => {
-    showError(String(err));
-    note("Watched folder: start refused: " + err);
-    // Put them back, otherwise they would be silently forgotten.
+  if (!state.watch.active || state.watchRunning || !state.watchPending.length) return;
+  const files = state.watchPending.slice(0, 1);
+  state.watchPending = state.watchPending.slice(1);
+  showWatchError("");
+  state.watchRunning = true;
+  updateButtons();
+  api().StartRun(collectWatchRequest(files)).catch((err) => {
+    state.watchRunning = false;
+    showWatchError(String(err));
+    watchNote("start refused: " + err);
+    // Put it back, otherwise it would be silently forgotten.
     state.watchPending = files.concat(state.watchPending);
+    updateButtons();
   });
 }
 
@@ -1234,7 +1357,6 @@ function showWatch(watchState) {
   if (watchState) state.watch.active = !!watchState.watching;
   if (watchState && watchState.folder) state.watch.folder = watchState.folder;
   $("watch-folder").textContent = state.watch.folder || "No folder chosen yet.";
-  $("btn-watch-toggle").textContent = state.watch.active ? "Stop watching" : "Start watching";
   $("watch-state").textContent = state.watch.active
     ? "Watching — new videos are converted on their own."
     : "";
@@ -1268,21 +1390,39 @@ async function startWatching() {
   }
 }
 
-async function toggleWatch() {
-  if (!state.watch.active) {
-    if (!state.watch.folder) return;
-    await startWatching();
-    return;
-  }
+// Two buttons rather than one that changes its meaning: with a standing order
+// you want to see at a glance whether it is on, and a switch that reads "Stop
+// watching" answers that only if you already know how it works.
+async function stopWatching() {
   try {
     const result = await api().StopWatching();
     state.watch.active = false;
     state.watchPending = [];
     showWatch(result);
   } catch (err) {
-    showError(String(err));
+    showWatchError(String(err));
   }
 }
+
+// stopWatchRun ends the file the watched folder is converting right now. The
+// standing order itself carries on - the next video that turns up is taken.
+async function stopWatchRun() {
+  if (!state.watchRunning) return;
+  state.watchStopping = true;
+  updateButtons();
+  try {
+    await api().StopWatchRun();
+  } catch (err) {
+    state.watchStopping = false;
+    updateButtons();
+    showWatchError(String(err));
+  }
+}
+
+// showWatchError keeps the watched folder's troubles on its own page. An error
+// from a background folder appearing over a batch you are running would look
+// like the batch had failed.
+function showWatchError(message) { $("watch-error").textContent = message || ""; }
 
 /* ---------- buttons ---------- */
 function updateButtons() {
@@ -1300,7 +1440,21 @@ function updateButtons() {
   $("btn-clear").disabled = state.running || state.queue.length === 0;
   $("btn-join-files").disabled = state.running;
   $("btn-join-clear").disabled = state.running || state.joinFiles.length === 0;
-  $("btn-watch-toggle").disabled = !state.watch.folder || !state.converterFound;
+  // The watched folder's own three buttons. Start is only offered when there
+  // is a folder and something to run it with; stop only when it is really on.
+  $("btn-watch-start").disabled = state.watch.active || !state.watch.folder || !state.converterFound;
+  $("btn-watch-stop").disabled = !state.watch.active;
+  $("btn-watch-pick").disabled = false;
+  $("btn-watch-stop-run").disabled = !state.watchRunning || state.watchStopping;
+  $("watch-run-hint").textContent = state.watchStopping
+    ? "Stopping this file — watching carries on."
+    : (state.watchRunning ? "Keeps what is already encoded as a playable preview." : "");
+
+  // Three converters at once is the measured ceiling, and the watched folder
+  // holds one of them while it is on. Offering a third here would be a promise
+  // the dispatcher has to break — so it is taken off the list, with the reason
+  // written next to it rather than left to guess.
+  limitParallelChoice();
   // "Shut down when finished" and a standing order do not go together: the
   // machine would switch itself off after the first video and every one after
   // it would never be converted. The box says why it is out of reach.
@@ -1313,6 +1467,27 @@ function updateButtons() {
   $("stop-hint").textContent = state.stopping
     ? "Stopping — click again to quit immediately."
     : (state.running ? "Keeps what is already encoded as a playable preview." : "");
+}
+
+// limitParallelChoice takes the choices off the list that the dispatcher would
+// not honour anyway: the watched folder occupies one of the three slots while
+// it is on, and the processor mode caps everything at two.
+function limitParallelChoice() {
+  const cpu = $("opt-encoder").value === "cpu";
+  const ceiling = cpu ? 2 : 3;
+  const allowed = Math.max(1, ceiling - (state.watch.active ? 1 : 0));
+  const picker = $("opt-parallel");
+  Array.from(picker.options).forEach((option) => {
+    option.disabled = parseInt(option.value, 10) > allowed;
+  });
+  if (parseInt(picker.value, 10) > allowed) picker.value = String(allowed);
+
+  const reasons = [];
+  if (state.watch.active) reasons.push("a watched folder is using one");
+  if (cpu) reasons.push("the processor mode allows two in total");
+  $("parallel-note").textContent = reasons.length
+    ? "At most " + allowed + " here right now — " + reasons.join(", ") + "."
+    : "";
 }
 
 /* ---------- progress ---------- */
@@ -1364,13 +1539,17 @@ function clearProgress() {
 // copyLog puts the whole log on the clipboard, ready to paste into a message.
 // Selecting hundreds of terminal lines with the mouse is no fun, and half a log
 // is no use to anybody trying to help.
-async function copyLog() {
-  const text = $("logbox").textContent || "";
+async function copyLog() { return copyOneLog("logbox", "log-copied"); }
+
+// copyOneLog works on whichever log it is pointed at — there are two now, and
+// copying the wrong one would be a quiet way to hand over the wrong evidence.
+async function copyOneLog(boxId, noteId) {
+  const text = $(boxId).textContent || "";
   if (!text.trim()) return;
   try {
     await window.runtime.ClipboardSetText(text);
-    $("log-copied").textContent = "copied";
-    setTimeout(() => { $("log-copied").textContent = ""; }, 2000);
+    $(noteId).textContent = "copied";
+    setTimeout(() => { $(noteId).textContent = ""; }, 2000);
   } catch (err) {
     showError(String(err));
   }
@@ -1408,13 +1587,21 @@ function resetProgress() {
 // renderLanes draws one line per converter that is working or has just
 // finished. With a single slot it looks like the old single progress block.
 function renderLanes() {
-  const box = $("lanes");
+  drawLanes("lanes", (slot) => !isWatchSlot(slot), "Idle.");
+  drawLanes("watch-lanes", isWatchSlot, "Nothing running.");
+}
+
+// drawLanes fills one of the two progress areas with the slots that belong to
+// it. Splitting it this way means a converter can never draw a line into the
+// other area's display, whatever order the events arrive in.
+function drawLanes(boxId, belongsHere, idleText) {
+  const box = $(boxId);
   box.innerHTML = "";
-  const slots = Object.keys(state.slots).map(Number).sort((a, b) => a - b);
+  const slots = Object.keys(state.slots).map(Number).filter(belongsHere).sort((a, b) => a - b);
   if (!slots.length) {
     const idle = document.createElement("div");
     idle.className = "lane-idle";
-    idle.textContent = "Idle.";
+    idle.textContent = idleText;
     box.appendChild(idle);
     return;
   }
@@ -1522,8 +1709,19 @@ function updateOverall() {
 // times. It must NOT clear the display — that would wipe out the slots that are
 // already working. Clearing happens once, where the batch is started.
 function onRunStart(event) {
-  state.runMode = event.mode || "convert";
+  // The watched folder always converts. Letting its start overwrite the running
+  // mode would be a real fault now that both areas run at once: a Split batch
+  // would suddenly be treated as a conversion because a folder found a file.
+  if (!isWatchSlot(event.slot)) state.runMode = event.mode || "convert";
   slotState(event.slot || 1);
+
+  if (isWatchSlot(event.slot)) {
+    watchNote("Converting " + (event.files ? event.files + " file(s)" : "a file") +
+      ", " + event.codec + " on " + event.encoder + ", NVENCForge " + event.version);
+    renderLanes();
+    return;
+  }
+
   if (!state.runAnnounced) {
     state.runAnnounced = true;
     // The tool modes carry neither a codec nor a file count at this point — the
@@ -1543,6 +1741,10 @@ function onRunStart(event) {
 // of the next file is the only reliable sign that the previous one is done.
 function isToolRun() { return state.runMode !== "convert"; }
 
+// isToolRunOn answers the same question for one slot. The watched folder only
+// ever converts, whatever the other area is doing at the time.
+function isToolRunOn(slot) { return isWatchSlot(slot) ? false : isToolRun(); }
+
 // runUsesQueue: joining is the one mode whose files do not come from the queue
 // — it has its own list. Without this, queue entries left over from another
 // page would be marked as if they were part of this run, and the file the
@@ -1559,10 +1761,12 @@ function markProcessed(entry) {
 }
 function onFileStart(event) {
   const lane = slotState(event.slot || 1);
-  const entry = runUsesQueue() ? findEntry(event.path) : null;
+  // The watched folder's files are not in the queue on the Convert page — that
+  // list belongs to what you dropped in yourself.
+  const entry = (runUsesQueue() && !isWatchSlot(event.slot)) ? findEntry(event.path) : null;
   // A tool run walks through several files in ONE process, so the start of the
   // next file is what closes off the previous one on this slot.
-  if (lane.entry && isToolRun() && lane.entry.status === "running") markProcessed(lane.entry);
+  if (lane.entry && isToolRunOn(event.slot) && lane.entry.status === "running") markProcessed(lane.entry);
   lane.entry = entry;
   lane.name = event.name;
   lane.pct = 0;
@@ -1632,10 +1836,14 @@ function onResult(event) {
     entry.finished = true;
   }
   // Counted here, because with several converters each one only reports on its
-  // own file — the balance for the whole batch exists nowhere else.
-  state.tally.files++;
-  if (state.tally[event.status] !== undefined) state.tally[event.status]++;
-  state.tally.savedMB += event.saved_mb || 0;
+  // own file — the balance for the whole batch exists nowhere else. Each area
+  // keeps its own books: the watched folder has no batch to belong to, and
+  // adding its files to one would inflate a number the user did not ask for.
+  const tally = isWatchSlot(event.slot) ? state.watchTally : state.tally;
+  tally.files++;
+  if (tally[event.status] !== undefined) tally[event.status]++;
+  tally.savedMB += event.saved_mb || 0;
+  if (isWatchSlot(event.slot)) renderWatchSummary();
 
   // The percentage is derived from ffmpeg's timestamps and usually stops a
   // little short of 100 % (99.1 %, for instance) because the video track ends
@@ -1662,13 +1870,13 @@ function onResult(event) {
 function onSummary(event) {
   const lane = slotState(event.slot || 1);
   lane.done = true;
-  state.tally.seconds += event.elapsed_sec || 0;
+  (isWatchSlot(event.slot) ? state.watchTally : state.tally).seconds += event.elapsed_sec || 0;
   // The tool modes report no result per file, so nothing ever filled their bar.
   // The percentage comes from ffmpeg's timestamps and stops a little short
   // (measured on a finished join: 95.6 %), which then stood next to an overall
   // bar at 100 % and looked like something was left undone. A stopped run keeps
   // its last value on purpose: there the rest really was not written.
-  if (isToolRun()) {
+  if (isToolRunOn(event.slot)) {
     state.tally.files += event.files || 0;
     if (!state.stopping && !lane.stopping) { lane.pct = 100; lane.known = true; }
     lane.stage = "finished";
@@ -1698,6 +1906,21 @@ function showFinalSummary() {
       tally.skipped + " skipped, " + tally.failed + " not finished — " +
       fmtMB(tally.savedMB) + " saved in " + time + ".";
   if (!state.stopping) setBar("bar-all", "pct-all", 100, true);
+}
+
+// renderWatchSummary keeps a running total instead of a final one. A standing
+// order has no end to report on, so what is worth saying is how much it has
+// taken off the disk since it was switched on.
+function renderWatchSummary() {
+  const box = $("watch-summary");
+  const tally = state.watchTally;
+  if (!tally.files) { box.style.display = "none"; box.textContent = ""; return; }
+  box.style.display = "block";
+  const parts = [tally.files + " file(s) since watching started",
+                 tally.success + " converted"];
+  if (tally.skipped) parts.push(tally.skipped + " skipped");
+  if (tally.failed) parts.push(tally.failed + " not finished");
+  box.textContent = parts.join(", ") + " — " + fmtMB(tally.savedMB) + " saved.";
 }
 
 /* ---------- the track chooser ----------
@@ -1828,7 +2051,7 @@ function onRunState(runState) {
     // that is normal — those modes report no result at all — so it is simply
     // closed off instead of looking like a fault.
     if (lane.entry && lane.entry.status === "running") {
-      if (isToolRun()) markProcessed(lane.entry);
+      if (isToolRunOn(slot)) markProcessed(lane.entry);
       else {
         lane.entry.status = "";
         lane.entry.note = "no result reported";
@@ -1840,6 +2063,21 @@ function onRunState(runState) {
     }
     lane.entry = null;
   }
+  // Trouble is reported where the run is shown. An error from a background
+  // folder appearing over the batch you are watching would read as if the
+  // batch had failed.
+  if (isWatchSlot(slot)) {
+    if (runState.error) {
+      showWatchError(runState.error);
+      watchNote("Could not run NVENCForge: " + runState.error);
+    } else if (runState.exitCode !== 0) {
+      watchNote("NVENCForge ended with exit code " + runState.exitCode + ".");
+    }
+    renderLanes();
+    updateButtons();
+    return;
+  }
+
   updateOverall();
   if (runState.error) {
     showError(runState.error);
@@ -1858,6 +2096,20 @@ function onRunState(runState) {
 function onQueueState(queueState) {
   state.active = queueState.active || 0;
   state.pending = queueState.pending || 0;
+  state.totalLimit = queueState.totalLimit || 3;
+
+  // The watched folder is followed separately, because it starts and finishes
+  // on its own schedule. Its end is not the batch's end and must not close a
+  // dialog or write a final summary over there.
+  const watchBusy = (queueState.watchActive || 0) > 0 || (queueState.watchPending || 0) > 0;
+  const watchWas = state.watchRunning;
+  state.watchRunning = watchBusy;
+  if (watchWas && !watchBusy) {
+    state.watchStopping = false;
+    // The next find, if one turned up while this one was converting.
+    maybeStartWatchRun();
+  }
+
   const busy = state.active > 0 || state.pending > 0;
   const wasRunning = state.running;
   state.running = busy;
@@ -1873,9 +2125,6 @@ function onQueueState(queueState) {
     // The INI is written by NVENCForge itself, so on a fresh installation it
     // only exists from the first run onwards — read it again now.
     refreshConfig();
-    // Files that turned up while this run was going are next in line. Without
-    // this they would sit in the queue until something else happened to start.
-    maybeStartWatchRun();
   }
   updateButtons();
 }
@@ -2661,10 +2910,6 @@ function showPage(name) {
     runSlot.appendChild($("panel-log"));
   }
 
-  // Watching is not started with the run button, so that button has no
-  // business being on this page — see the note above the page itself.
-  $("btn-start").hidden = name === "watch";
-
   // The chosen mode survives a trip to the settings page: the start button
   // travels with the panels and must not quietly change what it starts.
   const mode = MODE_PAGES[name];
@@ -2681,6 +2926,34 @@ function showPage(name) {
   // list on one), so the button is re-judged on every switch.
   updateButtons();
   if (name === "settings" && (!state.settingsFile || !state.settingsFile.found)) loadSettings();
+}
+
+// collectWatchRequest reads the watched folder's own option fields. It is a
+// separate function and not a parameter on collectRequest, because the two
+// sets of fields have nothing to do with each other - that separation is the
+// whole point.
+//
+// Never parallel and never a shutdown: one video at a time so the card stays
+// free for the work started by hand, and a standing order that switches the
+// machine off would never convert the video after it.
+function collectWatchRequest(files) {
+  return {
+    area: "watch",
+    mode: "",
+    files: files,
+    codec: $("wopt-codec").value,
+    encoder: $("wopt-encoder").value,
+    container: $("wopt-container").value,
+    resolution: $("wopt-resolution").value,
+    audio: $("wopt-audio").value,
+    bitDepth: $("wopt-bitdepth").value,
+    quality: $("wopt-quality").value,
+    fixedCQ: parseInt($("wopt-cq").value, 10) || 0,
+    maxBitrate: parseInt($("wopt-bitrate").value, 10) || 0,
+    keepSource: $("wopt-keep").checked,
+    parallel: 1,
+    shutdown: false
+  };
 }
 
 /* ---------- actions ---------- */
@@ -2814,7 +3087,13 @@ function wire() {
   };
   $("btn-join-clear").onclick = () => { state.joinFiles = []; state.joinBasePath = ""; afterJoinChange(); };
   $("btn-watch-pick").onclick = pickWatchFolder;
-  $("btn-watch-toggle").onclick = toggleWatch;
+  $("btn-watch-start").onclick = startWatching;
+  $("btn-watch-stop").onclick = stopWatching;
+  $("btn-watch-stop-run").onclick = stopWatchRun;
+  $("wopt-quality").onchange = (e) => { $("wfield-cq").hidden = e.target.value !== "fixed"; };
+  $("wopt-encoder").onchange = updateButtons;
+  $("btn-watch-log-copy").onclick = () => copyOneLog("watch-logbox", "watch-log-copied");
+  $("btn-watch-log-clear").onclick = () => { $("watch-logbox").innerHTML = ""; state.lastWatchLogSlot = 0; };
   $("btn-start").onclick = start;
   $("btn-stop").onclick = stop;
   $("btn-download").onclick = download;

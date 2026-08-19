@@ -42,7 +42,7 @@ func NewApp(window windowState, windowRemembered bool) *App {
 	// konvertiert wird und mit welchen Einstellungen.
 	app.watcher = NewFolderWatcher(
 		func(items []QueueItem) { app.emit("watch:files", items) },
-		app.note,
+		app.noteWatch,
 	)
 	return app
 }
@@ -136,6 +136,14 @@ func (a *App) onSecondInstance(options.SecondInstanceData) {
 // macht auf einen Blick klar, dass sie nicht vom Konverter stammt.
 func (a *App) note(text string) {
 	a.emit("conv:log", LogLine{Text: "[gui] " + text})
+}
+
+// noteWatch ist dasselbe für den beobachteten Ordner. Die Platznummer ist das
+// Einzige, woran die Fensterseite erkennt, in welches der beiden Protokolle
+// eine Zeile gehört — ohne sie landete jede Meldung des Ordners mitten im
+// Protokoll eines von Hand gestarteten Stapels.
+func (a *App) noteWatch(text string) {
+	a.emit("conv:log", LogLine{Text: "[gui] " + text, Slot: watchSlot})
 }
 
 // emit schickt eine Meldung an die Oberfläche. Vor dem Start des Fensters gibt
@@ -402,7 +410,7 @@ func (a *App) StartWatching(folder string) (WatchState, error) {
 	if err := a.watcher.Start(folder); err != nil {
 		return a.WatchStatus(), fmt.Errorf("app.go: StartWatching: %w", err)
 	}
-	a.note("Watching " + folder + " and its subfolders. New videos are converted once they stop growing.")
+	a.noteWatch("Watching " + folder + " and its subfolders. New videos are converted once they stop growing.")
 	return a.WatchStatus(), nil
 }
 
@@ -410,7 +418,7 @@ func (a *App) StartWatching(folder string) (WatchState, error) {
 // unberührt — abgebrochen wird nur über den Stop-Knopf.
 func (a *App) StopWatching() WatchState {
 	if a.watcher.Watching() {
-		a.note("Stopped watching. Files already in the queue stay there.")
+		a.noteWatch("Stopped watching. What is already running is left to finish.")
 	}
 	a.watcher.Stop()
 	return a.WatchStatus()

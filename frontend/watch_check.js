@@ -2,8 +2,13 @@
 //
 // What can go wrong here is quiet and lasting: a standing order that converts
 // the same file again and again, one that switches the machine off after the
-// first video, or one that re-encodes with the wrong mode because another page
-// happened to be open. None of that shows up until it has already happened.
+// first video, or one that writes its progress over the display of a batch you
+// started by hand. None of that shows up until it has already happened.
+//
+// Since the two areas run side by side, most of this file is about the fence
+// between them: the watched folder has its own options, its own log, its own
+// slot and its own books, and every check below asks whether something got
+// over that fence.
 const { loadGui, createChecker } = require("./check_harness");
 
 const { gui, html, element, calls } = loadGui();
@@ -22,16 +27,15 @@ function reset() {
   gui.state.queue = [];
   gui.state.watchPending = [];
   gui.state.running = false;
+  gui.state.watchRunning = false;
   gui.state.converterFound = true;
   gui.state.watch = { folder: "D:\\Downloads", active: true };
 }
 
-console.log("\nThe area has a page of its own");
-// Every slice below is anchored on two things that must both exist. A slice
-// whose end anchor is gone silently runs to the end of the file and swallows
-// the whole window — these checks then pass no matter where the panel really
-// sits, which is exactly what happened when the page they used to be cut
-// against was removed.
+// pageOf refuses to work on a missing anchor. A slice whose end anchor is gone
+// runs to the end of the file and swallows the whole window — these checks
+// then pass no matter where anything really sits, which is exactly what
+// happened once already when a page was renamed.
 function pageOf(id, nextId) {
   const from = html.indexOf('<div id="page-' + id + '"');
   const to = html.indexOf('<div id="page-' + nextId + '"');
@@ -41,127 +45,148 @@ function pageOf(id, nextId) {
 const watchPage = pageOf("watch", "settings");
 const convertPage = pageOf("convert", "split");
 
+console.log("\nThe area has a page of its own, with everything on it");
 checker.contains("the nav button opens it", html, '<button class="nav-item" data-page="watch">Watch</button>');
-checker.check("the panel is on the watch page", watchPage.includes('id="panel-watch"'), true);
-checker.check("with a folder button", watchPage.includes('id="btn-watch-pick"'), true);
-checker.check("and its own start button", watchPage.includes('id="btn-watch-toggle"'), true);
+checker.check("the folder button", watchPage.includes('id="btn-watch-pick"'), true);
+checker.check("a start button", watchPage.includes('id="btn-watch-start"'), true);
+checker.check("and a separate stop button", watchPage.includes('id="btn-watch-stop"'), true);
+checker.check("its own progress area", watchPage.includes('id="watch-lanes"'), true);
+checker.check("its own log", watchPage.includes('id="watch-logbox"'), true);
+checker.check("and its own options", watchPage.includes('id="wopt-codec"'), true);
 checker.check("it left the convert page", convertPage.includes('id="panel-watch"'), false);
-checker.check("run panels can still land there", watchPage.includes('data-slot="run"'), true);
-// Its own button on purpose: "Start" runs the queue once, watching is a
-// standing order. One button cannot honestly mean both, so the page must not
-// reach for the run button.
-checker.check("the page keeps its hands off the run button", watchPage.includes('id="btn-start"'), false);
-checker.check("no greyed-out nav entry is left", /disabled>Watch folder/.test(html), false);
+// The shared run panels must not travel here: they belong to the batch, and
+// the whole point is that this page shows only its own work.
+checker.check("no shared run panels here", watchPage.includes('data-slot="run"'), false);
+checker.check("no run button here", watchPage.includes('id="btn-start"'), false);
+// No shutdown here at all. A standing order that switches the machine off
+// after the first video would never convert the second one.
+checker.check("no shutdown option here", watchPage.includes("wopt-shutdown"), false);
+// One at a time, so the card stays free for the work started by hand.
+checker.check("and nothing to run several at once", watchPage.includes("wopt-parallel"), false);
 
-// And the run button really is taken off the page, not merely absent from the
-// markup: it travels with the shared panels and would otherwise arrive here.
-gui.showPage("watch");
-checker.check("no start button while watching", element("btn-start").hidden, true);
-checker.check("watch page is the one on show", element("page-watch").hidden, false);
-gui.showPage("convert");
-checker.check("it is back on the convert page", element("btn-start").hidden, false);
-checker.check("watch page is put away", element("page-watch").hidden, true);
-
-console.log("\nNothing happens until a folder is chosen");
+console.log("\nA run uses THIS page's options, not the Convert page's");
 reset();
-gui.state.watch = { folder: "", active: false };
-gui.showWatch(null);
-checker.check("the button waits for a folder", element("btn-watch-toggle").disabled, true);
-checker.contains("and says so", element("watch-folder").textContent, "No folder chosen");
-gui.state.watch.folder = "D:\\Downloads";
-gui.showWatch(null);
-checker.check("with a folder it can be switched on", element("btn-watch-toggle").disabled, false);
-checker.check("the button offers to start", element("btn-watch-toggle").textContent, "Start watching");
-gui.state.watch.active = true;
-gui.showWatch({ watching: true, folder: "D:\\Downloads" });
-checker.check("and to stop once it runs", element("btn-watch-toggle").textContent, "Stop watching");
-
-console.log("\nA found file is converted, whatever page is open");
-reset();
-gui.showPage("join");          // the join page sets the mode to "join"…
-gui.onWatchFiles([found("neu.mkv")]);
-checker.check("one run was started", calls.runs.length, 1);
-// …but a watched folder converts. Starting it in join mode would copy streams
-// around instead of encoding — and nothing on screen would look wrong.
-checker.check("it converts, not joins", lastRun().mode, "");
-checker.check("with the file that was found", lastRun().files[0], "D:\\Downloads\\neu.mkv");
-checker.check("and it is in the queue", gui.state.queue.length, 1);
-gui.showPage("convert");
-
-console.log("\nThe options above the panel are the ones that count");
-reset();
-element("opt-codec").value = "av1";
-element("opt-quality").value = "auto";
-gui.onWatchFiles([found("neu.mkv")]);
-checker.check("codec comes from the page", lastRun().codec, "av1");
-checker.check("quality too", lastRun().quality, "auto");
+element("wopt-codec").value = "av1";
+element("wopt-quality").value = "fixed";
+element("wopt-cq").value = "30";
+element("wopt-keep").checked = true;
+// Deliberately the opposite on the other page: if the two ever got mixed up,
+// these are the values that would turn up in the run.
 element("opt-codec").value = "";
-element("opt-quality").value = "";
+element("opt-quality").value = "auto";
+element("opt-keep").checked = false;
 
-console.log("\nShutting down and a standing order do not go together");
-// Two things stop it, and both are checked: the box is put out of reach, and
-// the run itself refuses to carry the flag. The second one is what counts —
-// the machine would switch itself off after the first video, and every one
-// after it would never be converted.
+gui.onWatchFiles([found("neu.mkv")]);
+checker.check("a run went off", calls.runs.length, 1);
+checker.check("marked as the watched area", lastRun().area, "watch");
+checker.check("codec from THIS page", lastRun().codec, "av1");
+checker.check("quality from THIS page", lastRun().quality, "fixed");
+checker.check("the fixed CQ too", lastRun().fixedCQ, 30);
+checker.check("and keeping the source", lastRun().keepSource, true);
+checker.check("always one at a time", lastRun().parallel, 1);
+checker.check("and never a shutdown", lastRun().shutdown, false);
+element("wopt-codec").value = "";
+element("wopt-quality").value = "auto";
+element("wopt-keep").checked = false;
+
+console.log("\nIts finds stay out of the batch's list");
+reset();
+gui.onWatchFiles([found("eins.mkv"), found("zwei.mkv")]);
+// The queue on the Convert page is what the user dropped in. A folder filling
+// it was the very thing that made the two areas impossible to tell apart.
+checker.check("the queue stays empty", gui.state.queue.length, 0);
+checker.check("one find went off, one waits", gui.state.watchPending.length, 1);
+
+console.log("\nA batch running by hand no longer holds it up");
+reset();
+gui.state.running = true;   // a batch is going on the other page
+gui.onWatchFiles([found("waehrenddessen.mkv")]);
+checker.check("it starts anyway", calls.runs.length, 1);
+checker.check("as the watched area", lastRun().area, "watch");
+
+console.log("\nBut only one of its own at a time");
+reset();
+gui.onWatchFiles([found("erste.mkv")]);
+checker.check("the first one runs", calls.runs.length, 1);
+gui.onWatchFiles([found("zweite.mkv")]);
+checker.check("the second one waits", calls.runs.length, 1);
+checker.check("it is on the waiting list", gui.state.watchPending.length, 1);
+// Its own end is what starts the next find — and only its own. A batch
+// finishing on the other page must not reach in here.
+gui.onQueueState({ active: 0, pending: 0, limit: 2, watchActive: 1, watchPending: 0 });
+checker.check("the other area finishing changes nothing", calls.runs.length, 1);
+gui.onQueueState({ active: 0, pending: 0, limit: 2, watchActive: 0, watchPending: 0 });
+checker.check("its own end starts the next", calls.runs.length, 2);
+checker.check("with the file that waited", lastRun().files[0], "D:\\Downloads\\zweite.mkv");
+checker.check("and only that one", lastRun().files.length, 1);
+checker.check("the waiting list is empty", gui.state.watchPending.length, 0);
+gui.onQueueState({ active: 0, pending: 0, limit: 2, watchActive: 0, watchPending: 0 });
+checker.check("nothing starts on an empty list", calls.runs.length, 2);
+
+console.log("\nNothing is converted twice");
+reset();
+gui.state.watchRunning = true;   // something of its own is already going
+gui.onWatchFiles([found("doppelt.mkv")]);
+gui.onWatchFiles([found("doppelt.mkv")]);
+checker.check("the waiting list holds it once", gui.state.watchPending.length, 1);
+checker.check("and nothing was started", calls.runs.length, 0);
+
+console.log("\nSwitching off stops what was waiting");
+reset();
+gui.state.watchRunning = true;
+gui.onWatchFiles([found("wartet.mkv")]);
+checker.check("it is waiting", gui.state.watchPending.length, 1);
+gui.state.watch.active = false;
+gui.state.watchPending = [];
+gui.onQueueState({ active: 0, pending: 0, limit: 2, watchActive: 0, watchPending: 0 });
+checker.check("after switching off nothing starts", calls.runs.length, 0);
+
+console.log("\nIts messages land in ITS log");
+// The complaint that started all this: a folder working in the background kept
+// writing into the log of the batch you were reading.
+const convertLog = element("logbox");
+const watchLog = element("watch-logbox");
+convertLog.appended = 0;
+watchLog.appended = 0;
+gui.log({ text: "a line from the watched folder", back: 0, slot: gui.WATCH_SLOT });
+checker.check("it writes into its own box", watchLog.appended > 0, true);
+checker.check("and not into the batch's log", convertLog.appended > 0, false);
+gui.log({ text: "a line from the batch", back: 0, slot: 1 });
+checker.check("the batch writes into its own", convertLog.appended > 0, true);
+
+console.log("\nIts balance is its own");
+reset();
+gui.state.watchTally = { files: 0, success: 0, skipped: 0, failed: 0, savedMB: 0, seconds: 0 };
+gui.state.tally = { files: 0, success: 0, skipped: 0, failed: 0, savedMB: 0, seconds: 0 };
+gui.onConverterEvent({
+  ev: "result", slot: gui.WATCH_SLOT, index: 1, status: "success",
+  name: "neu.mkv", in_mb: 700, out_mb: 300, saved_mb: 400, saved_pct: 57
+});
+checker.check("the watched folder counted it", gui.state.watchTally.files, 1);
+checker.check("with what it saved", gui.state.watchTally.savedMB, 400);
+checker.check("the batch counted nothing", gui.state.tally.files, 0);
+checker.contains("and it says so on its own page", element("watch-summary").textContent, "saved");
+
+console.log("\nThe Convert page owns up to sharing the card");
+reset();
+gui.state.watch.active = true;
+element("opt-encoder").value = "";
+gui.limitParallelChoice();
+checker.contains("it says why", element("parallel-note").textContent, "watched folder");
+gui.state.watch.active = false;
+gui.limitParallelChoice();
+checker.check("and stays quiet when it is off", element("parallel-note").textContent, "");
+// The processor mode caps everything at two, watched folder or not.
+element("opt-encoder").value = "cpu";
+gui.limitParallelChoice();
+checker.contains("the processor mode is named too", element("parallel-note").textContent, "processor");
+element("opt-encoder").value = "";
+
+console.log("\nShutting down and a standing order still do not go together");
 reset();
 element("opt-shutdown").checked = true;   // ticked before watching was switched on
 gui.updateButtons();
 checker.check("the box is out of reach", element("opt-shutdown").disabled, true);
 checker.check("and cleared", element("opt-shutdown").checked, false);
-// Tick it by hand, past the greyed-out box, and start the waiting file
-// directly: this is the run itself, with nothing else covering for it.
-element("opt-shutdown").checked = true;
-gui.state.watchPending = ["D:\\Downloads\\neu.mkv"];
-gui.maybeStartWatchRun();
-checker.check("the run never carries shutdown", lastRun().shutdown, false);
-element("opt-shutdown").checked = false;
-
-console.log("\nNothing is converted twice");
-reset();
-gui.onWatchFiles([found("neu.mkv")]);
-checker.check("first run", calls.runs.length, 1);
-gui.state.running = true;
-gui.onWatchFiles([found("neu.mkv")]);
-checker.check("the same file again starts nothing", calls.runs.length, 1);
-checker.check("and does not queue up twice", gui.state.queue.length, 1);
-// The watcher reports what it finds; a file that is reported twice must not
-// end up on the waiting list twice, or the converter gets it twice in one go.
-reset();
-gui.state.running = true;
-gui.onWatchFiles([found("doppelt.mkv")]);
-gui.onWatchFiles([found("doppelt.mkv")]);
-checker.check("the waiting list holds it once", gui.state.watchPending.length, 1);
-
-console.log("\nFiles arriving during a run are next in line");
-reset();
-gui.onWatchFiles([found("erste.mkv")]);
-checker.check("the first run went off", calls.runs.length, 1);
-gui.state.running = true;
-gui.onWatchFiles([found("zweite.mkv")]);
-checker.check("the second file waits", calls.runs.length, 1);
-checker.check("it is on the waiting list", gui.state.watchPending.length, 1);
-// The converter takes his file list at startup, so the waiting ones can only
-// go in the next run — which the end of this one has to trigger.
-gui.onQueueState({ active: 0, pending: 0, limit: 1 });
-checker.check("the end of the run starts them", calls.runs.length, 2);
-checker.check("with the file that waited", lastRun().files[0], "D:\\Downloads\\zweite.mkv");
-checker.check("and only that one", lastRun().files.length, 1);
-checker.check("the waiting list is empty", gui.state.watchPending.length, 0);
-// A finished run must not start itself over on an empty list.
-gui.onQueueState({ active: 0, pending: 0, limit: 1 });
-checker.check("nothing starts on an empty list", calls.runs.length, 2);
-
-console.log("\nSwitching off stops everything that was waiting");
-reset();
-gui.state.running = true;
-gui.onWatchFiles([found("wartet.mkv")]);
-checker.check("it is waiting", gui.state.watchPending.length, 1);
-toggleOff();
-function toggleOff() {
-  gui.state.watch.active = false;
-  gui.state.watchPending = [];
-}
-gui.onQueueState({ active: 0, pending: 0, limit: 1 });
-checker.check("after switching off nothing starts", calls.runs.length, 0);
 
 checker.finish();

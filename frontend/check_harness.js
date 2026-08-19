@@ -22,6 +22,10 @@ function fakeElement(id) {
     // itself, and the one thing two converters can ruin for each other.
     removed: 0,
     removeChild() { store.removed++; },
+    // Lines added are counted as well: with two logs in the window, WHICH box
+    // a line landed in is the only way to see that they really are separate.
+    appended: 0,
+    appendChild() { store.appended++; return fakeElement("child"); },
     // Attributes are kept rather than swallowed: whether a button says it is
     // switched on is the only thing that tells the user which theme is
     // running, and a stand-in that forgets it could not check that.
@@ -131,7 +135,7 @@ function loadGui() {
     " changedValues, defaultFor, noteGPUAdvice, renderSettings, showPage, log," +
     " onQuestion, sendAnswer, askSelection, isExtraOption, isToolRun, collectRequest, resetProgress," +
     " runUsesQueue, updateButtons, afterJoinChange, addJoinPaths, joinBase, joinOfKind," +
-    " joinReady, joinRunFiles, onWatchFiles, maybeStartWatchRun, showWatch, toggleWatch, onQueueState," +
+    " joinReady, joinRunFiles, onWatchFiles, maybeStartWatchRun, showWatch, stopWatching, stopWatchRun, collectWatchRequest, onQueueState, renderWatchSummary, isWatchSlot, WATCH_SLOT, limitParallelChoice, watchNote," +
     " startBatch, clearProgress, updateOverall, stopSlot, stop, renderLanes," +
     " loadSRTCleaner, renderSRTCleaner, addSRTPhrase, saveSRTPhrases, srtSignature," +
     " joinMode, isJoinMode, applyJoinMode, JOIN_MODES, applyTheme, chooseTheme, THEMES," +

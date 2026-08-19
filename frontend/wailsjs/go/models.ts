@@ -168,6 +168,9 @@ export namespace main {
 	    active: number;
 	    pending: number;
 	    limit: number;
+	    watchActive: number;
+	    watchPending: number;
+	    totalLimit: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new QueueState(source);
@@ -178,9 +181,13 @@ export namespace main {
 	        this.active = source["active"];
 	        this.pending = source["pending"];
 	        this.limit = source["limit"];
+	        this.watchActive = source["watchActive"];
+	        this.watchPending = source["watchPending"];
+	        this.totalLimit = source["totalLimit"];
 	    }
 	}
 	export class RunRequest {
+	    area: string;
 	    mode: string;
 	    parallel: number;
 	    files: string[];
@@ -202,6 +209,7 @@ export namespace main {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.area = source["area"];
 	        this.mode = source["mode"];
 	        this.parallel = source["parallel"];
 	        this.files = source["files"];
