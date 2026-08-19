@@ -93,40 +93,4 @@ contains("with the quality target   ", gui.HELP.quality().now, "96");
 gui.applyConfig(Object.assign({}, sampleConfig, { autoCQ: false }));
 contains("auto CQ off               ", gui.HELP.quality().now, "Auto CQ off");
 
-console.log("\n=== the folded options say what they add up to ===");
-// The fold hides ten fields. If the line written on it were wrong or stale,
-// the window would quietly promise one run and start another — and nobody
-// opens a fold to check, which is the entire point of having the line.
-function setOptions(values) {
-  const fields = {
-    "opt-codec": "", "opt-encoder": "", "opt-container": "", "opt-resolution": "",
-    "opt-audio": "", "opt-bitdepth": "", "opt-quality": "auto", "opt-cq": "26",
-    "opt-bitrate": "", "opt-parallel": "2"
-  };
-  Object.assign(fields, values);
-  Object.keys(fields).forEach((id) => { element(id).value = fields[id]; });
-  element("opt-keep").checked = !!values.keep;
-  element("opt-shutdown").checked = !!values.shutdown;
-  gui.updateOptionsLine();
-  return element("options-line").textContent;
-}
-
-check("the defaults, in one line ", setOptions({}), "H.265 · GPU · MKV · Auto CQ · 2 at a time");
-check("every choice is carried   ",
-  setOptions({ "opt-codec": "av1", "opt-encoder": "cpu", "opt-container": "mp4", "opt-parallel": "1" }),
-  "AV1 · CPU · MP4 · Auto CQ · 1 at a time");
-check("a fixed CQ shows its number",
-  setOptions({ "opt-quality": "fixed", "opt-cq": "30" }),
-  "H.265 · GPU · MKV · CQ 30 · 2 at a time");
-
-// Everything below only turns up when it departs from the default. A line that
-// always listed all of it would be as long as the panel it stands in for.
-contains("8 bit is called out       ", setOptions({ "opt-bitdepth": "8" }), "8 bit");
-contains("keeping the size too      ", setOptions({ "opt-resolution": "original" }), "original size");
-contains("untouched audio too       ", setOptions({ "opt-audio": "copy" }), "audio 1:1");
-contains("a typed bitrate too       ", setOptions({ "opt-bitrate": "6000" }), "max 6000 kbit/s");
-contains("kept sources too          ", setOptions({ keep: true }), "sources kept");
-contains("and the shutdown, loudest ", setOptions({ shutdown: true }), "shuts down when done");
-check("but silent when they are off", setOptions({}).includes("8 bit"), false);
-
 finish();

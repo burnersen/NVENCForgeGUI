@@ -94,7 +94,7 @@ node frontend\progress_check.js
 node frontend\options_check.js
 node frontend\settings_check.js
 node frontend\davinci_check.js
-node frontend\extract_check.js
+node frontend\split_check.js
 node frontend\join_check.js
 node frontend\watch_check.js
 node frontend\parallel_check.js

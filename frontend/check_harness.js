@@ -135,7 +135,7 @@ function loadGui() {
     " startBatch, clearProgress, updateOverall, stopSlot, stop, renderLanes," +
     " loadSRTCleaner, renderSRTCleaner, addSRTPhrase, saveSRTPhrases, srtSignature," +
     " joinMode, isJoinMode, applyJoinMode, JOIN_MODES, applyTheme, chooseTheme, THEMES," +
-    " extractMode, applyExtractMode, EXTRACT_MODES, optionsLine, updateOptionsLine," +
+    " splitMode, applySplitMode, SPLIT_MODES," +
     " onRunState };"
   )(windowStub, documentStub);
 

@@ -34,13 +34,13 @@ element("opt-parallel").value = "3";
 checker.check("converting uses the setting", gui.collectRequest().parallel, 3);
 // Taking apart and joining copy instead of encoding and ask about tracks —
 // there is nothing to win and a second dialog to lose. Both routes of the
-// Take apart page are checked: they are one page now, but still two jobs.
-gui.showPage("extract");
-element("extract-mode").value = "split";
-gui.applyExtractMode();
+// Split page are checked: they are one page now, but still two jobs.
+gui.showPage("split");
+element("split-mode").value = "split";
+gui.applySplitMode();
 checker.check("splitting stays single", gui.collectRequest().parallel, 1);
-element("extract-mode").value = "davinci";
-gui.applyExtractMode();
+element("split-mode").value = "davinci";
+gui.applySplitMode();
 checker.check("the Resolve route stays single", gui.collectRequest().parallel, 1);
 gui.showPage("join");
 checker.check("joining stays single", gui.collectRequest().parallel, 1);

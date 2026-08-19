@@ -39,7 +39,7 @@ function pageOf(id, nextId) {
   return html.slice(from, to);
 }
 const watchPage = pageOf("watch", "settings");
-const convertPage = pageOf("convert", "extract");
+const convertPage = pageOf("convert", "split");
 
 checker.contains("the nav button opens it", html, '<button class="nav-item" data-page="watch">Watch</button>');
 checker.check("the panel is on the watch page", watchPage.includes('id="panel-watch"'), true);
