@@ -294,7 +294,7 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
 .barline .pct { width: 54px; text-align: right; font-variant-numeric: tabular-nums; font-size: 12.5px; }
 .barline .bar { flex: 1; }
 /* ---------- one lane per running converter ---------- */
-#lanes { margin-bottom: 10px; }
+#lanes, #watch-lanes { margin-bottom: 10px; }
 .lane-idle { color: var(--muted); font-size: 13px; padding: 2px 0 8px; }
 .lane { display: grid; grid-template-columns: 20px 1fr; gap: 9px; align-items: start; padding: 5px 0; }
 .lane + .lane { border-top: 1px solid var(--line); }
@@ -311,7 +311,7 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
 .lane-stop:disabled { opacity: .25; }
 .lane-stats { color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; min-height: 15px; }
 .log-slot { color: var(--muted); }
-#summary {
+#summary, #watch-summary {
   margin-top: 12px; padding: 10px 12px; border-radius: 8px;
   background: var(--panel-2); border: 1px solid var(--line); font-size: 13px; display: none;
 }
@@ -320,14 +320,14 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
    The converter draws a real terminal picture. Its colours are kept and shown
    as they are meant to look; only the cursor commands are removed. */
 /* Its ground stays dark in the day theme too — see the note on the palette. */
-#logbox {
+#logbox, #watch-logbox {
   background: #0d0d0f; border: 1px solid var(--line); border-radius: 8px;
   padding: 8px 10px; height: 220px; overflow-y: auto;
   font: 12px/1.5 Consolas, "Cascadia Mono", monospace; white-space: pre;
   overflow-x: auto; user-select: text; color: #c8c8ce;
 }
-#logbox div { min-height: 1.5em; }
-#logbox div.gui { color: var(--accent); }
+#logbox div, #watch-logbox div { min-height: 1.5em; }
+#logbox div.gui, #watch-logbox div.gui { color: var(--accent); }
 .spacer { flex: 1; }
 .err { color: var(--bad); font-size: 12.5px; }
 

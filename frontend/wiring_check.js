@@ -66,6 +66,25 @@ console.log("\nFile dropping is taken over from the web view");
 checker.check("OnFileDrop is registered ", /runtime\.OnFileDrop\(/.test(script), true);
 checker.check("and drops reach the queue", /OnFileDrop\(\s*\(/.test(script) || script.includes("OnFileDrop("), true);
 
+// The watched folder has a twin of every display the Convert page has. Each
+// twin needs the same styling, and CSS says nothing when it does not: the rule
+// simply does not apply. That is how its log first appeared as a white,
+// sizeless box with unreadable terminal colours in it.
+console.log("\nEvery twin display is styled, not just the original");
+const css = markup.slice(markup.indexOf("<style>"), markup.indexOf("</style>"));
+const countOf = (name) => css.split("#" + name).length - 1;
+for (const [one, twin] of [["logbox", "watch-logbox"], ["lanes", "watch-lanes"], ["summary", "watch-summary"]]) {
+  // Counted, not merely looked for: naming the twin in one rule and forgetting
+  // it in the next is the same bug in a smaller size, and a plain "is it
+  // mentioned anywhere" would sail straight past it.
+  const forOne = countOf(one);
+  const forTwin = countOf(twin);
+  if (forOne !== forTwin) {
+    console.log("  #" + one + " is styled " + forOne + " time(s), #" + twin + " " + forTwin);
+  }
+  checker.check("  #" + twin.padEnd(16), forTwin, forOne);
+}
+
 // Second guard, and a different one: actually RUN wire(). The stand-in hands
 // back an element for any id, so this cannot see a missing element - but it
 // does see a handler pointing at a function that no longer exists, which is
