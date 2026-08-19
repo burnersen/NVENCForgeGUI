@@ -163,6 +163,19 @@ details[open] > summary::before { content: "▾ "; }
 details > summary:hover { color: var(--text); }
 details > .notes { margin-top: 6px; }
 
+/* The fold over the options. Its summary carries what the ten fields add up
+   to, so a folded panel still answers "what will this run do?". Once it is
+   open the line is dropped: the fields themselves are the better answer, and
+   two versions of the same truth on one screen is one too many. */
+#options-box > summary {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  color: var(--text); font-size: 12.5px;
+}
+#options-box > summary:hover #options-line { color: var(--text); }
+#options-line { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+#options-box[open] #options-line { display: none; }
+#options-box[open] > .options { margin-top: 10px; }
+
 /* ---------- buttons ---------- */
 .btn {
   background: var(--panel-2); border: 1px solid var(--line);
@@ -395,9 +408,9 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
   <div id="body">
     <nav>
       <button class="nav-item active" data-page="convert">Convert</button>
-      <button class="nav-item" data-page="split">Split</button>
+      <button class="nav-item" data-page="extract">Take apart</button>
       <button class="nav-item" data-page="join">Join</button>
-      <button class="nav-item" data-page="davinci">DaVinci</button>
+      <button class="nav-item" data-page="watch">Watch</button>
       <button class="nav-item" data-page="settings">Settings</button>
 
       <!-- Day or night. The icons are drawn here rather than taken from the
@@ -439,8 +452,17 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
         </div>
       </section>
 
-      <section class="panel">
-        <h2>Options for this run</h2>
+      <!-- The options fold away. Open, the ten fields plus their explanation
+           pushed the start button below the bottom of a small window, so the
+           one thing every run needs was the one thing you had to scroll for.
+           Folded they would be a secret, which is why what they add up to is
+           written on the fold itself. -->
+      <section class="panel compact">
+        <details id="options-box">
+          <summary>
+            <b class="inline-title">Options for this run</b>
+            <span id="options-line"></span>
+          </summary>
         <div class="options">
           <div class="field" data-help="codec">
             <label for="opt-codec">Codec</label>
@@ -517,30 +539,6 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
           Anything left on “default” is not passed on — your INI applies.
           With MP4, files that have several tracks open a chooser — you decide what goes in.
         </div>
-      </section>
-
-      <!-- Watching a folder sits on this page on purpose: it converts with the
-           settings above, so they belong together. It gets a button of its own
-           though — "Start" runs the queue once, watching is a standing order,
-           and one button cannot honestly mean both. -->
-      <section class="panel compact" id="panel-watch">
-        <div class="row">
-          <b class="inline-title">Watch a folder</b>
-          <button class="btn" id="btn-watch-pick">Choose…</button>
-          <span class="hint" id="watch-folder" style="margin:0">No folder chosen yet.</span>
-          <div class="spacer"></div>
-          <span class="hint" id="watch-state" style="margin:0"></span>
-          <button class="btn primary" id="btn-watch-toggle" disabled>Start watching</button>
-        </div>
-        <details>
-          <summary>What happens while this is on</summary>
-          <ul class="notes">
-            <li>Every video that turns up in that folder — or in any folder inside it — is converted on its own, with the options set above.</li>
-            <li>A file is only picked up once it has stopped growing for 30 seconds, so a download that is still running is left alone.</li>
-            <li>What is already in the folder when you switch on is taken along. Finished results and their sources are skipped, and so is the <b>originals</b> folder.</li>
-            <li>Watching only lasts while this window is open — closing it ends the standing order.</li>
-            <li>The results are written into an <b>output</b> folder next to their sources, and your originals are moved wherever your INI says. The watched folder will look different afterwards.</li>
-          </ul>
         </details>
       </section>
 
@@ -580,59 +578,51 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
       </section>
     </div>
 
-    <div id="page-davinci" hidden>
+    <!-- Splitting and the DaVinci route were two pages that differed in their
+         explanation and in nothing else. They are one page with a choice now,
+         exactly the way Join already asks it: same files, same queue, one
+         question about what should come out. -->
+    <div id="page-extract" hidden>
       <div class="shared-slot" data-slot="queue"></div>
 
       <section class="panel">
         <h2>What this does</h2>
         <p class="lead">
-          Takes each file in the queue apart for DaVinci Resolve: a silent
-          picture file plus every audio track and every subtitle as its own
-          file, written next to the source — each in a form Resolve can
-          actually open.
+          Takes each file in the queue apart: a silent picture file plus every
+          audio track and every subtitle as its own file, written next to the
+          source. Your source file stays where it is and is not touched.
         </p>
-        <details><summary>The details</summary>
+
+        <div class="row" style="margin-bottom:10px">
+          <label for="extract-mode">Result</label>
+          <select id="extract-mode">
+            <option value="split">1:1 — every part copied unchanged</option>
+            <option value="davinci">Resolve-ready — AAC audio, cleaned subtitles</option>
+          </select>
+        </div>
+        <div class="hint" id="extract-mode-hint"></div>
+
+        <details id="extract-details-split"><summary>The details</summary>
+        <ul class="notes">
+          <li>Every track is copied exactly as it is: audio keeps its own format (.ac3, .dts, .eac3, .m4a, .flac …), subtitles stay untouched.</li>
+          <li>The silent picture keeps the source container — an MP4 stays an MP4, everything else becomes MKV.</li>
+          <li>Files with more than one track open a chooser, so you decide what gets pulled out.</li>
+          <li>No stereo mix here: a downmix would be a re-encode, and this route never re-encodes.</li>
+          <li>Nothing is cleaned up either, so Join can put it back together unchanged.</li>
+        </ul></details>
+
+        <details id="extract-details-davinci" hidden><summary>The details</summary>
         <ul class="notes">
           <li>The picture is copied, never re-encoded — it only loses its sound.</li>
           <li>Audio is re-encoded to AAC wherever DaVinci would struggle: AC3, E-AC3, DTS, TrueHD, Opus, Vorbis and FLAC, anything with a layout other than mono, stereo or 5.1, and anything above 48 kHz. Everything else is copied as it is.</li>
           <li>Text subtitles become cleaned-up .srt files; picture subtitles (PGS) are copied unchanged as .sup.</li>
-          <li>Your source file stays where it is and is not touched.</li>
           <li>Files with more than one track open a chooser, so you decide what gets pulled out.</li>
           <li>Audio with more than two channels can additionally be written as a stereo mix — it is in the chooser as its own line, and “keep all” does not include it.</li>
         </ul></details>
+
         <div class="hint">
-          There are no options here — what the Convert area is set to makes no
-          difference. This is the DaVinci-ready route, so it re-encodes audio
-          where it has to. Want an untouched 1:1 copy instead? Use Split.
-        </div>
-      </section>
-
-      <div class="shared-slot" data-slot="run"></div>
-    </div>
-
-    <div id="page-split" hidden>
-      <div class="shared-slot" data-slot="queue"></div>
-
-      <section class="panel">
-        <h2>What this does</h2>
-        <p class="lead">
-          Takes each file in the queue apart into its raw parts — a silent
-          picture, every audio track and every subtitle as its own file, written
-          next to the source. Nothing is re-encoded and nothing is cleaned up,
-          so Join can put it back together unchanged.
-        </p>
-        <details><summary>The details</summary>
-        <ul class="notes">
-          <li>Every track is copied exactly as it is: audio keeps its own format (.ac3, .dts, .eac3, .m4a, .flac …), subtitles stay untouched.</li>
-          <li>The silent picture keeps the source container — an MP4 stays an MP4, everything else becomes MKV.</li>
-          <li>Your source file stays where it is and is not touched.</li>
-          <li>Files with more than one track open a chooser, so you decide what gets pulled out.</li>
-          <li>No stereo mix here: a downmix would be a re-encode, and this mode never re-encodes.</li>
-        </ul></details>
-        <div class="hint">
-          Not sure which one? <b>DaVinci</b> makes the parts ready for Resolve
-          — audio as AAC, subtitles cleaned. <b>Split</b> keeps everything bit
-          for bit as it was.
+          There are no other options here — what the Convert page is set to
+          makes no difference to either route.
         </div>
       </section>
 
@@ -685,6 +675,52 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
           The video can be <b>.mkv .mp4 .m4v .mov</b> — other formats
           cannot be used as a base here.
         </div>
+      </section>
+
+      <div class="shared-slot" data-slot="run"></div>
+    </div>
+
+    <!-- Watching a folder used to sit on the Convert page, because it converts
+         with the options set there. It has a page of its own now: a standing
+         order is a different kind of thing from a run you start by hand, and
+         having both on one page made that page long enough to scroll past its
+         own start button.
+
+         It still has no run button. "Start" runs the queue once, watching is a
+         standing order, and one button cannot honestly mean both — so the run
+         button is taken off this page entirely (see showPage). -->
+    <div id="page-watch" hidden>
+      <section class="panel" id="panel-watch">
+        <h2>What this does</h2>
+        <p class="lead">
+          Keeps an eye on one folder and converts every video that turns up in
+          it — on its own, without you dropping anything in.
+        </p>
+
+        <div class="row">
+          <button class="btn" id="btn-watch-pick">Choose…</button>
+          <span class="hint" id="watch-folder" style="margin:0">No folder chosen yet.</span>
+          <div class="spacer"></div>
+          <span class="hint" id="watch-state" style="margin:0"></span>
+          <button class="btn primary" id="btn-watch-toggle" disabled>Start watching</button>
+        </div>
+
+        <div class="hint">
+          Converted with the options on the <b>Convert</b> page — codec,
+          encoder, container, quality, all of them.
+          <button class="linkish" id="btn-watch-options">show me those</button>
+        </div>
+
+        <details>
+          <summary>What happens while this is on</summary>
+          <ul class="notes">
+            <li>Every video that turns up in that folder — or in any folder inside it — is converted on its own, with the options from the Convert page.</li>
+            <li>A file is only picked up once it has stopped growing for 30 seconds, so a download that is still running is left alone.</li>
+            <li>What is already in the folder when you switch on is taken along. Finished results and their sources are skipped, and so is the <b>originals</b> folder.</li>
+            <li>Watching only lasts while this window is open — closing it ends the standing order.</li>
+            <li>The results are written into an <b>output</b> folder next to their sources, and your originals are moved wherever your INI says. The watched folder will look different afterwards.</li>
+          </ul>
+        </details>
       </section>
 
       <div class="shared-slot" data-slot="run"></div>
@@ -1972,7 +2008,33 @@ function refreshFromConfig() {
     const fromIni = iniNumber(isAV1() ? "av1TargetCQ" : "targetCQ");
     if (fromIni) $("opt-cq").value = fromIni;
   }
+  updateOptionsLine();
 }
+// optionsLine puts the run into one line: the four choices that decide what
+// comes out, then anything that departs from the defaults. Written this way
+// round on purpose — a line listing every field would be as long as the panel
+// it stands in, and a line listing only the departures would be empty exactly
+// when someone wants reassurance that nothing odd is set.
+function optionsLine() {
+  const parts = [
+    $("opt-codec").value === "av1" ? "AV1" : "H.265",
+    $("opt-encoder").value === "cpu" ? "CPU" : "GPU",
+    $("opt-container").value === "mp4" ? "MP4" : "MKV"
+  ];
+  parts.push($("opt-quality").value === "fixed" ? "CQ " + $("opt-cq").value : "Auto CQ");
+
+  if ($("opt-bitdepth").value === "8") parts.push("8 bit");
+  if ($("opt-resolution").value === "original") parts.push("original size");
+  if ($("opt-audio").value === "copy") parts.push("audio 1:1");
+  if ($("opt-bitrate").value) parts.push("max " + $("opt-bitrate").value + " kbit/s");
+  parts.push($("opt-parallel").value + " at a time");
+  if ($("opt-keep").checked) parts.push("sources kept");
+  if ($("opt-shutdown").checked) parts.push("shuts down when done");
+
+  return parts.join(" · ");
+}
+function updateOptionsLine() { $("options-line").textContent = optionsLine(); }
+
 function refreshConfig() {
   try {
     api().GetConfigView().then(applyConfig).catch(() => {});
@@ -2546,8 +2608,6 @@ function noteGPUAdvice(text) {
 // that page starts nothing.
 const MODE_PAGES = {
   convert: { mode: "", start: "Start" },
-  davinci: { mode: "davinci", start: "Split for Resolve" },
-  split: { mode: "split", start: "Split losslessly" },
   join: { mode: "join", start: "Join into one MKV" }
 };
 
@@ -2586,11 +2646,56 @@ function applyJoinMode() {
     $("btn-start").textContent = JOIN_MODES[mode].start;
   }
 }
-const PAGES = ["convert", "davinci", "split", "join", "settings"];
+/* ---------- the two ways of taking a file apart ----------
+   The mirror image of JOIN_MODES above, and deliberately so: both routes pull
+   the same tracks out of the same queue, they only differ in what they hand
+   back. -split copies every part untouched, -davinci re-encodes the audio
+   Resolve cannot read and cleans the subtitles. Two pages for that meant the
+   same question was asked in two different shapes in one window. */
+const EXTRACT_MODES = {
+  split: {
+    start: "Split losslessly",
+    hint: "Every track is copied exactly as it is — nothing is re-encoded and " +
+          "nothing is cleaned up, so Join can put it back together unchanged."
+  },
+  davinci: {
+    start: "Split for Resolve",
+    hint: "Audio that DaVinci Resolve cannot read is re-encoded to AAC and text " +
+          "subtitles are cleaned on the way out. The picture is copied either " +
+          "way — only its sound is taken off."
+  }
+};
+function extractMode() {
+  const chosen = $("extract-mode").value;
+  return EXTRACT_MODES[chosen] ? chosen : "split";
+}
+function applyExtractMode() {
+  const mode = extractMode();
+  $("extract-mode-hint").textContent = EXTRACT_MODES[mode].hint;
+  // The long explanations stay in the page rather than being built here: a
+  // text that is written by the script is a text nobody proof-reads.
+  $("extract-details-split").hidden = mode !== "split";
+  $("extract-details-davinci").hidden = mode !== "davinci";
+  // Only take over the running mode while this page is the one on show —
+  // otherwise a change here would rename another page's start button.
+  if (state.page === "extract") {
+    state.mode = mode;
+    $("btn-start").textContent = EXTRACT_MODES[mode].start;
+  }
+}
+
+const PAGES = ["convert", "extract", "join", "watch", "settings"];
 
 function showPage(name) {
   state.page = name;
   PAGES.forEach((page) => { $("page-" + page).hidden = page !== name; });
+
+  // The navigation is marked here rather than in the click handler: a page can
+  // also be reached from a link inside another page, and a highlight that only
+  // follows clicks would then point at the page you just left.
+  document.querySelectorAll(".nav-item[data-page]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.page === name);
+  });
 
   // Queue, progress and log exist ONCE and move to whichever mode page is on
   // show. A second copy would mean a second list to keep in step, while the
@@ -2604,6 +2709,10 @@ function showPage(name) {
     runSlot.appendChild($("panel-log"));
   }
 
+  // Watching is not started with the run button, so that button has no
+  // business being on this page — see the note above the page itself.
+  $("btn-start").hidden = name === "watch";
+
   // The chosen mode survives a trip to the settings page: the start button
   // travels with the panels and must not quietly change what it starts.
   const mode = MODE_PAGES[name];
@@ -2611,8 +2720,9 @@ function showPage(name) {
     state.mode = mode.mode;
     $("btn-start").textContent = mode.start;
   }
-  // The Join page decides between its two routes itself.
+  // Join and Take apart each decide between their two routes themselves.
   if (name === "join") applyJoinMode();
+  if (name === "extract") applyExtractMode();
 
   hideTip();
   // Each page has its own condition for starting (the queue on most, the join
@@ -2760,6 +2870,14 @@ function wire() {
   $("btn-settings-save").onclick = saveSettings;
   $("btn-settings-defaults").onclick = restoreDefaults;
   $("join-mode").onchange = applyJoinMode;
+  $("extract-mode").onchange = applyExtractMode;
+
+  // One listener for the whole fold instead of eleven: every field inside it
+  // reports upwards, including any added later. The two typed-in ones report
+  // while they are being typed, so the line never lags a keystroke behind.
+  $("options-box").addEventListener("change", updateOptionsLine);
+  $("opt-cq").addEventListener("input", updateOptionsLine);
+  $("opt-bitrate").addEventListener("input", updateOptionsLine);
   $("btn-srt-add").onclick = addSRTPhrase;
   $("btn-srt-save").onclick = saveSRTPhrases;
   // Enter in the phrase box adds it — typing a list one line at a time
@@ -2779,12 +2897,11 @@ function wire() {
   $("btn-ask-always").onclick = () => { state.answerAllThisRun = true; sendAnswer(""); };
 
   document.querySelectorAll(".nav-item[data-page]").forEach((button) => {
-    button.onclick = () => {
-      document.querySelectorAll(".nav-item").forEach((other) => other.classList.remove("active"));
-      button.classList.add("active");
-      showPage(button.dataset.page);
-    };
+    button.onclick = () => showPage(button.dataset.page);
   });
+
+  // From the watched folder straight to the options it will use.
+  $("btn-watch-options").onclick = () => showPage("convert");
 
   $("opt-quality").onchange = (e) => { $("field-cq").hidden = e.target.value !== "fixed"; };
   $("opt-codec").onchange = (e) => {

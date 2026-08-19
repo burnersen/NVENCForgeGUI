@@ -26,21 +26,41 @@ function reset() {
   gui.state.watch = { folder: "D:\\Downloads", active: true };
 }
 
-console.log("\nThe area lives on the Convert page, not in the navigation");
-const convertPage = html.slice(html.indexOf('<div id="page-convert"'), html.indexOf('<div id="page-davinci"'));
-checker.check("the panel is on the convert page", convertPage.includes('id="panel-watch"'), true);
-checker.check("with a folder button", convertPage.includes('id="btn-watch-pick"'), true);
-checker.check("and its own start button", convertPage.includes('id="btn-watch-toggle"'), true);
+console.log("\nThe area has a page of its own");
+// Every slice below is anchored on two things that must both exist. A slice
+// whose end anchor is gone silently runs to the end of the file and swallows
+// the whole window — these checks then pass no matter where the panel really
+// sits, which is exactly what happened when the page they used to be cut
+// against was removed.
+function pageOf(id, nextId) {
+  const from = html.indexOf('<div id="page-' + id + '"');
+  const to = html.indexOf('<div id="page-' + nextId + '"');
+  if (from === -1 || to === -1 || to < from) throw new Error("page " + id + " or " + nextId + " is gone");
+  return html.slice(from, to);
+}
+const watchPage = pageOf("watch", "settings");
+const convertPage = pageOf("convert", "extract");
+
+checker.contains("the nav button opens it", html, '<button class="nav-item" data-page="watch">Watch</button>');
+checker.check("the panel is on the watch page", watchPage.includes('id="panel-watch"'), true);
+checker.check("with a folder button", watchPage.includes('id="btn-watch-pick"'), true);
+checker.check("and its own start button", watchPage.includes('id="btn-watch-toggle"'), true);
+checker.check("it left the convert page", convertPage.includes('id="panel-watch"'), false);
+checker.check("run panels can still land there", watchPage.includes('data-slot="run"'), true);
 // Its own button on purpose: "Start" runs the queue once, watching is a
-// standing order. One button cannot honestly mean both, so the panel must not
+// standing order. One button cannot honestly mean both, so the page must not
 // reach for the run button.
-const watchPanel = convertPage.slice(
-  convertPage.indexOf('id="panel-watch"'),
-  convertPage.indexOf('data-slot="run"', convertPage.indexOf('id="panel-watch"'))
-);
-checker.check("the panel keeps its hands off the run button", watchPanel.includes('id="btn-start"'), false);
-checker.check("its button is the watch one", watchPanel.includes('id="btn-watch-toggle"'), true);
+checker.check("the page keeps its hands off the run button", watchPage.includes('id="btn-start"'), false);
 checker.check("no greyed-out nav entry is left", /disabled>Watch folder/.test(html), false);
+
+// And the run button really is taken off the page, not merely absent from the
+// markup: it travels with the shared panels and would otherwise arrive here.
+gui.showPage("watch");
+checker.check("no start button while watching", element("btn-start").hidden, true);
+checker.check("watch page is the one on show", element("page-watch").hidden, false);
+gui.showPage("convert");
+checker.check("it is back on the convert page", element("btn-start").hidden, false);
+checker.check("watch page is put away", element("page-watch").hidden, true);
 
 console.log("\nNothing happens until a folder is chosen");
 reset();

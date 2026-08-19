@@ -18,7 +18,7 @@ results, same settings file — just visible.
 - **Live progress** — one line per running converter: file, bar, speed, ETA, bitrate, output size so far.
 - **Up to three videos at once.** Measured here with four 90-second clips: two at a time took **52 seconds instead of 72**. A third brought nothing more — the graphics card is busy by then. You pick 1, 2 or 3.
 - **Watch a folder.** Point it at your downloads folder and forget about it: every video that lands there is converted on its own. A file is only picked up once it has stopped growing for 30 seconds, so a download in progress is left alone.
-- **The lossless tools, with buttons:** split a video into its parts, join them back together, or prepare everything for DaVinci Resolve. Joining goes both ways: bit-for-bit, or Resolve-ready with AAC audio and cleaned subtitles.
+- **The lossless tools, with buttons:** take a video apart into its tracks, or put them back together. Both directions ask the same question: bit-for-bit, or Resolve-ready with AAC audio and cleaned subtitles.
 - **The track chooser** — when a file has several audio tracks or subtitles, you tick what you want instead of typing numbers.
 - **Every setting explained.** The Settings page is built from `NVENCForge_Config.ini` itself: hover over anything and it tells you what it does, what is allowed, and what your file currently says. The subtitle cleaner's phrase list is editable there too, instead of in a text editor.
 - **Stop one, or stop all.** Each converter has its own ✕; what is already encoded is kept as a playable preview.
@@ -94,7 +94,7 @@ node frontend\progress_check.js
 node frontend\options_check.js
 node frontend\settings_check.js
 node frontend\davinci_check.js
-node frontend\split_check.js
+node frontend\extract_check.js
 node frontend\join_check.js
 node frontend\watch_check.js
 node frontend\parallel_check.js

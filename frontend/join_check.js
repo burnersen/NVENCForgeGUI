@@ -45,7 +45,7 @@ checker.check("the page itself exists", html.includes('<div id="page-join" hidde
 // pure markup order, so nothing else would ever notice if it got shuffled.
 const navBlock = html.slice(html.indexOf("<nav>"), html.indexOf("</nav>"));
 const navOrder = Array.from(navBlock.matchAll(/nav-item[^>]*data-page="(\w+)"/g)).map((m) => m[1]);
-checker.check("the areas stand in the wanted order", navOrder.join(" "), "convert split join davinci settings");
+checker.check("the areas stand in the wanted order", navOrder.join(" "), "convert extract join watch settings");
 
 console.log("\nThe page brings its own list and lets the shared panels in");
 checker.check("its own drop area", joinPage.includes('id="join-dropzone"'), true);
@@ -67,7 +67,7 @@ gui.showPage("join");
 
 console.log("\nOnly the chosen page is on show");
 checker.check("join is visible", element("page-join").hidden, false);
-checker.check("split is put away", element("page-split").hidden, true);
+checker.check("take apart is put away", element("page-extract").hidden, true);
 checker.check("convert is put away", element("page-convert").hidden, true);
 // Leaving the page must hide it again. A page missing from the PAGES list is
 // never touched at all — and would then stand open underneath the next one.
@@ -221,10 +221,12 @@ gui.addJoinPaths([german.path]).then(() => {
   checker.check("falls back to 1:1", gui.joinMode(), "join");
 
   console.log("\nThe choice leaves another page's button alone");
-  gui.showPage("split");
+  gui.showPage("extract");
+  element("extract-mode").value = "split";
+  gui.applyExtractMode();
   element("join-mode").value = "joindavinci";
   gui.applyJoinMode();
-  checker.check("split keeps its mode", gui.state.mode, "split");
+  checker.check("take apart keeps its mode", gui.state.mode, "split");
 
   checker.finish();
 });

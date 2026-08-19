@@ -119,8 +119,10 @@ gui.onQueueState({ active: 0, pending: 0, limit: 1 });
 checker.contains("a conversion still reports its savings", element("summary").textContent, "2 converted");
 
 console.log("\nThe page decides which mode the start button runs");
-gui.showPage("davinci");
-checker.check("mode follows the page", gui.state.mode, "davinci");
+gui.showPage("extract");
+element("extract-mode").value = "davinci";
+gui.applyExtractMode();
+checker.check("mode follows the picker", gui.state.mode, "davinci");
 checker.check("and the button says so", element("btn-start").textContent, "Split for Resolve");
 checker.check("the request carries it", gui.collectRequest().mode, "davinci");
 
