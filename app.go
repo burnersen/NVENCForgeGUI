@@ -449,13 +449,43 @@ func (a *App) StartRun(request RunRequest) error {
 	// Arbeitsverzeichnis ist der tools-Ordner: dort liegen die Programmdatei,
 	// ihre INI und ihr FFmpeg. Die Ergebnisse entstehen weiterhin neben den
 	// Quelldateien — darüber entscheidet der Konverter, nicht dieses Fenster.
-	return a.dispatcher.Submit(status.Path, filepath.Dir(status.Path), request.Parallel, jobs)
+	//
+	// Ob auf der CPU gerechnet wird, steht ausschließlich in dieser Anfrage:
+	// Der Prozessor-Modus ist ein Schalter der Befehlszeile, kein Wert aus der
+	// INI. Eine INI kann ihn also nicht heimlich einschalten.
+	return a.dispatcher.Submit(
+		status.Path,
+		filepath.Dir(status.Path),
+		areaOf(request.Area),
+		request.Parallel,
+		request.Encoder == "cpu",
+		jobs,
+	)
 }
 
-// StopRun löst den sauberen Abbruch aus: wartende Aufträge fallen weg, die
-// laufenden Konverter hören sauber auf.
+// areaOf nimmt nur die beiden bekannten Bereiche an. Alles andere ist das
+// Umwandeln von Hand — der Bereich, aus dem eine Anfrage ohne Angabe stammt.
+func areaOf(area string) string {
+	if area == areaWatch {
+		return areaWatch
+	}
+	return areaConvert
+}
+
+// StopRun löst den sauberen Abbruch für das Umwandeln von Hand aus: wartende
+// Aufträge fallen weg, die laufenden Konverter hören sauber auf.
+//
+// Der beobachtete Ordner bleibt davon unberührt. Wer seinen Stapel abbricht,
+// will nicht nebenbei einen Dauerauftrag stilllegen, von dem auf dieser Seite
+// gar nichts zu sehen ist.
 func (a *App) StopRun() error {
-	return a.dispatcher.RequestStop()
+	return a.dispatcher.RequestStopArea(areaConvert)
+}
+
+// StopWatchRun hält an, was der beobachtete Ordner gerade umwandelt. Die
+// Beobachtung selbst läuft weiter — dafür gibt es den eigenen Knopf.
+func (a *App) StopWatchRun() error {
+	return a.dispatcher.RequestStopArea(areaWatch)
 }
 
 // StopSlot hält nur einen einzelnen Konverter an. Die anderen laufen weiter,

@@ -85,6 +85,11 @@ func needsJoinOrder(mode string) bool {
 
 // RunRequest ist das, was die Oberfläche für einen Lauf schickt.
 type RunRequest struct {
+	// Area sagt, aus welchem Bereich des Fensters der Auftrag kommt:
+	// leer/"convert" für das Umwandeln von Hand, "watch" für den beobachteten
+	// Ordner. Davon hängt ab, auf welchem Platz er läuft und in welcher
+	// Anzeige seine Meldungen landen.
+	Area       string   `json:"area"`
 	Mode       string   `json:"mode"`     // "" = konvertieren, sonst Schlüssel aus modeFlags
 	Parallel   int      `json:"parallel"` // gleichzeitige Läufe (1–3), 0 = einer
 	Files      []string `json:"files"`
