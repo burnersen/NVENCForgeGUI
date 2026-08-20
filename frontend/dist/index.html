@@ -369,6 +369,12 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
 }
 .logbox div { min-height: 1.5em; }
 .logbox div.gui { color: var(--accent); }
+/* The profile row sits above the options it stands for, so it reads as
+   "start from this, then adjust". */
+.profile-row { margin: -4px 0 14px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.profile-row > label { color: var(--muted); font-size: 12px; }
+.profile-row select { min-width: 180px; }
+.profile-row input[type="text"] { min-width: 200px; }
 .spacer { flex: 1; }
 .err { color: var(--bad); font-size: 12.5px; }
 
@@ -482,6 +488,16 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
 
       <section class="panel">
         <h2>Options for this run</h2>
+        <!-- Profiles: the options below under a name, to be picked up again
+             next time. The watched folder's page offers the same list. -->
+        <div class="row profile-row">
+          <label for="opt-profile">Profile</label>
+          <select id="opt-profile"></select>
+          <input type="text" id="opt-profile-name" maxlength="40" placeholder="Save these options as…" />
+          <button class="btn" id="btn-profile-save">Save</button>
+          <button class="btn" id="btn-profile-delete">Delete</button>
+          <span class="hint" id="profile-note" style="margin:0"></span>
+        </div>
         <div class="options">
           <div class="field" data-help="codec">
             <label for="opt-codec">Codec</label>
@@ -812,6 +828,13 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
            background while you convert something else to H.265 by hand. -->
       <section class="panel">
         <h2>Options for the watched folder</h2>
+        <!-- The same profiles as on the Convert page, to load only. They are
+             made in one place, so a name means the same thing on both pages. -->
+        <div class="row profile-row">
+          <label for="wopt-profile">Profile</label>
+          <select id="wopt-profile"></select>
+          <span class="hint" style="margin:0">Profiles are saved on the Convert page.</span>
+        </div>
         <div class="options">
           <div class="field">
             <label for="wopt-codec">Codec</label>
@@ -1091,6 +1114,8 @@ const state = {
   // What the window frame is showing right now (see updateFrame). "" is not a
   // state the frame can be in, so the very first run always gets through.
   frame: { mode: "", percent: -1 },
+  profiles: [],              // the saved option sets, as the Go side keeps them
+  profileDeleteAsked: false, // the delete button was clicked once and is waiting
   watch: { folder: "", active: false },
   watchPending: [],   // paths the watcher found that have not run yet
   joinFiles: [],      // the join area's own list, sorted by Go (joinfiles.go)
@@ -3433,6 +3458,179 @@ function collectWatchRequest(files) {
   };
 }
 
+/* ---------- profiles ----------
+   One set of options, kept under a name. Whoever always sets the same things
+   should set them once.
+
+   The sets are made on the Convert page only, and the watched folder's page
+   loads from the same list. One place where a name is given means both pages
+   can never quietly disagree about what that name stands for.
+
+   Deliberately NOT part of a profile: which files are queued (they belong to
+   the run, not to the settings) and "shut down the PC when finished". A switch
+   that turns the machine off must not come back on unnoticed because a profile
+   was picked.
+   --------------------------------------------------------------------------- */
+
+// profileFromOptions reads the Convert page exactly as it stands.
+function profileFromOptions(name) {
+  return {
+    name: name,
+    codec: $("opt-codec").value,
+    encoder: $("opt-encoder").value,
+    container: $("opt-container").value,
+    resolution: $("opt-resolution").value,
+    audio: $("opt-audio").value,
+    bitDepth: $("opt-bitdepth").value,
+    quality: $("opt-quality").value,
+    fixedCQ: parseInt($("opt-cq").value, 10) || 0,
+    maxBitrate: parseInt($("opt-bitrate").value, 10) || 0,
+    keepSource: $("opt-keep").checked,
+    parallel: parallelSetting()
+  };
+}
+
+// applyProfile writes a saved set into the controls of one page. The prefix
+// says which page: "opt" is Convert, "wopt" the watched folder. Both name
+// their fields the same way, which is what lets one profile serve both.
+function applyProfile(prefix, profile) {
+  if (!profile) return;
+  $(prefix + "-codec").value = profile.codec || "";
+  $(prefix + "-encoder").value = profile.encoder || "";
+  $(prefix + "-container").value = profile.container || "";
+  $(prefix + "-resolution").value = profile.resolution || "";
+  $(prefix + "-audio").value = profile.audio || "";
+  $(prefix + "-bitdepth").value = profile.bitDepth || "";
+  $(prefix + "-quality").value = profile.quality || "auto";
+  // A CQ of 0 means the profile was saved with the automatic search on. The
+  // box keeps its own value then — overwriting it with a zero would put an
+  // impossible number in front of the user.
+  if (profile.fixedCQ) $(prefix + "-cq").value = profile.fixedCQ;
+  $(prefix + "-bitrate").value = profile.maxBitrate || "";
+  $(prefix + "-keep").checked = !!profile.keepSource;
+  // How many at a time exists on the Convert page only: the watched folder
+  // does one video at a time, whatever a profile may say.
+  if (prefix === "opt" && profile.parallel) $("opt-parallel").value = String(profile.parallel);
+  afterOptionsChanged(prefix);
+}
+
+// afterOptionsChanged does what the fields' own handlers would have done had
+// the values been typed in by hand. Without it a loaded profile could leave a
+// hidden CQ box holding the number the run then uses.
+function afterOptionsChanged(prefix) {
+  $(prefix === "opt" ? "field-cq" : "wfield-cq").hidden = $(prefix + "-quality").value !== "fixed";
+  if (prefix === "opt") {
+    // AV1 goes up to 63, H.265 only to 51. A profile made for AV1 must not
+    // leave an impossible number behind on the H.265 side.
+    const max = $("opt-codec").value === "av1" ? 63 : 51;
+    const box = $("opt-cq");
+    box.max = max;
+    if (parseInt(box.value, 10) > max) box.value = max;
+    refreshFromConfig();
+    // A watched folder holding a slot, or the processor mode, can rule out the
+    // number of parallel runs the profile asks for.
+    limitParallelChoice();
+  }
+  updateButtons();
+}
+
+function profileNote(text) { $("profile-note").textContent = text || ""; }
+
+function profileNamed(name) {
+  return state.profiles.find((profile) => profile.name === name) || null;
+}
+
+// renderProfiles fills both drop-downs from the one list.
+function renderProfiles() {
+  ["opt-profile", "wopt-profile"].forEach((id) => {
+    const box = $(id);
+    const chosen = box.value;
+    box.innerHTML = "";
+    const empty = document.createElement("option");
+    empty.value = "";
+    empty.textContent = state.profiles.length ? "— choose a profile —" : "— none saved yet —";
+    box.appendChild(empty);
+    state.profiles.forEach((profile) => {
+      const option = document.createElement("option");
+      option.value = profile.name;
+      option.textContent = profile.name;
+      box.appendChild(option);
+    });
+    // A name that has just been deleted must not stay selected, or the next
+    // click would work on something that no longer exists.
+    box.value = state.profiles.some((profile) => profile.name === chosen) ? chosen : "";
+  });
+  $("btn-profile-delete").disabled = !$("opt-profile").value;
+}
+
+async function loadProfiles() {
+  try {
+    state.profiles = (await api().GetProfiles()) || [];
+  } catch (err) {
+    // No connection to the app yet. An empty list is the honest answer; the
+    // next start asks again.
+    state.profiles = [];
+  }
+  renderProfiles();
+}
+
+// chooseProfile loads what was picked into the page it was picked on.
+function chooseProfile(prefix) {
+  const name = $(prefix + "-profile").value;
+  resetProfileDelete();
+  if (!name) { renderProfiles(); return; }
+  applyProfile(prefix, profileNamed(name));
+  // Ready to save over it: the name is put in the box, so "Save" after a small
+  // change updates the profile instead of quietly making a second one.
+  if (prefix === "opt") $("opt-profile-name").value = name;
+  profileNote("Loaded: " + name);
+  renderProfiles();
+}
+
+async function saveProfile() {
+  // The typed name wins; without one, the profile on show is updated.
+  const name = ($("opt-profile-name").value || $("opt-profile").value || "").trim();
+  if (!name) { profileNote("Type a name for these options first."); return; }
+  try {
+    state.profiles = (await api().SaveProfile(profileFromOptions(name))) || [];
+    $("opt-profile").value = name;
+    profileNote("Saved: " + name);
+  } catch (err) {
+    // Saving is the one place where a failure must be said out loud — the
+    // whole point was to have the set again next time.
+    profileNote("Not saved: " + err);
+  }
+  resetProfileDelete();
+  renderProfiles();
+}
+
+// Deleting takes two clicks. There is no undo, and the button sits right next
+// to the one that saves.
+async function deleteProfile() {
+  const name = $("opt-profile").value;
+  if (!name) { profileNote("Choose a profile to delete."); return; }
+  if (!state.profileDeleteAsked) {
+    state.profileDeleteAsked = true;
+    $("btn-profile-delete").textContent = "Click again to delete";
+    profileNote("“" + name + "” will be gone for good.");
+    return;
+  }
+  try {
+    state.profiles = (await api().DeleteProfile(name)) || [];
+    profileNote("Deleted: " + name);
+    if ($("opt-profile-name").value === name) $("opt-profile-name").value = "";
+  } catch (err) {
+    profileNote("Not deleted: " + err);
+  }
+  resetProfileDelete();
+  renderProfiles();
+}
+
+function resetProfileDelete() {
+  state.profileDeleteAsked = false;
+  $("btn-profile-delete").textContent = "Delete";
+}
+
 /* ---------- actions ---------- */
 // collectRequest builds what one area sends off. Which files, which mode and
 // which slot it will land on all follow from the area itself.
@@ -3642,6 +3840,11 @@ function wire() {
   });
 
 
+  $("opt-profile").onchange = () => chooseProfile("opt");
+  $("wopt-profile").onchange = () => chooseProfile("wopt");
+  $("btn-profile-save").onclick = saveProfile;
+  $("btn-profile-delete").onclick = deleteProfile;
+
   $("opt-quality").onchange = (e) => { $("field-cq").hidden = e.target.value !== "fixed"; };
   $("opt-codec").onchange = (e) => {
     const max = e.target.value === "av1" ? 63 : 51;
@@ -3748,6 +3951,9 @@ async function boot() {
   applyJoinMode();
   showWatch(null);
   showSavings(null);
+  // The drop-downs are empty in the markup on purpose: what is in them depends
+  // on the file next to the exe, not on the page.
+  await loadProfiles();
   try {
     // The savings bar is filled from its own small call rather than out of the
     // startup report: that report asks the graphics card about itself and can

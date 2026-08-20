@@ -6,11 +6,15 @@ export function AddPaths(arg1:Array<string>):Promise<Array<main.QueueItem>>;
 
 export function AnswerQuestion(arg1:number,arg2:string):Promise<void>;
 
+export function DeleteProfile(arg1:string):Promise<Array<main.Profile>>;
+
 export function DownloadConverter(arg1:boolean):Promise<main.DownloadResult>;
 
 export function GetConfigView():Promise<main.ConfigView>;
 
 export function GetConverterStatus():Promise<main.ConverterStatus>;
+
+export function GetProfiles():Promise<Array<main.Profile>>;
 
 export function GetQueueStatus():Promise<main.QueueState>;
 
@@ -41,6 +45,8 @@ export function PickWatchFolder():Promise<string>;
 export function ResetSavings():Promise<main.SavingsReport>;
 
 export function RunSetup():Promise<void>;
+
+export function SaveProfile(arg1:main.Profile):Promise<Array<main.Profile>>;
 
 export function SaveSRTCleaner(arg1:Array<main.SRTPhrase>):Promise<main.SaveResult>;
 

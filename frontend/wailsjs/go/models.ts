@@ -160,6 +160,40 @@ export namespace main {
 	        this.missing = source["missing"];
 	    }
 	}
+	export class Profile {
+	    name: string;
+	    codec: string;
+	    encoder: string;
+	    container: string;
+	    resolution: string;
+	    audio: string;
+	    bitDepth: string;
+	    quality: string;
+	    fixedCQ: number;
+	    maxBitrate: number;
+	    keepSource: boolean;
+	    parallel: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new Profile(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.codec = source["codec"];
+	        this.encoder = source["encoder"];
+	        this.container = source["container"];
+	        this.resolution = source["resolution"];
+	        this.audio = source["audio"];
+	        this.bitDepth = source["bitDepth"];
+	        this.quality = source["quality"];
+	        this.fixedCQ = source["fixedCQ"];
+	        this.maxBitrate = source["maxBitrate"];
+	        this.keepSource = source["keepSource"];
+	        this.parallel = source["parallel"];
+	    }
+	}
 	export class QueueItem {
 	    path: string;
 	    name: string;

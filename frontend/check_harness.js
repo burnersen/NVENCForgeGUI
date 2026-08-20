@@ -91,7 +91,13 @@ function loadGui() {
   // Everything the window would hand to the Go side is recorded instead. That
   // is how a check can see WHICH answer a button really sends — the one thing
   // that decides whether the user gets the tracks they picked.
-  const calls = { answers: [], answerSlots: [], runs: [], joinSorts: [], stops: [], srtSaves: [], themes: [], clipboard: [], savingsResets: [], frame: [] };
+  const calls = { answers: [], answerSlots: [], runs: [], joinSorts: [], stops: [], srtSaves: [], themes: [], clipboard: [], savingsResets: [], frame: [], profileSaves: [], profileDeletes: [] };
+  // Die Profilablage. Sie führt wirklich Buch, statt nur zu bestätigen:
+  // Eine Prüfung muss sehen, was NACH dem Speichern im Auswahlfeld steht.
+  let profileList = [];
+  const sortProfiles = (list) =>
+    list.slice().sort((a, b) => a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1);
+
   // Was das Sparbuch der Go-Seite antworten soll; je Prüfung gesetzt.
   let savingsReply = { weekMB: 0, weekFiles: 0, monthMB: 0, monthFiles: 0 };
   // What GetSRTCleaner should answer; set per check with setSRTReply.
@@ -128,6 +134,17 @@ function loadGui() {
           // Which theme is written down decides what the window looks like on
           // the NEXT start — a wrong value here is invisible until then.
           GetTheme() { return Promise.resolve("dark"); },
+          GetProfiles() { return Promise.resolve(sortProfiles(profileList)); },
+          SaveProfile(profile) {
+            calls.profileSaves.push(profile);
+            profileList = profileList.filter((kept) => kept.name !== profile.name).concat([profile]);
+            return Promise.resolve(sortProfiles(profileList));
+          },
+          DeleteProfile(name) {
+            calls.profileDeletes.push(name);
+            profileList = profileList.filter((kept) => kept.name !== name);
+            return Promise.resolve(sortProfiles(profileList));
+          },
           // Das Sparbuch führt die Go-Seite. Das Fenster zeigt nur an — und
           // WAS es beim Zurücksetzen wirklich losschickt, steht hier.
           GetSavings() { return Promise.resolve(savingsReply); },
@@ -164,7 +181,7 @@ function loadGui() {
     " joinReady, joinRunFiles, onWatchFiles, maybeStartWatchRun, showWatch, clearWatchArea, runWentThroughCleanly, clearFinishedList, stopWatching, stopWatchRun, collectWatchRequest, onQueueState, renderWatchSummary, isWatchSlot, WATCH_SLOT, limitParallelChoice, watchNote," +
     " startBatch, clearProgress, updateOverall, batchProgress, updateFrame, stopSlot, stop, start, renderLanes, copyAreaLog," +
     " loadSRTCleaner, renderSRTCleaner, addSRTPhrase, saveSRTPhrases, srtSignature," +
-    " joinMode, applyJoinMode, JOIN_MODES, applyTheme, chooseTheme, THEMES," +
+    " joinMode, applyJoinMode, JOIN_MODES, loadProfiles, renderProfiles, chooseProfile, saveProfile, deleteProfile, applyProfile, profileFromOptions, profileNamed, applyTheme, chooseTheme, THEMES," +
     " splitMode, applySplitMode, SPLIT_MODES," +
     " areaOf, areaOfSlot, areaNameOfSlot, anyRunning, addItems, afterQueueChange," +
     " AREA_NAMES, AREA_SLOTS, finishArea, clearLanes, renderList, showFinalSummary, el," +
@@ -184,7 +201,9 @@ function loadGui() {
     // setSRTReply legt fest, was die Go-Seite auf GetSRTCleaner antworten soll.
     setSRTReply: (view) => { srtReply = view; },
     // setSavingsReply legt fest, was die Go-Seite als Sparbuch meldet.
-    setSavingsReply: (report) => { savingsReply = report; }
+    setSavingsReply: (report) => { savingsReply = report; },
+    // setProfiles legt fest, was die Go-Seite als gespeicherte Sätze meldet.
+    setProfiles: (list) => { profileList = list.slice(); }
   };
 }
 

@@ -10,6 +10,10 @@ export function AnswerQuestion(arg1, arg2) {
   return window['go']['main']['App']['AnswerQuestion'](arg1, arg2);
 }
 
+export function DeleteProfile(arg1) {
+  return window['go']['main']['App']['DeleteProfile'](arg1);
+}
+
 export function DownloadConverter(arg1) {
   return window['go']['main']['App']['DownloadConverter'](arg1);
 }
@@ -20,6 +24,10 @@ export function GetConfigView() {
 
 export function GetConverterStatus() {
   return window['go']['main']['App']['GetConverterStatus']();
+}
+
+export function GetProfiles() {
+  return window['go']['main']['App']['GetProfiles']();
 }
 
 export function GetQueueStatus() {
@@ -80,6 +88,10 @@ export function ResetSavings() {
 
 export function RunSetup() {
   return window['go']['main']['App']['RunSetup']();
+}
+
+export function SaveProfile(arg1) {
+  return window['go']['main']['App']['SaveProfile'](arg1);
 }
 
 export function SaveSRTCleaner(arg1) {

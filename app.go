@@ -34,12 +34,16 @@ type App struct {
 
 	// savings ist das Sparbuch: wie viel Platz das Umwandeln gebracht hat.
 	savings *savingsLedger
+
+	// profiles sind die gespeicherten Optionssätze der Konvertieren-Seite.
+	profiles *profileStore
 }
 
 // NewApp erzeugt die Anwendung mit dem Fensterzustand, mit dem sie startet.
 func NewApp(window windowState, windowRemembered bool) *App {
 	app := &App{window: window, windowRemembered: windowRemembered}
 	app.savings = newSavingsLedger()
+	app.profiles = newProfileStore()
 	// Der Verteiler meldet NICHT mehr geradewegs an die Oberfläche, sondern
 	// über bookAndForward: Was gespart wurde, wird im Vorbeigehen eingetragen.
 	app.dispatcher = NewDispatcher(app.bookAndForward)
@@ -226,6 +230,23 @@ func (a *App) ResetSavings() SavingsReport {
 	report := a.savings.Reset()
 	a.emit("conv:savings", report)
 	return report
+}
+
+// GetProfiles liefert die gespeicherten Optionssätze, nach Namen sortiert.
+func (a *App) GetProfiles() []Profile {
+	return a.profiles.List()
+}
+
+// SaveProfile legt einen Optionssatz unter seinem Namen ab und liefert die
+// neue Liste zurück. Ein Fehler wird ausdrücklich weitergereicht: Wer
+// "Speichern" drückt, muss erfahren, wenn nichts gespeichert wurde.
+func (a *App) SaveProfile(profile Profile) ([]Profile, error) {
+	return a.profiles.Save(profile)
+}
+
+// DeleteProfile nimmt einen Optionssatz wieder heraus.
+func (a *App) DeleteProfile(name string) ([]Profile, error) {
+	return a.profiles.Delete(name)
 }
 
 // emit schickt eine Meldung an die Oberfläche. Vor dem Start des Fensters gibt
