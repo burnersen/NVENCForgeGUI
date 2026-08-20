@@ -91,7 +91,7 @@ function loadGui() {
   // Everything the window would hand to the Go side is recorded instead. That
   // is how a check can see WHICH answer a button really sends — the one thing
   // that decides whether the user gets the tracks they picked.
-  const calls = { answers: [], answerSlots: [], runs: [], joinSorts: [], stops: [], srtSaves: [], themes: [], clipboard: [], savingsResets: [], frame: [], profileSaves: [], profileDeletes: [] };
+  const calls = { answers: [], answerSlots: [], runs: [], joinSorts: [], stops: [], srtSaves: [], themes: [], clipboard: [], savingsResets: [], frame: [], profileSaves: [], profileDeletes: [], opened: [] };
   // Die Profilablage. Sie führt wirklich Buch, statt nur zu bestätigen:
   // Eine Prüfung muss sehen, was NACH dem Speichern im Auswahlfeld steht.
   let profileList = [];
@@ -110,6 +110,9 @@ function loadGui() {
     addEventListener() {},
     runtime: {
       OnFileDrop() {}, EventsOn() {},
+      // Links MUESSEN hier durch: ein <a href> wuerde die Seite IM Fenster
+      // laden und das Programm waere weg.
+      BrowserOpenURL(url) { calls.opened.push(url); },
       ClipboardSetText(text) { calls.clipboard.push(text); return Promise.resolve(); }
     },
     go: {
@@ -181,7 +184,7 @@ function loadGui() {
     " joinReady, joinRunFiles, onWatchFiles, maybeStartWatchRun, showWatch, clearWatchArea, runWentThroughCleanly, clearFinishedList, stopWatching, stopWatchRun, collectWatchRequest, onQueueState, renderWatchSummary, isWatchSlot, WATCH_SLOT, limitParallelChoice, watchNote," +
     " startBatch, clearProgress, updateOverall, batchProgress, updateFrame, stopSlot, stop, start, renderLanes, copyAreaLog," +
     " loadSRTCleaner, renderSRTCleaner, addSRTPhrase, saveSRTPhrases, srtSignature," +
-    " joinMode, applyJoinMode, JOIN_MODES, loadProfiles, renderProfiles, chooseProfile, saveProfile, deleteProfile, applyProfile, profileFromOptions, profileNamed, applyTheme, chooseTheme, THEMES," +
+    " joinMode, applyJoinMode, JOIN_MODES, showAbout, openLink, LINKS, loadProfiles, renderProfiles, chooseProfile, saveProfile, deleteProfile, applyProfile, profileFromOptions, profileNamed, applyTheme, chooseTheme, THEMES," +
     " splitMode, applySplitMode, SPLIT_MODES," +
     " areaOf, areaOfSlot, areaNameOfSlot, anyRunning, addItems, afterQueueChange," +
     " AREA_NAMES, AREA_SLOTS, finishArea, clearLanes, renderList, showFinalSummary, el," +

@@ -245,6 +245,18 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
 .checks { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 12px; }
 .check { display: flex; align-items: center; gap: 7px; font-size: 13px; }
 .hint { color: var(--muted); font-size: 11.5px; margin-top: 10px; }
+
+/* The About page. Two columns for the facts, plain prose for the rest — this
+   is a page to read once, not one to work on. */
+.about-grid {
+  display: grid; grid-template-columns: 150px 1fr; gap: 8px 16px;
+  font-size: 13px; align-items: baseline;
+}
+.about-grid > div:nth-child(odd) { color: var(--muted); }
+.about-grid .path { font-family: Consolas, "Cascadia Mono", monospace; font-size: 12px; word-break: break-all; }
+.about-text { margin: 0 0 12px; font-size: 13px; line-height: 1.6; max-width: 78ch; }
+.about-list { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.6; max-width: 78ch; }
+.about-list li { margin-bottom: 8px; }
 .lead { margin: 0 0 10px; }
 .notes { margin: 0; padding-left: 18px; color: var(--muted); font-size: 12.5px; }
 .notes li { margin: 3px 0; }
@@ -447,6 +459,7 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
       <button class="nav-item" data-page="join">Join</button>
       <button class="nav-item" data-page="watch">Watch</button>
       <button class="nav-item" data-page="settings">Settings</button>
+      <button class="nav-item" data-page="about">About</button>
 
       <!-- Day or night. The icons are drawn here rather than taken from the
            emoji font: an emoji sun arrives in its own colours on every machine
@@ -991,6 +1004,63 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
           <button class="btn" id="btn-savings-reset">Reset the savings counter</button>
           <span class="hint" id="savings-reset-note" style="margin:0">The figures along the bottom edge start again at zero.</span>
         </div>
+      </section>
+    </div>
+
+    <!-- The About page. It exists for three things that are otherwise
+         invisible: which versions are running, under what licence, and what
+         the program puts on the disk. Links go through BrowserOpenURL — a
+         plain link would load the page INSIDE this window and the program
+         would be gone. -->
+    <div id="page-about" hidden>
+      <section class="panel">
+        <h2>About</h2>
+        <div class="about-grid">
+          <div>This window</div><div id="about-gui">NVENCForgeGUI</div>
+          <div>The converter</div><div id="about-converter">looking…</div>
+          <div>Where it is</div><div id="about-converter-path" class="path">—</div>
+        </div>
+        <div class="row" style="margin-top:14px">
+          <button class="btn" id="btn-about-gui-repo">NVENCForgeGUI on GitHub</button>
+          <button class="btn" id="btn-about-converter-repo">NVENCForge on GitHub</button>
+          <span class="hint" id="about-note" style="margin:0"></span>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Licence</h2>
+        <p class="about-text">
+          NVENCForgeGUI is source-available under the <b>PolyForm Noncommercial License 1.0.0</b>.
+          Free to use, study, change and pass on for any <b>noncommercial</b> purpose — private use,
+          hobby, teaching, research. <b>Commercial use, resale or bundling into paid products is not
+          permitted</b> without a separate licence from the author.
+        </p>
+        <div class="row">
+          <button class="btn" id="btn-about-licence">Read the licence</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>What it is built on</h2>
+        <ul class="about-list">
+          <li><b>Wails v2</b> (MIT licence) pairs the Go program with the WebView2 runtime Windows
+              already ships. Wails stays under its own licence.</li>
+          <li><b>NVENCForge</b> is a separate program by the same author under the same licence. This
+              window looks for it in its <b>tools</b> folder and fetches it from GitHub if it is missing.</li>
+          <li><b>FFmpeg</b> (GPL build) does the actual encoding. NVENCForge fetches it itself on its
+              first run — this window never touches it.</li>
+        </ul>
+      </section>
+
+      <section class="panel">
+        <h2>What it puts on your disk</h2>
+        <p class="about-text">
+          Nothing is installed and nothing is written to the registry. Next to the program file it keeps
+          three small files: <b>NVENCForgeGUI.window</b> (size, place and whether it is day or night),
+          <b>NVENCForgeGUI.savings</b> (how much space was saved) and <b>NVENCForgeGUI.profiles</b>
+          (your saved option sets). The converter and FFmpeg live in the <b>tools</b> folder.
+          Delete the folder and it is gone.
+        </p>
       </section>
     </div>
     </main>
@@ -3409,7 +3479,7 @@ function applySplitMode() {
   $("btn-split-start").textContent = SPLIT_MODES[mode].start;
 }
 
-const PAGES = ["convert", "split", "join", "watch", "settings"];
+const PAGES = ["convert", "split", "join", "watch", "settings", "about"];
 
 // showPage only shows and hides now. Nothing moves between pages any more:
 // every area owns its list, its progress display, its log and its buttons, so
@@ -3456,6 +3526,42 @@ function collectWatchRequest(files) {
     parallel: 1,
     shutdown: false
   };
+}
+
+/* ---------- the About page ----------
+   Three things that are otherwise invisible: which versions are running,
+   under what licence, and what the program leaves on the disk.
+
+   Every link goes through BrowserOpenURL. A plain <a href> inside a WebView2
+   window does NOT open a browser — it loads the page into this window, and the
+   program is simply gone, with no way back.
+   --------------------------------------------------------------------------- */
+const LINKS = {
+  gui: "https://github.com/burnersen/NVENCForgeGUI",
+  converter: "https://github.com/burnersen/NVENCForge",
+  licence: "https://polyformproject.org/licenses/noncommercial/1.0.0"
+};
+
+function openLink(url) {
+  try {
+    window.runtime.BrowserOpenURL(url);
+    $("about-note").textContent = "";
+  } catch (err) {
+    // Not silently swallowed: without a word, a dead button looks like the
+    // whole window has stopped responding.
+    $("about-note").textContent = "Could not open the browser — the address is " + url;
+  }
+}
+
+// showAbout fills in what the Go side reported at startup. It is fed from the
+// same report the header uses, so the two can never name different versions.
+function showAbout(info) {
+  $("about-gui").textContent = "NVENCForgeGUI v" + (info.guiVersion || "?");
+  const converter = info.converter || {};
+  $("about-converter").textContent = converter.found
+    ? "NVENCForge " + converter.version + (converter.eventChannel ? "" : " (no event channel)")
+    : "not found — the Convert page offers to fetch it";
+  $("about-converter-path").textContent = converter.found ? converter.path : "—";
 }
 
 /* ---------- profiles ----------
@@ -3840,6 +3946,10 @@ function wire() {
   });
 
 
+  $("btn-about-gui-repo").onclick = () => openLink(LINKS.gui);
+  $("btn-about-converter-repo").onclick = () => openLink(LINKS.converter);
+  $("btn-about-licence").onclick = () => openLink(LINKS.licence);
+
   $("opt-profile").onchange = () => chooseProfile("opt");
   $("wopt-profile").onchange = () => chooseProfile("wopt");
   $("btn-profile-save").onclick = saveProfile;
@@ -3969,6 +4079,7 @@ async function boot() {
     $("gui-version").textContent = "GUI v" + info.guiVersion;
     showGPU(info.gpu);
     showConverter(info.converter);
+    showAbout(info);
     applyConfig(info.config);
     await loadSettings();
     await loadSRTCleaner();

@@ -51,11 +51,12 @@ checker.check("no greyed-out Join button is left", /disabled>Join/.test(html), f
 checker.check("the page itself exists", html.includes('<div id="page-join" hidden>'), true);
 
 // The order of the areas is the user's own choice (2026-08-18): the two
-// lossless tools sit right behind Convert, DaVinci and Settings follow. It is
-// pure markup order, so nothing else would ever notice if it got shuffled.
+// lossless tools sit right behind Convert, DaVinci and Settings follow, and
+// About closes the list. It is pure markup order, so nothing else would ever
+// notice if it got shuffled.
 const navBlock = html.slice(html.indexOf("<nav>"), html.indexOf("</nav>"));
 const navOrder = Array.from(navBlock.matchAll(/nav-item[^>]*data-page="(\w+)"/g)).map((m) => m[1]);
-checker.check("the areas stand in the wanted order", navOrder.join(" "), "convert split join watch settings");
+checker.check("the areas stand in the wanted order", navOrder.join(" "), "convert split join watch settings about");
 
 console.log("\nThe page brings its own list, progress and log");
 checker.check("its own drop area", joinPage.includes('id="join-dropzone"'), true);
