@@ -31,12 +31,18 @@ type App struct {
 	// keinen Platz, den man wiederherstellen könnte.
 	window           windowState
 	windowRemembered bool
+
+	// savings ist das Sparbuch: wie viel Platz das Umwandeln gebracht hat.
+	savings *savingsLedger
 }
 
 // NewApp erzeugt die Anwendung mit dem Fensterzustand, mit dem sie startet.
 func NewApp(window windowState, windowRemembered bool) *App {
 	app := &App{window: window, windowRemembered: windowRemembered}
-	app.dispatcher = NewDispatcher(app.emit)
+	app.savings = newSavingsLedger()
+	// Der Verteiler meldet NICHT mehr geradewegs an die Oberfläche, sondern
+	// über bookAndForward: Was gespart wurde, wird im Vorbeigehen eingetragen.
+	app.dispatcher = NewDispatcher(app.bookAndForward)
 	// Der Beobachter meldet nur, WAS er gefunden hat. Ob daraufhin ein Lauf
 	// beginnt, entscheidet die Oberfläche: Sie allein weiß, ob gerade schon
 	// konvertiert wird und mit welchen Einstellungen.
@@ -144,6 +150,38 @@ func (a *App) note(text string) {
 // Protokoll eines von Hand gestarteten Stapels.
 func (a *App) noteWatch(text string) {
 	a.emit("conv:log", LogLine{Text: "[gui] " + text, Slot: watchSlot})
+}
+
+// bookAndForward trägt jede fertig umgewandelte Datei ins Sparbuch ein und
+// reicht die Meldung dann weiter wie bisher.
+//
+// Warum hier und nicht in der Fensterseite: Die Zahl soll auch dann stimmen,
+// wenn niemand hinsieht. Die Oberfläche zeigt nur an, was hier gezählt wurde —
+// eine zweite Buchführung im Fenster wäre eine zweite Wahrheit, und beim
+// nächsten Start wäre nicht mehr zu sagen, welche die richtige war.
+func (a *App) bookAndForward(name string, data ...any) {
+	if name == "conv:event" && len(data) == 1 {
+		if event, ok := data[0].(map[string]any); ok {
+			if savedMB, counted := savedMBFromEvent(event); counted {
+				a.emit("conv:savings", a.savings.Add(savedMB))
+			}
+		}
+	}
+	a.emit(name, data...)
+}
+
+// GetSavings liefert den Stand für die Leiste unten im Fenster.
+func (a *App) GetSavings() SavingsReport {
+	return a.savings.Report()
+}
+
+// ResetSavings setzt die Statistik zurück. Der Knopf dafür steht auf der
+// Einstellungsseite, nicht in der Leiste: Was sich nicht rückgängig machen
+// lässt, gehört nicht neben eine Anzeige, an der man täglich vorbeisieht.
+func (a *App) ResetSavings() SavingsReport {
+	report := a.savings.Reset()
+	a.emit("conv:savings", report)
+	return report
 }
 
 // emit schickt eine Meldung an die Oberfläche. Vor dem Start des Fensters gibt

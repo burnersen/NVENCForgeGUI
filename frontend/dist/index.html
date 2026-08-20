@@ -121,6 +121,18 @@ header {
 
 #body { display: flex; flex: 1; min-height: 0; }
 
+/* ---------- the savings bar ----------
+   Always in view, never in the way: one quiet line along the bottom edge, in
+   the muted colour, with only the two figures themselves in full contrast. */
+#savings {
+  display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap;
+  padding: 7px 18px; border-top: 1px solid var(--line);
+  background: var(--panel); color: var(--muted); font-size: 12.5px;
+}
+#savings b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+#savings .sep { color: var(--line); }
+#savings .files { font-size: 11.5px; }
+
 nav {
   width: 178px; flex: 0 0 auto; border-right: 1px solid var(--line);
   background: var(--panel); padding: 12px 10px; display: flex; flex-direction: column; gap: 4px;
@@ -920,10 +932,31 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
           Changes apply to the next run; a run in progress keeps the settings it started with.
           The version before your last save is kept as NVENCForge_Config.ini.bak.
         </div>
+
+        <!-- The savings counter is written next to the exe and survives every
+             restart, so the only way back to zero is this button. It asks
+             twice, because there is nothing to undo it with. -->
+        <div class="row" style="margin-top:16px">
+          <button class="btn" id="btn-savings-reset">Reset the savings counter</button>
+          <span class="hint" id="savings-reset-note" style="margin:0">The figures along the bottom edge start again at zero.</span>
+        </div>
       </section>
     </div>
     </main>
   </div>
+
+  <!-- What the program has saved. The user asked for it along the bottom,
+       always visible, "but never in the way" — so it is one line, quiet, and
+       it says nothing at all until there is something to say. Resetting it
+       lives on the settings page, not here: a figure you walk past every day
+       should not sit next to a button that wipes it. -->
+  <footer id="savings">
+    <span>Saved</span>
+    <span class="sep">·</span>
+    <span><b id="savings-week">—</b> this week<span class="files" id="savings-week-files"></span></span>
+    <span class="sep">·</span>
+    <span><b id="savings-month">—</b> this month<span class="files" id="savings-month-files"></span></span>
+  </footer>
 </div>
 <div id="tip"></div>
 
@@ -1025,6 +1058,8 @@ const state = {
   config: null,          // values read out of NVENCForge_Config.ini, null = not read (yet)
   cqTouched: false,      // true once the CQ box was edited by hand
   totalLimit: 3,         // how many may work the card at once, as the dispatcher says
+  savings: null,         // what the Go side has counted; null = not asked yet
+  savingsResetAsked: false, // the reset button was clicked once and is waiting
   watch: { folder: "", active: false },
   watchPending: [],   // paths the watcher found that have not run yet
   joinFiles: [],      // the join area's own list, sorted by Go (joinfiles.go)
@@ -2120,6 +2155,48 @@ function renderWatchSummary() {
   if (tally.skipped) parts.push(tally.skipped + " skipped");
   if (tally.failed) parts.push(tally.failed + " not finished");
   box.textContent = parts.join(", ") + " — " + fmtMB(tally.savedMB) + " saved.";
+}
+
+/* ---------- the savings bar ----------
+   The figures come from the Go side, which counts them as the results come in
+   and writes them next to the exe. The window only shows them: a second set of
+   books here would be a second truth, and after a restart nobody could say
+   which of the two was right. */
+
+// showSavings draws the bar. A week with nothing in it says so instead of
+// showing "0.0 MB" — a zero looks like something went wrong, and nothing
+// having been converted yet is not a fault.
+function showSavings(report) {
+  if (report) state.savings = report;
+  const saved = state.savings;
+  const figure = (mb) => (mb > 0 ? fmtMB(mb) : "nothing yet");
+  const files = (count) => (count > 0 ? "  (" + count + (count === 1 ? " file)" : " files)") : "");
+
+  $("savings-week").textContent = saved ? figure(saved.weekMB) : "—";
+  $("savings-month").textContent = saved ? figure(saved.monthMB) : "—";
+  $("savings-week-files").textContent = saved ? files(saved.weekFiles) : "";
+  $("savings-month-files").textContent = saved ? files(saved.monthFiles) : "";
+}
+
+// resetSavings asks twice. There is no way back from it: the counter lives in
+// a file next to the exe, and nothing else in the window could restore it.
+async function resetSavings() {
+  const button = $("btn-savings-reset");
+  const note = $("savings-reset-note");
+  if (!state.savingsResetAsked) {
+    state.savingsResetAsked = true;
+    button.textContent = "Click again to reset";
+    note.textContent = "This cannot be undone — both figures start again at zero.";
+    return;
+  }
+  state.savingsResetAsked = false;
+  button.textContent = "Reset the savings counter";
+  try {
+    showSavings(await api().ResetSavings());
+    note.textContent = "Counter reset.";
+  } catch (err) {
+    note.textContent = "Could not reset it: " + err;
+  }
 }
 
 /* ---------- the track chooser ----------
@@ -3367,6 +3444,7 @@ function wire() {
   $("btn-watch-log-clear").onclick = clearWatchArea;
   $("btn-download").onclick = download;
   $("btn-settings-save").onclick = saveSettings;
+  $("btn-savings-reset").onclick = resetSavings;
   $("btn-settings-defaults").onclick = restoreDefaults;
   $("join-mode").onchange = applyJoinMode;
   $("split-mode").onchange = applySplitMode;
@@ -3474,6 +3552,7 @@ function wire() {
   window.runtime.EventsOn("conv:state", onRunState);
   window.runtime.EventsOn("conv:queue", onQueueState);
   window.runtime.EventsOn("conv:setup", onSetupDone);
+  window.runtime.EventsOn("conv:savings", showSavings);
   window.runtime.EventsOn("conv:download", (info) => {
     if (!info.total) return;
     const done = (info.done / info.total * 100).toFixed(0);
@@ -3502,6 +3581,17 @@ async function boot() {
   applySplitMode();
   applyJoinMode();
   showWatch(null);
+  showSavings(null);
+  try {
+    // The savings bar is filled from its own small call rather than out of the
+    // startup report: that report asks the graphics card about itself and can
+    // take a moment, and the bar has nothing to wait for.
+    showSavings(await api().GetSavings());
+  } catch (err) {
+    // An older window without this call, or a book that could not be read.
+    // The bar simply keeps its dashes — it is a nice-to-have, not a reason to
+    // stop the start.
+  }
   try {
     const info = await api().GetStartupInfo();
     $("gui-version").textContent = "GUI v" + info.guiVersion;

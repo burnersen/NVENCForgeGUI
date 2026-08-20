@@ -87,7 +87,9 @@ function loadGui() {
   // Everything the window would hand to the Go side is recorded instead. That
   // is how a check can see WHICH answer a button really sends — the one thing
   // that decides whether the user gets the tracks they picked.
-  const calls = { answers: [], answerSlots: [], runs: [], joinSorts: [], stops: [], srtSaves: [], themes: [], clipboard: [] };
+  const calls = { answers: [], answerSlots: [], runs: [], joinSorts: [], stops: [], srtSaves: [], themes: [], clipboard: [], savingsResets: [] };
+  // Was das Sparbuch der Go-Seite antworten soll; je Prüfung gesetzt.
+  let savingsReply = { weekMB: 0, weekFiles: 0, monthMB: 0, monthFiles: 0 };
   // What GetSRTCleaner should answer; set per check with setSRTReply.
   let srtReply = { found: false, path: "", note: "not set", phrases: [] };
   // Sorting the join list happens in Go (joinfiles.go) and is tested there.
@@ -122,6 +124,14 @@ function loadGui() {
           // Which theme is written down decides what the window looks like on
           // the NEXT start — a wrong value here is invisible until then.
           GetTheme() { return Promise.resolve("dark"); },
+          // Das Sparbuch führt die Go-Seite. Das Fenster zeigt nur an — und
+          // WAS es beim Zurücksetzen wirklich losschickt, steht hier.
+          GetSavings() { return Promise.resolve(savingsReply); },
+          ResetSavings() {
+            calls.savingsResets.push(true);
+            savingsReply = { weekMB: 0, weekFiles: 0, monthMB: 0, monthFiles: 0 };
+            return Promise.resolve(savingsReply);
+          },
           SaveTheme(theme) { calls.themes.push(theme); return Promise.resolve(); },
           GetSRTCleaner() { return Promise.resolve(srtReply); },
           SaveSRTCleaner(phrases) {
@@ -147,7 +157,7 @@ function loadGui() {
     " splitMode, applySplitMode, SPLIT_MODES," +
     " areaOf, areaOfSlot, areaNameOfSlot, anyRunning, addItems, afterQueueChange," +
     " AREA_NAMES, AREA_SLOTS, finishArea, clearLanes, renderList, showFinalSummary, el," +
-    " onRunState };"
+    " showSavings, resetSavings, onRunState };"
   )(windowStub, documentStub);
 
   return {
@@ -161,7 +171,9 @@ function loadGui() {
     // setJoinReply legt fest, was die Go-Seite auf SortJoinFiles antworten soll.
     setJoinReply: (files) => { joinReply = files; },
     // setSRTReply legt fest, was die Go-Seite auf GetSRTCleaner antworten soll.
-    setSRTReply: (view) => { srtReply = view; }
+    setSRTReply: (view) => { srtReply = view; },
+    // setSavingsReply legt fest, was die Go-Seite als Sparbuch meldet.
+    setSavingsReply: (report) => { savingsReply = report; }
   };
 }
 
