@@ -22,6 +22,10 @@ results, same settings file — just visible.
 - **The track chooser** — when a file has several audio tracks or subtitles, you tick what you want instead of typing numbers.
 - **Every setting explained.** The Settings page is built from `NVENCForge_Config.ini` itself: hover over anything and it tells you what it does, what is allowed, and what your file currently says. The subtitle cleaner's phrase list is editable there too, instead of in a text editor.
 - **Stop one, or stop all.** Each converter has its own ✕; what is already encoded is kept as a playable preview.
+- **Keep your settings under a name.** A set of options you use often can be saved as a profile and picked again with one click — on the Convert page, and for the watched folder as well.
+- **See what it has been worth.** A quiet line along the bottom edge counts two things from the very first run: the space saved and the time spent converting. Nothing else — no week, no month, no resetting itself.
+- **Progress on the taskbar button.** The percentage sits at the front of the window title and fills the taskbar button, so you can send the window away and still see how far it is. When a batch finishes, the button flashes. No sound.
+- **An About page** that says which versions are running, under what licence, what the window is built on, and exactly what it puts on your disk.
 - **Day or night.** A switch at the bottom left turns the window light or dark, and it remembers which you chose. The log keeps its dark ground either way — the colours in there come from the converter itself and are meant for one.
 - **It stays where you put it.** Size and place are remembered between starts, and starting it a second time brings the open window forward instead of opening a rival that fights over the same files.
 
