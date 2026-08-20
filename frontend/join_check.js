@@ -30,6 +30,12 @@ const baseVideo = file("film.NoSound.mkv", "video");
 const german = file("film.ger.m4a", "audio");
 const subtitle = file("film.ger.srt", "subtitle");
 
+// Joining is an area of its own: its own list, its own progress area, its own
+// log, and its own slot at the converter (6) so it can run beside a batch.
+const join = gui.areaOf("join");
+const convert = gui.areaOf("convert");
+const JOIN_SLOT = 6;
+
 function setList(files) {
   gui.state.joinFiles = files;
   gui.afterJoinChange();
@@ -47,22 +53,31 @@ const navBlock = html.slice(html.indexOf("<nav>"), html.indexOf("</nav>"));
 const navOrder = Array.from(navBlock.matchAll(/nav-item[^>]*data-page="(\w+)"/g)).map((m) => m[1]);
 checker.check("the areas stand in the wanted order", navOrder.join(" "), "convert split join watch settings");
 
-console.log("\nThe page brings its own list and lets the shared panels in");
+console.log("\nThe page brings its own list, progress and log");
 checker.check("its own drop area", joinPage.includes('id="join-dropzone"'), true);
 checker.check("its own list", joinPage.includes('id="join-list"'), true);
 checker.check("a result line", joinPage.includes('id="join-result"'), true);
-// The shared queue must NOT be here: it takes video files only, and one join
-// run builds exactly one file — a queue would promise a batch.
-checker.check("no shared queue slot", joinPage.includes('data-slot="queue"'), false);
-checker.check("run slot (progress + log)", joinPage.includes('data-slot="run"'), true);
+checker.check("its own progress", joinPage.includes('id="join-lanes"'), true);
+checker.check("its own log", joinPage.includes('id="join-logbox"'), true);
+checker.check("its own start button", joinPage.includes('id="btn-join-start"'), true);
+// A queue of video files must NOT be here: one join run builds exactly one
+// file, and a queue would promise a batch this mode cannot do.
+checker.check("no queue of video files", joinPage.includes('id="join-queue"'), false);
+// No overall bar either — with one file there is nothing for it to add up, and
+// an empty bar next to a working one reads like something is stuck.
+checker.check("and no overall bar", joinPage.includes('id="join-bar"'), false);
 
-console.log("\nThe page decides what the start button runs");
+console.log("\nThe page decides what its own start button runs");
 gui.showPage("join");
-checker.check("mode follows the page", gui.state.mode, "join");
-checker.check("and the button says so", element("btn-start").textContent, "Join into one MKV");
-checker.check("the request carries it", gui.collectRequest().mode, "join");
+gui.applyJoinMode();
+checker.check("mode follows the page", join.mode, "join");
+checker.check("and the button says so", element("btn-join-start").textContent, "Join into one MKV");
+checker.check("the request carries it", gui.collectRequest(join).mode, "join");
+checker.check("and it names its own area", gui.collectRequest(join).area, "join");
 gui.showPage("convert");
-checker.check("back to converting", gui.state.mode, "");
+// Converting keeps its own button and its own mode — leaving this page cannot
+// change either any more.
+checker.check("converting is untouched", convert.mode, "");
 gui.showPage("join");
 
 console.log("\nOnly the chosen page is on show");
@@ -77,24 +92,24 @@ gui.showPage("join");
 
 console.log("\nStart stays locked until the run can actually work");
 gui.state.converterFound = true;
-gui.state.running = false;
+join.running = false;
 setList([]);
-checker.check("nothing dropped yet", element("btn-start").disabled, true);
+checker.check("nothing dropped yet", element("btn-join-start").disabled, true);
 setList([baseVideo]);
-checker.check("video alone is not enough", element("btn-start").disabled, true);
+checker.check("video alone is not enough", element("btn-join-start").disabled, true);
 setList([german]);
-checker.check("audio without a video is not enough", element("btn-start").disabled, true);
+checker.check("audio without a video is not enough", element("btn-join-start").disabled, true);
 setList([baseVideo, german]);
-checker.check("video + audio starts", element("btn-start").disabled, false);
+checker.check("video + audio starts", element("btn-join-start").disabled, false);
 setList([baseVideo, subtitle]);
-checker.check("video + subtitle alone also starts", element("btn-start").disabled, false);
+checker.check("video + subtitle alone also starts", element("btn-join-start").disabled, false);
 
 // A file that has moved away in the meantime would let the converter give up
 // mid-run — and he reports that only in the log, never in the data channel.
 setList([Object.assign({}, baseVideo, { missing: true }), german]);
-checker.check("a missing video locks it", element("btn-start").disabled, true);
+checker.check("a missing video locks it", element("btn-join-start").disabled, true);
 setList([baseVideo, Object.assign({}, german, { missing: true })]);
-checker.check("a missing audio file locks it", element("btn-start").disabled, true);
+checker.check("a missing audio file locks it", element("btn-join-start").disabled, true);
 
 console.log("\nThe groups are named the way the user reads them");
 // "Picture" was the first wording and the user asked for "Video" — the list
@@ -112,7 +127,7 @@ console.log("\nOnly files the converter can use are handed over");
 const orphan = file("film.ger.sub", "unusable", { note: "a .sub only works together with its .idx file" });
 const companion = file("film.eng.sub", "companion", { note: "goes along with the .idx of the same name" });
 setList([baseVideo, german, subtitle, orphan, companion]);
-const request = gui.collectRequest();
+const request = gui.collectRequest(join);
 checker.check("video first", request.files[0], baseVideo.path);
 checker.check("then audio", request.files[1], german.path);
 checker.check("then subtitles", request.files[2], subtitle.path);
@@ -122,7 +137,7 @@ checker.check("nothing else goes along", request.files.length, 3);
 checker.check("the orphaned .sub stays behind", request.files.includes(orphan.path), false);
 checker.check("the companion .sub stays behind", request.files.includes(companion.path), false);
 // …but an unusable file must not block a run that is otherwise fine.
-checker.check("and it does not block the start", element("btn-start").disabled, false);
+checker.check("and it does not block the start", element("btn-join-start").disabled, false);
 
 console.log("\nWith several videos the user picks the base");
 const second = file("other.mkv", "video");
@@ -131,8 +146,8 @@ checker.check("the first one stands in", gui.joinBase().path, baseVideo.path);
 gui.state.joinBasePath = second.path;
 gui.afterJoinChange();
 checker.check("the chosen one wins", gui.joinBase().path, second.path);
-checker.check("and it is what gets sent", gui.collectRequest().files[0], second.path);
-checker.check("the other video does not come along", gui.collectRequest().files.includes(baseVideo.path), false);
+checker.check("and it is what gets sent", gui.collectRequest(join).files[0], second.path);
+checker.check("the other video does not come along", gui.collectRequest(join).files.includes(baseVideo.path), false);
 // A video that was removed must not stay chosen invisibly.
 setList([baseVideo, german]);
 checker.check("a vanished choice falls back", gui.joinBase().path, baseVideo.path);
@@ -165,27 +180,32 @@ gui.addJoinPaths([german.path]).then(() => {
   checker.check("and the new one too", calls.joinSorts[0][1], german.path);
 
   console.log("\nA join run leaves the queue of the other pages alone");
-  gui.state.queue = [
+  convert.queue = [
     { path: "C:\\v\\film.NoSound.mkv", name: "film.NoSound.mkv", sizeMB: 500, status: "", note: "" }
   ];
-  gui.state.totalMB = 500;
-  gui.onConverterEvent({ ev: "run", mode: "join", version: "1.18.0" });
-  checker.check("joining does not feed on the queue", gui.runUsesQueue(), false);
-  checker.check("no queue entry is re-labelled", gui.state.queue[0].note, "");
-  // The converter names the same file the queue happens to hold — it must not
-  // light up as if it were being worked on.
+  convert.totalMB = 500;
+  // The convert bar is put to its resting state first, so that "it never
+  // moved" is a real reading and not just an element nobody has touched.
+  gui.resetProgress(convert);
+  gui.onConverterEvent({ ev: "run", slot: JOIN_SLOT, mode: "join", version: "1.18.0" });
+  checker.check("no queue entry is re-labelled", convert.queue[0].note, "");
+  // The converter names the same file the convert queue happens to hold — it
+  // must not light up as if it were being worked on.
   gui.onConverterEvent({
-    ev: "file", index: 1, total: 1,
+    ev: "file", slot: JOIN_SLOT, index: 1, total: 1,
     name: "film.NoSound.mkv", path: "C:\\v\\film.NoSound.mkv", in_mb: 14
   });
-  checker.check("and none is marked as running", gui.state.queue[0].status, "");
-  checker.check("the overall bar stays quiet", element("pct-all").textContent, "—");
-  checker.contains("the file is still named", gui.state.slots[1].name, "film.NoSound.mkv");
+  checker.check("and none is marked as running", convert.queue[0].status, "");
+  checker.check("the convert bar stays quiet", element("convert-pct").textContent, "—");
+  // The file is named where it belongs: in this area's own progress display.
+  checker.contains("the file is named here", join.slots[JOIN_SLOT].name, "film.NoSound.mkv");
+  checker.check("and nowhere else", Object.keys(convert.slots).length, 0);
 
-  console.log("\nSplitting still works the old way");
-  gui.onConverterEvent({ ev: "run", mode: "split", version: "1.18.0" });
-  checker.check("split keeps its queue", gui.runUsesQueue(), true);
-  checker.check("and is still a tool run", gui.isToolRun(), true);
+  console.log("\nSplitting keeps its own queue, on its own slot");
+  gui.onConverterEvent({ ev: "run", slot: 5, mode: "split", version: "1.18.0" });
+  checker.check("splitting works from a list", gui.areaOf("split").hasQueue, true);
+  checker.check("joining does not", join.hasQueue, false);
+  checker.check("and both are tool runs", gui.isToolRun(gui.areaOf("split")) && gui.isToolRun(join), true);
 
   // The two ways of joining send the same files but do NOT do the same job:
   // -join copies everything, -davinci re-encodes the audio Resolve cannot read
@@ -195,26 +215,31 @@ gui.addJoinPaths([german.path]).then(() => {
   gui.showPage("join");
   element("join-mode").value = "join";
   gui.applyJoinMode();
-  checker.check("1:1 is the mode", gui.state.mode, "join");
-  checker.check("and the button says so", element("btn-start").textContent, "Join into one MKV");
+  checker.check("1:1 is the mode", join.mode, "join");
+  checker.check("and the button says so", element("btn-join-start").textContent, "Join into one MKV");
   checker.contains("the hint mentions copying", element("join-mode-hint").textContent, "copied exactly as it is");
 
   element("join-mode").value = "joindavinci";
   gui.applyJoinMode();
-  checker.check("Resolve-ready is the mode", gui.state.mode, "joindavinci");
-  checker.check("and the button changes", element("btn-start").textContent, "Join for Resolve");
+  checker.check("Resolve-ready is the mode", join.mode, "joindavinci");
+  checker.check("and the button changes", element("btn-join-start").textContent, "Join for Resolve");
   checker.contains("the hint names AAC", element("join-mode-hint").textContent, "AAC");
 
-  console.log("\nBoth routes draw from the join list, the others do not");
-  checker.check("1:1 does", gui.isJoinMode("join"), true);
-  checker.check("Resolve-ready does", gui.isJoinMode("joindavinci"), true);
-  checker.check("splitting does not", gui.isJoinMode("split"), false);
-  checker.check("converting does not", gui.isJoinMode(""), false);
+  console.log("\nBoth routes draw from the join list, whichever is chosen");
+  // Where the files come from is the area's business now, not the mode's: this
+  // page has no queue at all, so both routes can only take the join list.
+  element("join-mode").value = "join";
+  gui.applyJoinMode();
+  checker.check("1:1 sends the list", gui.collectRequest(join).files[0], baseVideo.path);
+  element("join-mode").value = "joindavinci";
+  gui.applyJoinMode();
+  checker.check("Resolve-ready sends the same", gui.collectRequest(join).files[0], baseVideo.path);
+  checker.check("both are known routes", !!(gui.JOIN_MODES.join && gui.JOIN_MODES.joindavinci), true);
 
-  // A run started as -davinci from the join page must not eat the queue of the
-  // other pages either — it is still a join.
-  gui.onConverterEvent({ ev: "run", mode: "joindavinci", version: "1.18.0" });
-  checker.check("a Resolve join spares the queue", gui.runUsesQueue(), false);
+  // A run started as -davinci from this page must not touch another area's
+  // list either — it is still a join, on the join slot.
+  gui.onConverterEvent({ ev: "run", slot: JOIN_SLOT, mode: "joindavinci", version: "1.18.0" });
+  checker.check("a Resolve join spares the queue", convert.queue[0].status, "");
 
   console.log("\nAn unknown value falls back instead of sending nonsense");
   element("join-mode").value = "something-else";
@@ -226,7 +251,8 @@ gui.addJoinPaths([german.path]).then(() => {
   gui.applySplitMode();
   element("join-mode").value = "joindavinci";
   gui.applyJoinMode();
-  checker.check("the split page keeps its mode", gui.state.mode, "split");
+  checker.check("the split page keeps its mode", gui.areaOf("split").mode, "split");
+  checker.check("and the join page keeps its own", join.mode, "joindavinci");
 
   checker.finish();
 });

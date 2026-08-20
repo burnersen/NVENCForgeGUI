@@ -471,29 +471,29 @@ func (a *App) StartRun(request RunRequest) error {
 	)
 }
 
-// areaOf nimmt nur die beiden bekannten Bereiche an. Alles andere ist das
-// Umwandeln von Hand — der Bereich, aus dem eine Anfrage ohne Angabe stammt.
+// areaOf nimmt jeden bekannten Bereich an. Alles andere ist das Umwandeln von
+// Hand — der Bereich, aus dem eine Anfrage ohne Angabe stammt.
+//
+// Ein vertippter Bereich läuft damit als Umwandeln los statt abzustürzen; dass
+// er überhaupt abgewiesen gehört, prüft der Verteiler in Submit.
 func areaOf(area string) string {
-	if area == areaWatch {
-		return areaWatch
+	if knownArea(area) {
+		return area
 	}
 	return areaConvert
 }
 
-// StopRun löst den sauberen Abbruch für das Umwandeln von Hand aus: wartende
-// Aufträge fallen weg, die laufenden Konverter hören sauber auf.
+// StopArea hält EINEN Bereich sauber an: seine wartenden Aufträge fallen weg,
+// seine laufenden Konverter hören sauber auf.
 //
-// Der beobachtete Ordner bleibt davon unberührt. Wer seinen Stapel abbricht,
-// will nicht nebenbei einen Dauerauftrag stilllegen, von dem auf dieser Seite
-// gar nichts zu sehen ist.
-func (a *App) StopRun() error {
-	return a.dispatcher.RequestStopArea(areaConvert)
-}
-
-// StopWatchRun hält an, was der beobachtete Ordner gerade umwandelt. Die
-// Beobachtung selbst läuft weiter — dafür gibt es den eigenen Knopf.
-func (a *App) StopWatchRun() error {
-	return a.dispatcher.RequestStopArea(areaWatch)
+// Die anderen Bereiche bleiben unberührt. Wer seinen Stapel abbricht, will
+// nicht nebenbei den beobachteten Ordner stilllegen oder das Zusammenfügen —
+// von denen auf seiner Seite gar nichts zu sehen ist.
+func (a *App) StopArea(area string) error {
+	if !knownArea(area) {
+		return fmt.Errorf("app.go: StopArea: unknown area %q", area)
+	}
+	return a.dispatcher.RequestStopArea(area)
 }
 
 // StopSlot hält nur einen einzelnen Konverter an. Die anderen laufen weiter,

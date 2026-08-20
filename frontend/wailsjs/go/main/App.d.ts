@@ -48,11 +48,9 @@ export function StartRun(arg1:main.RunRequest):Promise<void>;
 
 export function StartWatching(arg1:string):Promise<main.WatchState>;
 
-export function StopRun():Promise<void>;
+export function StopArea(arg1:string):Promise<void>;
 
 export function StopSlot(arg1:number):Promise<void>;
-
-export function StopWatchRun():Promise<void>;
 
 export function StopWatching():Promise<main.WatchState>;
 

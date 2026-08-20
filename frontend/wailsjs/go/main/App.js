@@ -94,16 +94,12 @@ export function StartWatching(arg1) {
   return window['go']['main']['App']['StartWatching'](arg1);
 }
 
-export function StopRun() {
-  return window['go']['main']['App']['StopRun']();
+export function StopArea(arg1) {
+  return window['go']['main']['App']['StopArea'](arg1);
 }
 
 export function StopSlot(arg1) {
   return window['go']['main']['App']['StopSlot'](arg1);
-}
-
-export function StopWatchRun() {
-  return window['go']['main']['App']['StopWatchRun']();
 }
 
 export function StopWatching() {

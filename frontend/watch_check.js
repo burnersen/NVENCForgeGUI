@@ -14,6 +14,11 @@ const { loadGui, createChecker } = require("./check_harness");
 const { gui, html, element, calls } = loadGui();
 const checker = createChecker();
 
+// The two areas this file is about. The watched folder runs on slot 4, a batch
+// started by hand on 1..3 — that number is the whole fence.
+const watch = gui.areaOf("watch");
+const convert = gui.areaOf("convert");
+
 const found = (name) => ({
   path: "D:\\Downloads\\" + name, name, folder: "D:\\Downloads", sizeMB: 700, missing: false
 });
@@ -24,10 +29,17 @@ function lastRun() { return calls.runs[calls.runs.length - 1]; }
 
 function reset() {
   calls.runs.length = 0;
-  gui.state.queue = [];
+  // Both areas are put back to a standing start. They run side by side now,
+  // so a leftover "still running" from one check would quietly stop the next
+  // one from ever starting.
+  // Both areas are put back to a standing start. They run side by side now, so
+  // a leftover "still running" in one of them would quietly keep the next
+  // check from ever starting anything.
+  convert.queue = [];
+  convert.running = false;
+  watch.running = false;
+  watch.stopping = false;
   gui.state.watchPending = [];
-  gui.state.running = false;
-  gui.state.watchRunning = false;
   gui.state.converterFound = true;
   gui.state.watch = { folder: "D:\\Downloads", active: true };
 }
@@ -94,12 +106,12 @@ reset();
 gui.onWatchFiles([found("eins.mkv"), found("zwei.mkv")]);
 // The queue on the Convert page is what the user dropped in. A folder filling
 // it was the very thing that made the two areas impossible to tell apart.
-checker.check("the queue stays empty", gui.state.queue.length, 0);
+checker.check("the queue stays empty", convert.queue.length, 0);
 checker.check("one find went off, one waits", gui.state.watchPending.length, 1);
 
 console.log("\nA batch running by hand no longer holds it up");
 reset();
-gui.state.running = true;   // a batch is going on the other page
+convert.running = true;   // a batch is going on the other page
 gui.onWatchFiles([found("waehrenddessen.mkv")]);
 checker.check("it starts anyway", calls.runs.length, 1);
 checker.check("as the watched area", lastRun().area, "watch");
@@ -125,7 +137,7 @@ checker.check("nothing starts on an empty list", calls.runs.length, 2);
 
 console.log("\nNothing is converted twice");
 reset();
-gui.state.watchRunning = true;   // something of its own is already going
+watch.running = true;   // something of its own is already going
 gui.onWatchFiles([found("doppelt.mkv")]);
 gui.onWatchFiles([found("doppelt.mkv")]);
 checker.check("the waiting list holds it once", gui.state.watchPending.length, 1);
@@ -133,7 +145,7 @@ checker.check("and nothing was started", calls.runs.length, 0);
 
 console.log("\nSwitching off stops what was waiting");
 reset();
-gui.state.watchRunning = true;
+watch.running = true;
 gui.onWatchFiles([found("wartet.mkv")]);
 checker.check("it is waiting", gui.state.watchPending.length, 1);
 gui.state.watch.active = false;
@@ -144,7 +156,7 @@ checker.check("after switching off nothing starts", calls.runs.length, 0);
 console.log("\nIts messages land in ITS log");
 // The complaint that started all this: a folder working in the background kept
 // writing into the log of the batch you were reading.
-const convertLog = element("logbox");
+const convertLog = element("convert-logbox");
 const watchLog = element("watch-logbox");
 convertLog.appended = 0;
 watchLog.appended = 0;
@@ -156,15 +168,15 @@ checker.check("the batch writes into its own", convertLog.appended > 0, true);
 
 console.log("\nIts balance is its own");
 reset();
-gui.state.watchTally = { files: 0, success: 0, skipped: 0, failed: 0, savedMB: 0, seconds: 0 };
-gui.state.tally = { files: 0, success: 0, skipped: 0, failed: 0, savedMB: 0, seconds: 0 };
+watch.tally = { files: 0, success: 0, skipped: 0, failed: 0, savedMB: 0, seconds: 0 };
+convert.tally = { files: 0, success: 0, skipped: 0, failed: 0, savedMB: 0, seconds: 0 };
 gui.onConverterEvent({
   ev: "result", slot: gui.WATCH_SLOT, index: 1, status: "success",
   name: "neu.mkv", in_mb: 700, out_mb: 300, saved_mb: 400, saved_pct: 57
 });
-checker.check("the watched folder counted it", gui.state.watchTally.files, 1);
-checker.check("with what it saved", gui.state.watchTally.savedMB, 400);
-checker.check("the batch counted nothing", gui.state.tally.files, 0);
+checker.check("the watched folder counted it", watch.tally.files, 1);
+checker.check("with what it saved", watch.tally.savedMB, 400);
+checker.check("the batch counted nothing", convert.tally.files, 0);
 checker.contains("and it says so on its own page", element("watch-summary").textContent, "saved");
 
 console.log("\nThe Convert page owns up to sharing the card");
@@ -196,12 +208,12 @@ console.log("\nClear takes the folder path with it");
 // the log".
 reset();
 gui.state.watch = { folder: "D:\\Privat\\Serien", active: false };
-gui.state.watchTally = { files: 3, success: 3, skipped: 0, failed: 0, savedMB: 900, seconds: 60 };
+watch.tally = { files: 3, success: 3, skipped: 0, failed: 0, savedMB: 900, seconds: 60 };
 gui.showWatch(null);
 gui.clearWatchArea();
 checker.check("the folder is forgotten  ", gui.state.watch.folder, "");
 checker.check("the display says so      ", element("watch-folder").textContent, "No folder chosen yet.");
-checker.check("the running total is gone", gui.state.watchTally.files, 0);
+checker.check("the running total is gone", watch.tally.files, 0);
 checker.check("and its line with it     ", element("watch-summary").textContent, "");
 
 // While the order is still standing, the path stays: it is still moving

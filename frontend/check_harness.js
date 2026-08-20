@@ -104,7 +104,9 @@ function loadGui() {
           // answer sent to the wrong one would pull the wrong tracks.
           AnswerQuestion(slot, text) { calls.answers.push(text); calls.answerSlots.push(slot); return Promise.resolve(); },
           StartRun(request) { calls.runs.push(request); return Promise.resolve(); },
-          StopRun() { calls.stops.push("all"); return Promise.resolve(); },
+          // Welcher BEREICH angehalten wird, ist der ganze Punkt: ein Stapel
+          // abbrechen darf den beobachteten Ordner nicht mitreißen.
+          StopArea(area) { calls.stops.push(area); return Promise.resolve(); },
           StopSlot(slot) { calls.stops.push(slot); return Promise.resolve(); },
           SortJoinFiles(paths) { calls.joinSorts.push(paths); return Promise.resolve(joinReply); },
           PickJoinFiles() { return Promise.resolve(joinReply); },
@@ -132,14 +134,16 @@ function loadGui() {
     "window", "document",
     scriptText + "\n;return { wire, onConverterEvent, state, applyConfig, refreshFromConfig, bitrateCapKey, HELP," +
     " settingModel, looksInvalid, settingHelp, editSetting, revertSetting, restoreDefaults," +
-    " changedValues, defaultFor, noteGPUAdvice, renderSettings, showPage, log," +
+    " changedValues, defaultFor, noteGPUAdvice, renderSettings, showPage, log, note," +
     " onQuestion, sendAnswer, askSelection, isExtraOption, isToolRun, collectRequest, resetProgress," +
-    " runUsesQueue, updateButtons, afterJoinChange, addJoinPaths, joinBase, joinOfKind," +
+    " updateButtons, afterJoinChange, addJoinPaths, joinBase, joinOfKind," +
     " joinReady, joinRunFiles, onWatchFiles, maybeStartWatchRun, showWatch, clearWatchArea, runWentThroughCleanly, clearFinishedList, stopWatching, stopWatchRun, collectWatchRequest, onQueueState, renderWatchSummary, isWatchSlot, WATCH_SLOT, limitParallelChoice, watchNote," +
-    " startBatch, clearProgress, updateOverall, stopSlot, stop, renderLanes," +
+    " startBatch, clearProgress, updateOverall, stopSlot, stop, start, renderLanes," +
     " loadSRTCleaner, renderSRTCleaner, addSRTPhrase, saveSRTPhrases, srtSignature," +
-    " joinMode, isJoinMode, applyJoinMode, JOIN_MODES, applyTheme, chooseTheme, THEMES," +
+    " joinMode, applyJoinMode, JOIN_MODES, applyTheme, chooseTheme, THEMES," +
     " splitMode, applySplitMode, SPLIT_MODES," +
+    " areaOf, areaOfSlot, areaNameOfSlot, anyRunning, addItems, afterQueueChange," +
+    " AREA_NAMES, AREA_SLOTS, finishArea, clearLanes, renderList, showFinalSummary, el," +
     " onRunState };"
   )(windowStub, documentStub);
 

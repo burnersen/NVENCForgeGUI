@@ -175,18 +175,19 @@ details > .notes { margin-top: 6px; }
 .btn.danger { border-color: var(--danger-line); color: var(--danger-text); }
 .btn.danger:hover:not(:disabled) { border-color: var(--bad); }
 
-/* ---------- queue ---------- */
-/* The join area has a list of its own (it takes audio and subtitles too), but
-   it should look exactly like the queue — same rules, one place to change. */
-#dropzone, #join-dropzone {
+/* ---------- file lists ---------- */
+/* Every area has a list of its own now — convert, split, join and the watched
+   folder. They are styled by class rather than by id: one rule for all of
+   them, instead of a list of ids that the next area is forgotten from. */
+.dropzone {
   border: 1.5px dashed var(--line); border-radius: var(--radius);
   padding: 18px; text-align: center; color: var(--muted); margin-bottom: 10px;
 }
-#dropzone.hot, #join-dropzone.hot { border-color: var(--accent); color: var(--accent); }
-#dropzone b, #join-dropzone b { color: var(--text); display: block; margin-bottom: 3px; }
+.dropzone.hot { border-color: var(--accent); color: var(--accent); }
+.dropzone b { color: var(--text); display: block; margin-bottom: 3px; }
 
-#queue, #join-list { max-height: 240px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; }
-#queue:empty, #join-list:empty { display: none; }
+.filelist { max-height: 240px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; }
+.filelist:empty { display: none; }
 .item {
   display: grid; grid-template-columns: 22px 1fr auto auto 26px;
   align-items: center; gap: 10px; padding: 7px 10px; border-bottom: 1px solid var(--line);
@@ -294,7 +295,7 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
 .barline .pct { width: 54px; text-align: right; font-variant-numeric: tabular-nums; font-size: 12.5px; }
 .barline .bar { flex: 1; }
 /* ---------- one lane per running converter ---------- */
-#lanes, #watch-lanes { margin-bottom: 10px; }
+.lanes { margin-bottom: 10px; }
 .lane-idle { color: var(--muted); font-size: 13px; padding: 2px 0 8px; }
 .lane { display: grid; grid-template-columns: 20px 1fr; gap: 9px; align-items: start; padding: 5px 0; }
 .lane + .lane { border-top: 1px solid var(--line); }
@@ -311,23 +312,31 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
 .lane-stop:disabled { opacity: .25; }
 .lane-stats { color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; min-height: 15px; }
 .log-slot { color: var(--muted); }
-#summary, #watch-summary {
+.summary {
   margin-top: 12px; padding: 10px 12px; border-radius: 8px;
   background: var(--panel-2); border: 1px solid var(--line); font-size: 13px; display: none;
+}
+/* Once a run is over this line is the only thing left of the progress area, so
+   it carries the whole answer to "what did it just do?". It is allowed to
+   stand out for that — heavier type and a hint of the accent colour, not a
+   colour that shouts. */
+.summary.final {
+  font-weight: 600; color: var(--text);
+  background: var(--wash); border-color: var(--accent-dim);
 }
 
 /* ---------- log ----------
    The converter draws a real terminal picture. Its colours are kept and shown
    as they are meant to look; only the cursor commands are removed. */
 /* Its ground stays dark in the day theme too — see the note on the palette. */
-#logbox, #watch-logbox {
+.logbox {
   background: #0d0d0f; border: 1px solid var(--line); border-radius: 8px;
   padding: 8px 10px; height: 220px; overflow-y: auto;
   font: 12px/1.5 Consolas, "Cascadia Mono", monospace; white-space: pre;
   overflow-x: auto; user-select: text; color: #c8c8ce;
 }
-#logbox div, #watch-logbox div { min-height: 1.5em; }
-#logbox div.gui, #watch-logbox div.gui { color: var(--accent); }
+.logbox div { min-height: 1.5em; }
+.logbox div.gui { color: var(--accent); }
 .spacer { flex: 1; }
 .err { color: var(--bad); font-size: 12.5px; }
 
@@ -423,20 +432,19 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
 
     <main>
     <div id="page-convert">
-      <div class="shared-slot" data-slot="queue"></div>
-      <section class="panel" id="panel-queue">
+      <section class="panel">
         <h2>Queue</h2>
-        <div id="dropzone">
+        <div class="dropzone" id="convert-dropzone">
           <b>Drop video files or folders here</b>
           Folders are searched completely.
         </div>
-        <div id="queue"></div>
+        <div class="filelist" id="convert-queue"></div>
         <div class="row" style="margin-top:10px">
-          <button class="btn" id="btn-files">Add files…</button>
-          <button class="btn" id="btn-folder">Add folder…</button>
-          <button class="btn" id="btn-clear">Clear</button>
+          <button class="btn" id="btn-convert-files">Add files…</button>
+          <button class="btn" id="btn-convert-folder">Add folder…</button>
+          <button class="btn" id="btn-convert-clear">Clear</button>
           <div class="spacer"></div>
-          <span class="hint" id="queue-info" style="margin:0"></span>
+          <span class="hint" id="convert-queue-info" style="margin:0"></span>
         </div>
       </section>
 
@@ -523,38 +531,37 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
         </div>
       </section>
 
-      <div class="shared-slot" data-slot="run"></div>
-      <section class="panel" id="panel-progress">
+      <section class="panel">
         <h2>Progress</h2>
         <!-- One line per converter. Up to three can run at once, and each of
              them only ever reports on its own file. -->
-        <div id="lanes"><div class="lane-idle">Idle.</div></div>
+        <div class="lanes" id="convert-lanes"><div class="lane-idle">Idle.</div></div>
 
-        <div class="barline">
+        <div class="barline" id="convert-barline">
           <span class="label">All files</span>
-          <div class="bar overall"><i id="bar-all"></i></div>
-          <span class="pct" id="pct-all">—</span>
+          <div class="bar overall"><i id="convert-bar"></i></div>
+          <span class="pct" id="convert-pct">—</span>
         </div>
 
-        <div id="summary"></div>
+        <div class="summary" id="convert-summary"></div>
 
         <div class="row" style="margin-top:12px">
-          <button class="btn primary" id="btn-start">Start</button>
-          <button class="btn danger" id="btn-stop" disabled>Stop cleanly</button>
-          <span class="hint" style="margin:0" id="stop-hint"></span>
+          <button class="btn primary" id="btn-convert-start">Start</button>
+          <button class="btn danger" id="btn-convert-stop" disabled>Stop cleanly</button>
+          <span class="hint" style="margin:0" id="convert-stop-hint"></span>
           <div class="spacer"></div>
-          <span class="err" id="error-text"></span>
+          <span class="err" id="convert-error"></span>
         </div>
       </section>
 
-      <section class="panel" id="panel-log">
-        <h2>Log <span style="text-transform:none;letter-spacing:0">— the converter's own screen output</span></h2>
-        <div id="logbox"></div>
+      <section class="panel">
+        <h2>Log <span style="text-transform:none;letter-spacing:0">— what the converter says while converting</span></h2>
+        <div class="logbox" id="convert-logbox"></div>
         <div class="row" style="margin-top:8px">
-          <button class="btn" id="btn-log-copy">Copy log</button>
-          <button class="btn" id="btn-log-clear">Clear log</button>
-          <label class="check"><input type="checkbox" id="opt-autoscroll" checked /> Follow</label>
-          <span class="hint" id="log-copied" style="margin:0"></span>
+          <button class="btn" id="btn-convert-log-copy">Copy log</button>
+          <button class="btn" id="btn-convert-log-clear">Clear log</button>
+          <label class="check"><input type="checkbox" id="convert-autoscroll" checked /> Follow</label>
+          <span class="hint" id="convert-log-copied" style="margin:0"></span>
         </div>
       </section>
     </div>
@@ -564,7 +571,21 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
          exactly the way Join already asks it: same files, same queue, one
          question about what should come out. -->
     <div id="page-split" hidden>
-      <div class="shared-slot" data-slot="queue"></div>
+      <section class="panel">
+        <h2>Files to take apart</h2>
+        <div class="dropzone" id="split-dropzone">
+          <b>Drop video files or folders here</b>
+          Folders are searched completely.
+        </div>
+        <div class="filelist" id="split-queue"></div>
+        <div class="row" style="margin-top:10px">
+          <button class="btn" id="btn-split-files">Add files…</button>
+          <button class="btn" id="btn-split-folder">Add folder…</button>
+          <button class="btn" id="btn-split-clear">Clear</button>
+          <div class="spacer"></div>
+          <span class="hint" id="split-queue-info" style="margin:0"></span>
+        </div>
+      </section>
 
       <section class="panel">
         <h2>What this does</h2>
@@ -607,7 +628,37 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
         </div>
       </section>
 
-      <div class="shared-slot" data-slot="run"></div>
+      <section class="panel">
+        <h2>Progress</h2>
+        <div class="lanes" id="split-lanes"><div class="lane-idle">Idle.</div></div>
+
+        <div class="barline" id="split-barline">
+          <span class="label">All files</span>
+          <div class="bar overall"><i id="split-bar"></i></div>
+          <span class="pct" id="split-pct">—</span>
+        </div>
+
+        <div class="summary" id="split-summary"></div>
+
+        <div class="row" style="margin-top:12px">
+          <button class="btn primary" id="btn-split-start">Split losslessly</button>
+          <button class="btn danger" id="btn-split-stop" disabled>Stop cleanly</button>
+          <span class="hint" style="margin:0" id="split-stop-hint"></span>
+          <div class="spacer"></div>
+          <span class="err" id="split-error"></span>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Log <span style="text-transform:none;letter-spacing:0">— only what taking files apart does</span></h2>
+        <div class="logbox" id="split-logbox"></div>
+        <div class="row" style="margin-top:8px">
+          <button class="btn" id="btn-split-log-copy">Copy log</button>
+          <button class="btn" id="btn-split-log-clear">Clear log</button>
+          <label class="check"><input type="checkbox" id="split-autoscroll" checked /> Follow</label>
+          <span class="hint" id="split-log-copied" style="margin:0"></span>
+        </div>
+      </section>
     </div>
 
     <!-- Join has a list of its own instead of the shared queue: it takes audio
@@ -615,11 +666,11 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
     <div id="page-join" hidden>
       <section class="panel" id="panel-join">
         <h2>Files to join</h2>
-        <div id="join-dropzone">
+        <div class="dropzone" id="join-dropzone">
           <b>Drop the video file plus its audio and subtitle files here</b>
           They are sorted by extension. Dropping a folder adds the files inside it.
         </div>
-        <div id="join-list"></div>
+        <div class="filelist" id="join-list"></div>
         <div class="row" style="margin-top:10px">
           <button class="btn" id="btn-join-files">Add files…</button>
           <button class="btn" id="btn-join-clear">Clear</button>
@@ -658,7 +709,31 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
         </div>
       </section>
 
-      <div class="shared-slot" data-slot="run"></div>
+      <section class="panel">
+        <h2>Progress</h2>
+        <div class="lanes" id="join-lanes"><div class="lane-idle">Idle.</div></div>
+
+        <div class="summary" id="join-summary"></div>
+
+        <div class="row" style="margin-top:12px">
+          <button class="btn primary" id="btn-join-start">Join into one MKV</button>
+          <button class="btn danger" id="btn-join-stop" disabled>Stop cleanly</button>
+          <span class="hint" style="margin:0" id="join-stop-hint"></span>
+          <div class="spacer"></div>
+          <span class="err" id="join-error"></span>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Log <span style="text-transform:none;letter-spacing:0">— only what joining does</span></h2>
+        <div class="logbox" id="join-logbox"></div>
+        <div class="row" style="margin-top:8px">
+          <button class="btn" id="btn-join-log-copy">Copy log</button>
+          <button class="btn" id="btn-join-log-clear">Clear log</button>
+          <label class="check"><input type="checkbox" id="join-autoscroll" checked /> Follow</label>
+          <span class="hint" id="join-log-copied" style="margin:0"></span>
+        </div>
+      </section>
     </div>
 
     <!-- Watching a folder used to sit on the Convert page, because it converts
@@ -780,8 +855,8 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
            kept overwriting the display of the batch you were watching. -->
       <section class="panel" id="panel-watch-progress">
         <h2>Progress</h2>
-        <div id="watch-lanes"><div class="lane-idle">Nothing running.</div></div>
-        <div id="watch-summary"></div>
+        <div class="lanes" id="watch-lanes"><div class="lane-idle">Nothing running.</div></div>
+        <div class="summary" id="watch-summary"></div>
         <div class="row" style="margin-top:12px">
           <button class="btn danger" id="btn-watch-stop-run" disabled>Stop this file</button>
           <span class="hint" style="margin:0" id="watch-run-hint"></span>
@@ -792,7 +867,7 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
 
       <section class="panel" id="panel-watch-log">
         <h2>Log <span style="text-transform:none;letter-spacing:0">— only what the watched folder does</span></h2>
-        <div id="watch-logbox"></div>
+        <div class="logbox" id="watch-logbox"></div>
         <div class="row" style="margin-top:8px">
           <button class="btn" id="btn-watch-log-copy">Copy log</button>
           <button class="btn" id="btn-watch-log-clear" title="Clears the log, the running total and the folder path">Clear</button>
@@ -874,51 +949,87 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
 "use strict";
 
 /* ---------------------------------------------------------------------------
-   State. queue[] is the single source of truth for the list; every event from
-   the converter is matched onto it by file path.
+   State.
+
+   The window has four areas that run side by side: converting by hand, taking
+   files apart, joining, and the watched folder. Each of them keeps its own
+   books — its own list, its own converters, its own balance, its own log — so
+   that none of them can write into another one's display while it works.
+   Shared is only what belongs to the whole window: the converter that was
+   found, the INI, the theme.
+
+   Which area a message belongs to is worked out from its slot number alone
+   (areaNameOfSlot), exactly as the Go side does it (dispatcher.go). That is
+   what kept this change small: not one event had to grow an extra field.
    --------------------------------------------------------------------------- */
+
+// Which slots belong to which area. The same division exists in Go and the two
+// MUST agree — the slot number is the only thing that says where a message
+// belongs.
+const AREA_NAMES = ["convert", "split", "join", "watch"];
+const AREA_SLOTS = { convert: [1, 2, 3], split: [5], join: [6], watch: [4] };
+const WATCH_SLOT = 4;
+
+const SLOT_AREA = {};
+AREA_NAMES.forEach((name) => AREA_SLOTS[name].forEach((slot) => { SLOT_AREA[slot] = name; }));
+
+// What an area says when nothing is running. The watched folder says it
+// differently on purpose: it is not idle, it is on duty.
+const AREA_IDLE = { convert: "Idle.", split: "Idle.", join: "Idle.", watch: "Nothing running." };
+
+// newArea is everything one area has to remember about its own work.
+function newArea(name) {
+  return {
+    name: name,
+    // Converting and taking apart work from a list of video files. Joining has
+    // a list of its own shape (state.joinFiles), the watched folder has none —
+    // it is handed its files by the folder itself.
+    hasQueue: name === "convert" || name === "split",
+    // An overall bar only means something where several files are worked
+    // through. Joining builds exactly one file, and a standing order has no
+    // end to count towards.
+    hasBar: name === "convert" || name === "split",
+    mode: name === "convert" || name === "watch" ? "" : name, // what the start button runs
+    queue: [],          // { path, name, folder, sizeMB, missing, status, savedPct, note }
+    slots: {},          // slot number -> what that converter is doing right now
+    byIndex: {},        // "slot:file number" -> queue entry (result events only carry the number)
+    batch: null,        // lower-cased paths of the files this run is about
+    // Running balance over this area's converters. Filled in from the start,
+    // not null: an event arriving before the first start must not hit a hole
+    // and take the whole display down with it.
+    tally: { files: 0, success: 0, skipped: 0, failed: 0, savedMB: 0, seconds: 0 },
+    running: false,
+    stopping: false,
+    stopClicks: 0,
+    trouble: false,     // the converter reported an error or ended badly
+    parallel: 1,        // how many converters this area may use at once
+    active: 0,          // converters working, as reported by the dispatcher
+    pending: 0,         // jobs still waiting for a free slot
+    runMode: "convert", // what the running converter says it is doing
+    runAnnounced: false,// the "run started" line is written once per batch
+    answerAll: false,   // "stop asking" was clicked here: every question gets "all tracks"
+    finished: false,    // a run is over — lanes cleared, result line left standing
+    lastLogSlot: 0,     // which converter wrote the last line in this log
+    totalMB: 0
+  };
+}
+
 const state = {
-  queue: [],          // { path, name, folder, sizeMB, missing, status, savedPct, note }
-  running: false,
-  stopping: false,
-  stopClicks: 0,
-  totalMB: 0,
-  doneMB: 0,          // input MB of files already finished
-  slots: {},          // slot number -> what that converter is doing right now
-  parallel: 1,        // how many converters the current batch may use
-  active: 0,          // converters working, as reported by the dispatcher
-  pending: 0,         // jobs still waiting for a free slot
-  // Running balance over all converters of this batch. Filled in from the
-  // start, not null: an event arriving before the first start must not hit a
-  // hole and take the whole display down with it.
-  tally: { files: 0, success: 0, skipped: 0, failed: 0, savedMB: 0, seconds: 0 },
-  batch: null,        // lower-cased paths of the files this run is about
+  areas: {},          // filled in right below, one entry per area
   setupRunning: false,// the converter is writing its configuration right now
   setupTried: false,  // it was offered once this window; not again
-  runAnnounced: false,// the "run started" line is written once per batch
-  lastLogSlot: 0,     // which converter wrote the last log line
   questions: [],      // open track questions, one per waiting converter
-  byIndex: {},        // "slot:file number" -> queue entry (result events only carry the number)
   eventChannel: false,
   converterFound: false,
   forceDownload: false,  // set after a download was held back on purpose
   config: null,          // values read out of NVENCForge_Config.ini, null = not read (yet)
   cqTouched: false,      // true once the CQ box was edited by hand
+  totalLimit: 3,         // how many may work the card at once, as the dispatcher says
   watch: { folder: "", active: false },
   watchPending: [],   // paths the watcher found that have not run yet
-  // The watched folder keeps its own books. It runs beside a batch started by
-  // hand, so mixing the two would mean a bar that jumps and a balance that
-  // counts files nobody put in the list.
-  watchRunning: false,
-  watchStopping: false,
-  watchTally: { files: 0, success: 0, skipped: 0, failed: 0, savedMB: 0, seconds: 0 },
-  lastWatchLogSlot: 0,
   joinFiles: [],      // the join area's own list, sorted by Go (joinfiles.go)
   joinBasePath: "",   // path of the video file the join is built on
   page: "convert",
-  mode: "",                 // what the start button will run: "" = convert, "davinci", …
-  runMode: "convert",       // what the running converter is doing: convert | davinci | split | join
-  answerAllThisRun: false,  // set by "stop asking": every further question gets "all tracks"
   settingsFile: null,    // the whole INI as parsed by the app
   theme: "dark",         // day or night, as last chosen; see applyTheme
   edits: {},             // key -> value typed on the settings page, not saved yet
@@ -927,12 +1038,27 @@ const state = {
   // the Save button can tell a real change from a round trip.
   srt: { view: null, phrases: [], saved: "" }
 };
+AREA_NAMES.forEach((name) => { state.areas[name] = newArea(name); });
 
-// The converter on this slot is the watched folder's. Slots 1..3 belong to
-// converting by hand. The same split exists on the Go side (dispatcher.go) and
-// the two must agree: it is the only thing that tells a message where to go.
-const WATCH_SLOT = 4;
+function areaOf(name) { return state.areas[name] || state.areas.convert; }
+
+// anyRunning: is a converter working anywhere in the window? Only worth asking
+// where something concerns the whole program — saving the INI, for instance.
+function anyRunning() { return AREA_NAMES.some((name) => areaOf(name).running); }
+function areaNameOfSlot(slot) { return SLOT_AREA[Number(slot)] || "convert"; }
+function areaOfSlot(slot) { return areaOf(areaNameOfSlot(slot)); }
 const isWatchSlot = (slot) => Number(slot) === WATCH_SLOT;
+
+// el picks one of an area's own elements. Every area names them the same way —
+// "convert-lanes", "split-lanes", "watch-lanes" — so the display an event
+// reaches follows from its slot without a table of ids anywhere.
+function el(area, role) { return $(area.name + "-" + role); }
+
+// visibleArea is the area someone is actually looking at. Messages that belong
+// to no run in particular (a download, a failed start) land in its log, rather
+// than in one the user would have to go looking for. The settings page has no
+// log, so there it falls back to converting.
+function visibleArea() { return state.areas[state.page] ? state.page : "convert"; }
 
 const MAX_LOG_LINES = 400;
 const $ = (id) => document.getElementById(id);
@@ -945,11 +1071,17 @@ function fmtMB(mb) {
   return mb.toFixed(1) + " MB";
 }
 function pct(value) { return Math.max(0, Math.min(100, value)); }
-function setBar(barId, pctId, value, known) {
-  $(barId).style.width = known ? pct(value) + "%" : "0%";
-  $(pctId).textContent = known ? pct(value).toFixed(1) + " %" : "—";
+function setBar(area, value, known) {
+  el(area, "bar").style.width = known ? pct(value) + "%" : "0%";
+  el(area, "pct").textContent = known ? pct(value).toFixed(1) + " %" : "—";
 }
-function showError(message) { $("error-text").textContent = message || ""; }
+// showError puts the trouble on the page it belongs to. An error from a
+// background folder appearing over the batch you are watching would read as if
+// the batch had failed — and the other way round just as much.
+function showError(message, areaName) {
+  const box = el(areaOf(areaName || visibleArea()), "error");
+  if (box) box.textContent = message || "";
+}
 
 /* ---------------------------------------------------------------------------
    Log. The converter writes a real terminal picture: colours as escape codes,
@@ -1013,23 +1145,21 @@ function renderTerminalText(raw) {
 function log(line) {
   const entry = typeof line === "string" ? { text: line, back: 0 } : line;
   const slot = entry.slot || 0;
-  // Two logs, told apart by the slot alone. This is the whole separation the
-  // window needed: a folder working quietly in the background used to redraw
-  // its lines into the log of the batch you were reading.
-  const watched = isWatchSlot(slot);
-  const box = $(watched ? "watch-logbox" : "logbox");
-  const lastSlot = watched ? state.lastWatchLogSlot : state.lastLogSlot;
+  // Four logs, told apart by the slot alone. This is the whole separation the
+  // window needed: an area working in the background used to redraw its lines
+  // into the log of the run you were reading.
+  const area = entry.area ? areaOf(entry.area) : areaOfSlot(slot);
+  const box = el(area, "logbox");
 
   // A redraw first takes back what it overwrites — but only its OWN lines.
-  // With two converters writing at once, a redraw from one of them would
+  // With several converters writing at once, a redraw from one of them would
   // otherwise delete the other one's lines, and the log would eat itself.
-  const back = slot === lastSlot ? (entry.back || 0) : 0;
+  const back = slot === area.lastLogSlot ? (entry.back || 0) : 0;
   for (let i = 0; i < back && box.lastElementChild; i++) {
     box.removeChild(box.lastElementChild);
   }
   if (!entry.text) return;
-  if (watched) state.lastWatchLogSlot = slot;
-  else state.lastLogSlot = slot;
+  area.lastLogSlot = slot;
   noteGPUAdvice(entry.text);
 
   const row = document.createElement("div");
@@ -1037,9 +1167,9 @@ function log(line) {
     row.className = "gui";
     row.textContent = entry.text;
   } else {
-    // Which converter said it — only worth showing when more than one can talk.
-    // Never in the watched folder's log: only one converter writes there.
-    if (slot > 0 && !watched && state.parallel > 1) {
+    // Which converter said it — only worth showing where more than one can
+    // talk. In the areas that only ever run one, the number would be noise.
+    if (slot > 0 && AREA_SLOTS[area.name].length > 1 && area.parallel > 1) {
       const tag = document.createElement("span");
       tag.className = "log-slot";
       tag.textContent = "[" + slot + "] ";
@@ -1049,21 +1179,27 @@ function log(line) {
   }
   box.appendChild(row);
   while (box.childElementCount > MAX_LOG_LINES) box.removeChild(box.firstChild);
-  if ($(watched ? "watch-autoscroll" : "opt-autoscroll").checked) box.scrollTop = box.scrollHeight;
+  if (el(area, "autoscroll").checked) box.scrollTop = box.scrollHeight;
 }
 
-// watchNote is what the window has to say about the watched folder. Same shape
-// as note(), but it lands in the other log.
-function watchNote(t) { log({ text: "[gui] " + t, back: 0, slot: WATCH_SLOT }); }
+// note is what the window itself has to say, never the converter. Without an
+// area it goes to the page on show — see visibleArea.
+function note(text, areaName) {
+  log({ text: "[gui] " + text, back: 0, area: areaName || visibleArea() });
+}
 
-// note is what the window itself has to say, never the converter.
-function note(text) { log({ text: "[gui] " + text, back: 0 }); }
+// watchNote keeps the watched folder's own remarks in its own log, whichever
+// page happens to be on show at the time.
+function watchNote(text) { note(text, "watch"); }
 
-/* ---------- queue rendering ---------- */
-function renderQueue() {
-  const box = $("queue");
+/* ---------- queue rendering ----------
+   Converting and taking apart each have a list of their own. That the same
+   file has to be dropped into both to do both is meant: one area converting
+   while the other takes files apart is the whole point of the separation. */
+function renderQueue(area) {
+  const box = el(area, "queue");
   box.innerHTML = "";
-  state.queue.forEach((entry, index) => {
+  area.queue.forEach((entry, index) => {
     const row = document.createElement("div");
     row.className = "item" + (entry.status === "running" ? " active" : "");
 
@@ -1092,38 +1228,46 @@ function renderQueue() {
     remove.className = "x";
     remove.textContent = "✕";
     remove.title = "Remove from queue";
-    remove.disabled = state.running;
-    remove.onclick = () => { state.queue.splice(index, 1); afterQueueChange(); };
+    remove.disabled = area.running;
+    remove.onclick = () => { area.queue.splice(index, 1); afterQueueChange(area); };
 
     row.append(idx, name, size, status, remove);
     box.appendChild(row);
   });
 }
-function afterQueueChange() {
-  state.totalMB = state.queue.reduce((sum, e) => sum + (e.sizeMB || 0), 0);
-  $("queue-info").textContent = state.queue.length
-    ? state.queue.length + " file(s), " + fmtMB(state.totalMB)
+function afterQueueChange(area) {
+  area.totalMB = area.queue.reduce((sum, e) => sum + (e.sizeMB || 0), 0);
+  el(area, "queue-info").textContent = area.queue.length
+    ? area.queue.length + " file(s), " + fmtMB(area.totalMB)
     : "";
-  renderQueue();
+  renderQueue(area);
   updateButtons();
 }
-function addItems(items) {
+function addItems(items, area) {
   if (!items || !items.length) return;
-  const known = new Set(state.queue.map((e) => e.path.toLowerCase()));
+  const known = new Set(area.queue.map((e) => e.path.toLowerCase()));
   let added = 0;
   for (const item of items) {
     if (known.has(item.path.toLowerCase())) continue;
     known.add(item.path.toLowerCase());
-    state.queue.push(Object.assign({ status: "", note: "" }, item));
+    area.queue.push(Object.assign({ status: "", note: "" }, item));
     added++;
   }
-  if (added > 0) note(added + " file(s) added to the queue.");
-  afterQueueChange();
+  if (added > 0) note(added + " file(s) added to the list.", area.name);
+  afterQueueChange(area);
 }
-function findEntry(path) {
+function findEntry(path, area) {
   if (!path) return null;
   const wanted = path.toLowerCase();
-  return state.queue.find((e) => e.path.toLowerCase() === wanted) || null;
+  return area.queue.find((e) => e.path.toLowerCase() === wanted) || null;
+}
+
+// renderList redraws whatever list the area works from. Which one that is
+// belongs to the area, not to the caller: an event knows its slot, not whether
+// the files behind it came from a queue or from the join list.
+function renderList(area) {
+  if (area.name === "join") { renderJoin(); return; }
+  if (area.hasQueue) renderQueue(area);
 }
 
 /* ---------- join list ----------
@@ -1226,13 +1370,13 @@ function joinRow(file, base) {
   remove.className = "x";
   remove.textContent = "✕";
   remove.title = "Remove from the list";
-  remove.disabled = state.running;
+  remove.disabled = areaOf("join").running;
   remove.onclick = (event) => {
     event.stopPropagation();
     setJoinPaths(state.joinFiles.filter((other) => other.path !== file.path).map((other) => other.path));
   };
 
-  if (file.kind === "video" && !state.running) {
+  if (file.kind === "video" && !areaOf("join").running) {
     row.onclick = () => { state.joinBasePath = file.path; afterJoinChange(); };
   }
 
@@ -1336,15 +1480,16 @@ function onWatchFiles(items) {
 // the watched folder's OWN slot - a batch running by hand no longer holds it
 // up, and one find at a time keeps that slot honest.
 function maybeStartWatchRun() {
-  if (!state.watch.active || state.watchRunning || !state.watchPending.length) return;
+  const area = areaOf("watch");
+  if (!state.watch.active || area.running || !state.watchPending.length) return;
   const files = state.watchPending.slice(0, 1);
   state.watchPending = state.watchPending.slice(1);
-  showWatchError("");
-  state.watchRunning = true;
+  showError("", "watch");
+  area.running = true;
   updateButtons();
   api().StartRun(collectWatchRequest(files)).catch((err) => {
-    state.watchRunning = false;
-    showWatchError(String(err));
+    area.running = false;
+    showError(String(err), "watch");
     watchNote("start refused: " + err);
     // Put it back, otherwise it would be silently forgotten.
     state.watchPending = files.concat(state.watchPending);
@@ -1373,7 +1518,7 @@ async function pickWatchFolder() {
     if (state.watch.active) await startWatching();
     else showWatch(null);
   } catch (err) {
-    showError(String(err));
+    showError(String(err), "watch");
   }
 }
 
@@ -1384,8 +1529,8 @@ async function startWatching() {
     showWatch(result);
   } catch (err) {
     state.watch.active = false;
-    showError(String(err));
-    note("Could not watch that folder: " + err);
+    showError(String(err), "watch");
+    note("Could not watch that folder: " + err, "watch");
     showWatch(null);
   }
 }
@@ -1400,55 +1545,65 @@ async function stopWatching() {
     state.watchPending = [];
     showWatch(result);
   } catch (err) {
-    showWatchError(String(err));
+    showError(String(err), "watch");
   }
 }
 
 // stopWatchRun ends the file the watched folder is converting right now. The
 // standing order itself carries on - the next video that turns up is taken.
 async function stopWatchRun() {
-  if (!state.watchRunning) return;
-  state.watchStopping = true;
+  const area = areaOf("watch");
+  if (!area.running) return;
+  area.stopping = true;
   updateButtons();
   try {
-    await api().StopWatchRun();
+    await api().StopArea("watch");
   } catch (err) {
-    state.watchStopping = false;
+    area.stopping = false;
     updateButtons();
-    showWatchError(String(err));
+    showError(String(err), "watch");
   }
 }
 
-// showWatchError keeps the watched folder's troubles on its own page. An error
-// from a background folder appearing over a batch you are running would look
-// like the batch had failed.
-function showWatchError(message) { $("watch-error").textContent = message || ""; }
-
 /* ---------- buttons ---------- */
+// areaHasWork: what would actually start here. The join page asks its own
+// question — one video file plus at least one audio or subtitle file. Started
+// with anything else, the converter says nothing at all in his data channel:
+// he sends his "run" event and ends without a word (measured 2026-08-18). A
+// locked button is the only honest answer to that.
+function areaHasWork(area) {
+  return area.name === "join" ? joinReady() : area.queue.length > 0;
+}
+
 function updateButtons() {
-  // The join page has its own list and its own conditions: one video file
-  // plus at least one audio or subtitle file. Started with anything else, the
-  // converter says nothing at all in his data channel — he sends his "run"
-  // event and ends without a word (measured 2026-08-18). A locked button is
-  // the only honest answer to that.
-  const hasWork = state.page === "join" ? joinReady() : state.queue.length > 0;
-  const canStart = !state.running && hasWork && state.converterFound;
-  $("btn-start").disabled = !canStart;
-  $("btn-stop").disabled = !state.running;
-  $("btn-files").disabled = state.running;
-  $("btn-folder").disabled = state.running;
-  $("btn-clear").disabled = state.running || state.queue.length === 0;
-  $("btn-join-files").disabled = state.running;
-  $("btn-join-clear").disabled = state.running || state.joinFiles.length === 0;
-  // The watched folder's own three buttons. Start is only offered when there
-  // is a folder and something to run it with; stop only when it is really on.
+  // Every area judges itself. A batch running on one page must not grey out
+  // the start button on another — running both at once is the point.
+  ["convert", "split", "join"].forEach((name) => {
+    const area = areaOf(name);
+    $("btn-" + name + "-start").disabled = area.running || !areaHasWork(area) || !state.converterFound;
+    $("btn-" + name + "-stop").disabled = !area.running;
+    el(area, "stop-hint").textContent = area.stopping
+      ? "Stopping — click again to quit immediately."
+      : (area.running ? "Keeps what is already encoded as a playable preview." : "");
+  });
+  ["convert", "split"].forEach((name) => {
+    const area = areaOf(name);
+    $("btn-" + name + "-files").disabled = area.running;
+    $("btn-" + name + "-folder").disabled = area.running;
+    $("btn-" + name + "-clear").disabled = area.running || area.queue.length === 0;
+  });
+  $("btn-join-files").disabled = areaOf("join").running;
+  $("btn-join-clear").disabled = areaOf("join").running || state.joinFiles.length === 0;
+  // The watched folder's own buttons. Start is only offered when there is a
+  // folder and something to run it with; stop only when it is really on.
+  const watch = areaOf("watch");
   $("btn-watch-start").disabled = state.watch.active || !state.watch.folder || !state.converterFound;
   $("btn-watch-stop").disabled = !state.watch.active;
   $("btn-watch-pick").disabled = false;
-  $("btn-watch-stop-run").disabled = !state.watchRunning || state.watchStopping;
-  $("watch-run-hint").textContent = state.watchStopping
+  $("btn-watch-stop-run").disabled = !watch.running || watch.stopping;
+  $("watch-run-hint").textContent = watch.stopping
     ? "Stopping this file — watching carries on."
-    : (state.watchRunning ? "Keeps what is already encoded as a playable preview." : "");
+    : (watch.running ? "Keeps what is already encoded as a playable preview." : "");
 
   // Three converters at once is the measured ceiling, and the watched folder
   // holds one of them while it is on. Offering a third here would be a promise
@@ -1464,9 +1619,6 @@ function updateButtons() {
     ? "Not available while a folder is being watched — the next video needs the machine on."
     : "";
   if (state.watch.active) shutdownBox.checked = false;
-  $("stop-hint").textContent = state.stopping
-    ? "Stopping — click again to quit immediately."
-    : (state.running ? "Keeps what is already encoded as a playable preview." : "");
 }
 
 // limitParallelChoice takes the choices off the list that the dispatcher would
@@ -1498,23 +1650,26 @@ function limitParallelChoice() {
    and the summary are added up here in the window, since each converter only
    ever reports on its own file. */
 
-// slotState returns the record for one slot, creating it on first sight.
+// slotState returns the record for one slot, creating it on first sight. The
+// slot number decides which area it is filed under — nothing else does.
 function slotState(slot) {
-  if (!state.slots[slot]) {
-    state.slots[slot] = {
+  const area = areaOfSlot(slot);
+  if (!area.slots[slot]) {
+    area.slots[slot] = {
       slot: slot, name: "", entry: null, pct: 0, known: false,
       stage: "", stats: "", done: false, stopping: false
     };
   }
-  return state.slots[slot];
+  return area.slots[slot];
 }
 
 // stopSlot stops ONE converter. The batch keeps going: the other slots are not
-// touched, and the next waiting file moves onto this one. state.stopping stays
-// alone — it means "the whole run is being stopped" and drives the big button
-// and the final summary.
+// touched, and the next waiting file moves onto this one. area.stopping stays
+// alone — it means "this whole area is being stopped" and drives its stop
+// button and its result line.
 async function stopSlot(slot) {
-  const lane = state.slots[slot];
+  const area = areaOfSlot(slot);
+  const lane = area.slots[slot];
   if (!lane || lane.done) return;
   lane.stopping = true;
   renderLanes();
@@ -1523,89 +1678,96 @@ async function stopSlot(slot) {
   } catch (err) {
     lane.stopping = false;
     renderLanes();
-    showError(String(err));
+    showError(String(err), area.name);
   }
 }
 
 // clearProgress puts the progress display back to idle. Only ever called by
 // hand (clearing the list or the log) — never while something is running, so
 // the bars of a live run cannot vanish under it.
-function clearProgress() {
-  if (state.running) return;
-  state.batch = null;
-  resetProgress();
+function clearProgress(area) {
+  if (area.running) return;
+  area.batch = null;
+  resetProgress(area);
 }
 
-// copyLog puts the whole log on the clipboard, ready to paste into a message.
-// Selecting hundreds of terminal lines with the mouse is no fun, and half a log
-// is no use to anybody trying to help.
-async function copyLog() { return copyOneLog("logbox", "log-copied"); }
-
-// copyOneLog works on whichever log it is pointed at — there are two now, and
-// copying the wrong one would be a quiet way to hand over the wrong evidence.
-async function copyOneLog(boxId, noteId) {
-  const text = $(boxId).textContent || "";
+// copyAreaLog puts one whole log on the clipboard, ready to paste into a
+// message. Selecting hundreds of terminal lines with the mouse is no fun, and
+// half a log is no use to anybody trying to help. It always works on the area
+// whose button was pressed — copying the wrong one would be a quiet way to
+// hand over the wrong evidence.
+async function copyAreaLog(area) {
+  const text = el(area, "logbox").textContent || "";
   if (!text.trim()) return;
   try {
     await window.runtime.ClipboardSetText(text);
-    $(noteId).textContent = "copied";
-    setTimeout(() => { $(noteId).textContent = ""; }, 2000);
+    el(area, "log-copied").textContent = "copied";
+    setTimeout(() => { el(area, "log-copied").textContent = ""; }, 2000);
   } catch (err) {
-    showError(String(err));
+    showError(String(err), area.name);
   }
 }
 
 // startBatch marks which files this run is about and clears what they carry
 // from an earlier one. The overall bar is worked out from exactly this set.
-function startBatch(files) {
-  state.batch = new Set((files || []).map((path) => path.toLowerCase()));
-  state.queue.forEach((entry) => {
-    if (!state.batch.has(entry.path.toLowerCase())) return;
+function startBatch(area, files) {
+  area.batch = new Set((files || []).map((path) => path.toLowerCase()));
+  area.queue.forEach((entry) => {
+    if (!area.batch.has(entry.path.toLowerCase())) return;
     entry.finished = false;
     entry.status = "";
     entry.note = "queued";
   });
-  renderQueue();
+  renderList(area);
 }
 
-function resetProgress() {
-  state.doneMB = 0;
-  state.slots = {};
+function resetProgress(area) {
+  area.slots = {};
   // A new batch is not a stopped one. Left standing, the flag from an earlier
   // abort would keep the next summary from filling the bar.
-  state.stopping = false;
-  state.stopClicks = 0;
-  state.byIndex = {};
-  state.tally = { files: 0, success: 0, skipped: 0, failed: 0, savedMB: 0, seconds: 0 };
-  state.runAnnounced = false;
-  state.lastLogSlot = 0;
-  setBar("bar-all", "pct-all", 0, false);
-  $("summary").style.display = "none";
+  area.stopping = false;
+  area.stopClicks = 0;
+  area.trouble = false;
+  area.byIndex = {};
+  area.tally = { files: 0, success: 0, skipped: 0, failed: 0, savedMB: 0, seconds: 0 };
+  area.runAnnounced = false;
+  area.lastLogSlot = 0;
+  // The result line of the run before belongs to that run — it goes as soon as
+  // a new one starts, together with the empty look its ending left behind.
+  area.finished = false;
+  const summary = el(area, "summary");
+  summary.className = "summary";
+  summary.style.display = "none";
+  if (area.hasBar) {
+    el(area, "barline").hidden = false;
+    setBar(area, 0, false);
+  }
   renderLanes();
 }
 
-// renderLanes draws one line per converter that is working or has just
-// finished. With a single slot it looks like the old single progress block.
+// renderLanes draws every area's progress area. Each one only ever holds its
+// own converters, so a slot can never draw a line into another area's display,
+// whatever order the events arrive in.
 function renderLanes() {
-  drawLanes("lanes", (slot) => !isWatchSlot(slot), "Idle.");
-  drawLanes("watch-lanes", isWatchSlot, "Nothing running.");
+  AREA_NAMES.forEach((name) => drawLanes(areaOf(name)));
 }
 
-// drawLanes fills one of the two progress areas with the slots that belong to
-// it. Splitting it this way means a converter can never draw a line into the
-// other area's display, whatever order the events arrive in.
-function drawLanes(boxId, belongsHere, idleText) {
-  const box = $(boxId);
+function drawLanes(area) {
+  const box = el(area, "lanes");
   box.innerHTML = "";
-  const slots = Object.keys(state.slots).map(Number).filter(belongsHere).sort((a, b) => a - b);
+  const slots = Object.keys(area.slots).map(Number).sort((a, b) => a - b);
   if (!slots.length) {
+    // After a finished run the area is left empty on purpose: the bars of a
+    // run that is over say nothing, and the result line below them says it
+    // all. Before the first run there is nothing to read yet, so it says so.
+    if (area.finished) return;
     const idle = document.createElement("div");
     idle.className = "lane-idle";
-    idle.textContent = idleText;
+    idle.textContent = AREA_IDLE[area.name] || "Idle.";
     box.appendChild(idle);
     return;
   }
-  slots.forEach((number) => box.appendChild(renderLane(state.slots[number])));
+  slots.forEach((number) => box.appendChild(renderLane(area.slots[number])));
 }
 
 function renderLane(lane) {
@@ -1664,8 +1826,8 @@ function renderLane(lane) {
 }
 
 // laneFor finds the converter that is working on this queue entry.
-function laneFor(entry) {
-  return Object.values(state.slots).find((lane) => lane.entry === entry) || null;
+function laneFor(area, entry) {
+  return Object.values(area.slots).find((lane) => lane.entry === entry) || null;
 }
 
 // updateOverall works the bar out from the queue itself, every time, instead of
@@ -1677,31 +1839,31 @@ function laneFor(entry) {
 // finished, and ended at 44.5 % on a batch that was completely done (reported
 // 2026-08-18). Read from the queue, a file that is done stays done: the bar can
 // only ever go up.
-function updateOverall() {
-  // A join run is not fed by the queue (see runUsesQueue), so measuring it
-  // against the queue's total size would show a bar for files nobody is
-  // touching. One job per run means there is no overall progress to show.
-  if (!runUsesQueue() || !state.batch || !state.batch.size) {
-    setBar("bar-all", "pct-all", 0, false);
+function updateOverall(area) {
+  // Only where there is a bar at all: joining builds one file and the watched
+  // folder never ends, so neither has an overall bar to fill.
+  if (!area.hasBar) return;
+  if (!area.batch || !area.batch.size) {
+    setBar(area, 0, false);
     return;
   }
   let total = 0;
   let done = 0;
-  state.queue.forEach((entry) => {
+  area.queue.forEach((entry) => {
     // Only the files of THIS batch. Older entries stay on show as a record and
     // must not weigh the bar down.
-    if (!state.batch.has(entry.path.toLowerCase())) return;
+    if (!area.batch.has(entry.path.toLowerCase())) return;
     const size = entry.sizeMB || 0;
     total += size;
     if (entry.finished) {
       done += size;
       return;
     }
-    const lane = laneFor(entry);
+    const lane = laneFor(area, entry);
     if (lane && lane.known) done += size * (lane.pct || 0) / 100;
   });
-  if (total <= 0) { setBar("bar-all", "pct-all", 0, false); return; }
-  setBar("bar-all", "pct-all", done / total * 100, true);
+  if (total <= 0) { setBar(area, 0, false); return; }
+  setBar(area, done / total * 100, true);
 }
 
 /* ---------- converter events ---------- */
@@ -1709,47 +1871,43 @@ function updateOverall() {
 // times. It must NOT clear the display — that would wipe out the slots that are
 // already working. Clearing happens once, where the batch is started.
 function onRunStart(event) {
-  // The watched folder always converts. Letting its start overwrite the running
-  // mode would be a real fault now that both areas run at once: a Split batch
-  // would suddenly be treated as a conversion because a folder found a file.
-  if (!isWatchSlot(event.slot)) state.runMode = event.mode || "convert";
+  // Each area remembers for itself what its converter is doing. Sharing that
+  // was a real fault once both can run at once: a Split batch was treated as a
+  // conversion because a watched folder had found a file.
+  const area = areaOfSlot(event.slot);
+  area.runMode = event.mode || "convert";
   slotState(event.slot || 1);
 
-  if (isWatchSlot(event.slot)) {
+  // The watched folder says it per file rather than per run: it has no batch,
+  // it has one video after another for as long as it is switched on.
+  if (area.name === "watch") {
     watchNote("Converting " + (event.files ? event.files + " file(s)" : "a file") +
       ", " + event.codec + " on " + event.encoder + ", NVENCForge " + event.version);
     renderLanes();
     return;
   }
 
-  if (!state.runAnnounced) {
-    state.runAnnounced = true;
+  if (!area.runAnnounced) {
+    area.runAnnounced = true;
     // The tool modes carry neither a codec nor a file count at this point — the
     // count only exists once the folder has been read.
-    note(isToolRun()
+    note(isToolRun(area)
       ? "Run started: " + event.mode + ", NVENCForge " + event.version
       : "Run started: " + event.mode + ", " + event.codec + " on " + event.encoder +
-        ", NVENCForge " + event.version);
+        ", NVENCForge " + event.version, area.name);
   }
-  renderQueue();
+  renderList(area);
   renderLanes();
 }
 
-// isToolRun tells the two kinds of run apart. It matters for the queue: only a
+// isToolRun tells the two kinds of run apart. It matters for the list: only a
 // conversion reports a result per file. -davinci, -split and -join produce
 // several outputs per source and keep no such bookkeeping, so there the start
 // of the next file is the only reliable sign that the previous one is done.
-function isToolRun() { return state.runMode !== "convert"; }
+function isToolRun(area) { return area.runMode !== "convert"; }
 
-// isToolRunOn answers the same question for one slot. The watched folder only
-// ever converts, whatever the other area is doing at the time.
-function isToolRunOn(slot) { return isWatchSlot(slot) ? false : isToolRun(); }
-
-// runUsesQueue: joining is the one mode whose files do not come from the queue
-// — it has its own list. Without this, queue entries left over from another
-// page would be marked as if they were part of this run, and the file the
-// converter names would light up in a list it never came from.
-function runUsesQueue() { return !isJoinMode(state.runMode); }
+// isToolRunOn answers the same question for one slot.
+function isToolRunOn(slot) { return isToolRun(areaOfSlot(slot)); }
 
 // markProcessed closes a queue entry that will never get a result event. It
 // deliberately does not claim success: whether every track really came out is
@@ -1760,13 +1918,14 @@ function markProcessed(entry) {
   entry.finished = true;
 }
 function onFileStart(event) {
+  const area = areaOfSlot(event.slot);
   const lane = slotState(event.slot || 1);
-  // The watched folder's files are not in the queue on the Convert page — that
-  // list belongs to what you dropped in yourself.
-  const entry = (runUsesQueue() && !isWatchSlot(event.slot)) ? findEntry(event.path) : null;
+  // Only two areas work from a list of their own; joining and the watched
+  // folder have no queue entry a file could belong to.
+  const entry = area.hasQueue ? findEntry(event.path, area) : null;
   // A tool run walks through several files in ONE process, so the start of the
   // next file is what closes off the previous one on this slot.
-  if (lane.entry && isToolRunOn(event.slot) && lane.entry.status === "running") markProcessed(lane.entry);
+  if (lane.entry && isToolRun(area) && lane.entry.status === "running") markProcessed(lane.entry);
   lane.entry = entry;
   lane.name = event.name;
   lane.pct = 0;
@@ -1774,16 +1933,16 @@ function onFileStart(event) {
   lane.stage = "";
   lane.stats = "";
   lane.done = false;
-  state.byIndex[laneKey(event.slot, event.index)] = entry;
+  area.byIndex[laneKey(event.slot, event.index)] = entry;
   if (entry) {
     entry.status = "running";
     entry.note = "working…";
     // The converter knows the real size; trust it over our own reading.
     if (event.in_mb > 0) entry.sizeMB = event.in_mb;
   }
-  updateOverall();
+  updateOverall(area);
   renderLanes();
-  afterQueueChange();
+  if (area.hasQueue) afterQueueChange(area);
 }
 
 // laneKey: the result event carries only the file number, and every converter
@@ -1803,6 +1962,7 @@ function onStage(event) {
   renderLanes();
 }
 function onProgress(event) {
+  const area = areaOfSlot(event.slot);
   const lane = slotState(event.slot || 1);
   lane.pct = event.pct;
   lane.known = true;
@@ -1813,7 +1973,7 @@ function onProgress(event) {
     event.bitrate && event.bitrate !== "-" ? event.bitrate : "",
     event.est_mb > 0 ? "→ " + fmtMB(event.est_mb) : ""
   ].filter(Boolean).join("  ·  ");
-  updateOverall();
+  updateOverall(area);
   renderLanes();
 }
 const RESULT_TEXT = {
@@ -1823,10 +1983,11 @@ const RESULT_TEXT = {
   preview: () => "stopped — preview kept"
 };
 function onResult(event) {
+  const area = areaOfSlot(event.slot);
   const lane = slotState(event.slot || 1);
   // The result event carries only the file number, not the input path — the
   // mapping was noted down when the file started.
-  const entry = state.byIndex[laneKey(event.slot, event.index)] || lane.entry;
+  const entry = area.byIndex[laneKey(event.slot, event.index)] || lane.entry;
   if (entry) {
     entry.status = event.status;
     entry.note = (RESULT_TEXT[event.status] || (() => event.status))(event);
@@ -1836,14 +1997,14 @@ function onResult(event) {
     entry.finished = true;
   }
   // Counted here, because with several converters each one only reports on its
-  // own file — the balance for the whole batch exists nowhere else. Each area
-  // keeps its own books: the watched folder has no batch to belong to, and
-  // adding its files to one would inflate a number the user did not ask for.
-  const tally = isWatchSlot(event.slot) ? state.watchTally : state.tally;
+  // own file — the balance for a run exists nowhere else. Every area keeps its
+  // own books: adding a watched folder's file to a batch you started by hand
+  // would inflate a number nobody asked for.
+  const tally = area.tally;
   tally.files++;
   if (tally[event.status] !== undefined) tally[event.status]++;
   tally.savedMB += event.saved_mb || 0;
-  if (isWatchSlot(event.slot)) renderWatchSummary();
+  if (area.name === "watch") renderWatchSummary();
 
   // The percentage is derived from ffmpeg's timestamps and usually stops a
   // little short of 100 % (99.1 %, for instance) because the video track ends
@@ -1858,54 +2019,59 @@ function onResult(event) {
   lane.stage = RESULT_TEXT[event.status] ? (RESULT_TEXT[event.status])(event) : event.status;
   if (event.status === "success") {
     note(event.name + ": " + fmtMB(event.in_mb) + " → " + fmtMB(event.out_mb) +
-        " (" + event.saved_pct.toFixed(1) + " % smaller)");
+        " (" + event.saved_pct.toFixed(1) + " % smaller)", area.name);
   }
-  updateOverall();
+  updateOverall(area);
   renderLanes();
-  renderQueue();
+  renderList(area);
 }
 // onSummary fires once per converter — with three slots, three times. Each one
 // only knows about its own file, so the numbers are added up and the balance is
 // shown when the whole batch is through (see showFinalSummary).
 function onSummary(event) {
+  const area = areaOfSlot(event.slot);
   const lane = slotState(event.slot || 1);
   lane.done = true;
-  (isWatchSlot(event.slot) ? state.watchTally : state.tally).seconds += event.elapsed_sec || 0;
+  area.tally.seconds += event.elapsed_sec || 0;
   // The tool modes report no result per file, so nothing ever filled their bar.
   // The percentage comes from ffmpeg's timestamps and stops a little short
   // (measured on a finished join: 95.6 %), which then stood next to an overall
   // bar at 100 % and looked like something was left undone. A stopped run keeps
   // its last value on purpose: there the rest really was not written.
-  if (isToolRunOn(event.slot)) {
-    state.tally.files += event.files || 0;
-    if (!state.stopping && !lane.stopping) { lane.pct = 100; lane.known = true; }
+  if (isToolRun(area)) {
+    area.tally.files += event.files || 0;
+    if (!area.stopping && !lane.stopping) { lane.pct = 100; lane.known = true; }
     lane.stage = "finished";
   }
   renderLanes();
 }
 
-// showFinalSummary is the balance for everything that ran — drawn when no
-// converter is left working and nothing is waiting.
-function showFinalSummary() {
-  const box = $("summary");
-  const tally = state.tally;
+// showFinalSummary is one area's balance — drawn when none of its converters
+// is left working and nothing of its own is waiting.
+//
+// It is the line that stays: the bars above it are cleared away when a run
+// ends (see finishArea), so this is the whole answer to "what did it just do?"
+// and it is marked as such.
+function showFinalSummary(area) {
+  const box = el(area, "summary");
+  const tally = area.tally;
   if (!tally || !tally.files) return;
   box.style.display = "block";
+  box.className = "summary final";
   const minutes = Math.floor(tally.seconds / 60);
   const seconds = Math.round(tally.seconds % 60);
   // With several converters the wall clock is shorter than the times added up,
   // so it says "converter time" instead of pretending to be a stopwatch.
-  const time = state.parallel > 1
+  const time = area.parallel > 1
     ? minutes + " min " + seconds + " s of converter time"
     : minutes + " min " + seconds + " s";
   // A tool run has no success/failed counters and nothing was saved — showing
   // "0 converted, 0 saved" would read like a failure instead of a finished job.
-  box.textContent = isToolRun()
+  box.textContent = isToolRun(area)
     ? tally.files + " file(s) processed in " + time + "."
     : tally.files + " file(s): " + tally.success + " converted, " +
       tally.skipped + " skipped, " + tally.failed + " not finished — " +
       fmtMB(tally.savedMB) + " saved in " + time + ".";
-  if (!state.stopping) setBar("bar-all", "pct-all", 100, true);
 }
 
 // clearWatchArea wipes the page back to the state of a fresh start: the log,
@@ -1917,11 +2083,12 @@ function showFinalSummary() {
 // stays. A standing order is still moving originals about; a window that no
 // longer says where would be hiding something that is still happening.
 function clearWatchArea() {
-  $("watch-logbox").innerHTML = "";
-  state.lastWatchLogSlot = 0;
-  state.watchTally = { files: 0, success: 0, skipped: 0, failed: 0, savedMB: 0, seconds: 0 };
+  const area = areaOf("watch");
+  el(area, "logbox").innerHTML = "";
+  area.lastLogSlot = 0;
+  area.tally = { files: 0, success: 0, skipped: 0, failed: 0, savedMB: 0, seconds: 0 };
   renderWatchSummary();
-  showWatchError("");
+  showError("", "watch");
 
   if (state.watch.active) {
     watchNote("Cleared. The folder stays named while watching is still on.");
@@ -1929,8 +2096,7 @@ function clearWatchArea() {
   }
   state.watch.folder = "";
   state.watchPending = [];
-  state.slots[WATCH_SLOT] = undefined;
-  delete state.slots[WATCH_SLOT];
+  delete area.slots[WATCH_SLOT];
   renderLanes();
   showWatch(null);
 }
@@ -1940,7 +2106,7 @@ function clearWatchArea() {
 // taken off the disk since it was switched on.
 function renderWatchSummary() {
   const box = $("watch-summary");
-  const tally = state.watchTally;
+  const tally = areaOf("watch").tally;
   if (!tally.files) { box.style.display = "none"; box.textContent = ""; return; }
   box.style.display = "block";
   const parts = [tally.files + " file(s) since watching started",
@@ -1967,9 +2133,11 @@ function isExtraOption(label) { return String(label || "").trim().startsWith("�
 // and both are standing still until they get their line — so the second one is
 // kept and shown as soon as the first is answered, instead of overwriting it.
 function onQuestion(event) {
-  // "stop asking" was clicked earlier in this run: answer straight away, so
-  // nothing stands still and no dialog flashes up.
-  if (state.answerAllThisRun) { sendAnswer("", event.slot); return; }
+  // "stop asking" was clicked earlier in this area: answer straight away, so
+  // nothing stands still and no dialog flashes up. It counts for that area
+  // only — a batch you waved through says nothing about the files another
+  // area is taking apart at the same time.
+  if (areaOfSlot(event.slot).answerAll) { sendAnswer("", event.slot); return; }
   state.questions.push(event);
   if (state.questions.length === 1) showQuestion(event);
 }
@@ -1978,7 +2146,12 @@ function showQuestion(event) {
   const options = event.options || [];
   $("ask-file").textContent = event.file || "";
   // Which converter is waiting — only worth saying when more than one can ask.
-  $("ask-slot").textContent = state.parallel > 1 ? "converter " + (event.slot || 1) : "";
+  // Several areas running at once is exactly such a case, so the question also
+  // says which area it comes from.
+  const area = areaOfSlot(event.slot);
+  $("ask-slot").textContent = (area.parallel > 1 || state.questions.length > 1)
+    ? area.name + ", converter " + (event.slot || 1)
+    : "";
 
   const box = $("ask-options");
   box.innerHTML = "";
@@ -2032,18 +2205,22 @@ async function sendAnswer(text, slot) {
   try {
     await api().AnswerQuestion(target || 1, text);
   } catch (err) {
-    showError(String(err));
-    note("Could not send the answer: " + err);
+    const area = areaOfSlot(target);
+    showError(String(err), area.name);
+    note("Could not send the answer: " + err, area.name);
   }
   // Somebody else may still be waiting.
   if (state.questions.length) showQuestion(state.questions[0]);
 }
 
-// closeQuestion takes open dialogs away WITHOUT answering. Only correct once
-// the run is over anyway — then nobody is waiting for the line any more.
-function closeQuestion() {
-  state.questions = [];
-  $("ask").hidden = true;
+// closeQuestions takes ONE area's open dialogs away WITHOUT answering. Only
+// correct once that area's run is over — then nobody is waiting for the line
+// any more. The other areas keep theirs: their converters are still standing
+// still until they get an answer.
+function closeQuestions(area) {
+  state.questions = state.questions.filter((question) => areaNameOfSlot(question.slot) !== area.name);
+  if (state.questions.length) showQuestion(state.questions[0]);
+  else $("ask").hidden = true;
 }
 
 function onConverterEvent(event) {
@@ -2063,15 +2240,17 @@ function onConverterEvent(event) {
 // carry on — so the run is only over when the dispatcher says so (onQueueState).
 function onRunState(runState) {
   const slot = runState.slot || 1;
+  const area = areaOfSlot(slot);
   // Stopping belongs to the slot, not to the run: one converter being stopped
-  // says nothing about the others. Only the big button sets state.stopping.
+  // says nothing about the others. Only the area's own stop button sets
+  // area.stopping.
   if (runState.stopping) {
     slotState(slot).stopping = true;
     renderLanes();
   }
   if (runState.running) return;
 
-  const lane = state.slots[slot];
+  const lane = area.slots[slot];
   if (lane) {
     lane.done = true;
     // A file still marked as running never reported a result. In a tool run
@@ -2093,26 +2272,19 @@ function onRunState(runState) {
   // Trouble is reported where the run is shown. An error from a background
   // folder appearing over the batch you are watching would read as if the
   // batch had failed.
-  if (isWatchSlot(slot)) {
-    if (runState.error) {
-      showWatchError(runState.error);
-      watchNote("Could not run NVENCForge: " + runState.error);
-    } else if (runState.exitCode !== 0) {
-      watchNote("NVENCForge ended with exit code " + runState.exitCode + ".");
-    }
-    renderLanes();
-    updateButtons();
-    return;
-  }
-
-  updateOverall();
+  updateOverall(area);
   if (runState.error) {
-    showError(runState.error);
-    note("Could not run NVENCForge: " + runState.error);
+    area.trouble = true;
+    showError(runState.error, area.name);
+    note("Could not run NVENCForge: " + runState.error, area.name);
   } else if (runState.exitCode !== 0) {
-    note("NVENCForge ended with exit code " + runState.exitCode + ".");
+    // Remembered, not just written: the areas that report no result per file
+    // would otherwise look like a clean run and have their list cleared away
+    // under them.
+    area.trouble = true;
+    note("NVENCForge ended with exit code " + runState.exitCode + ".", area.name);
   }
-  renderQueue();
+  renderList(area);
   renderLanes();
   updateButtons();
 }
@@ -2121,77 +2293,96 @@ function onRunState(runState) {
 // whether the whole batch is through: the slots that are working plus the jobs
 // still waiting for a free one.
 function onQueueState(queueState) {
-  // The dispatcher reports every area separately now. Reading it through one
+  // The dispatcher reports every area separately. Reading it through one
   // helper keeps a missing area from turning into "undefined is not a number"
   // halfway down.
-  const areaOf = (name) => (queueState.areas && queueState.areas[name]) || { active: 0, pending: 0, limit: 1 };
-  const convert = areaOf("convert");
-  const watch = areaOf("watch");
-
-  state.active = convert.active;
-  state.pending = convert.pending;
+  const reportFor = (name) => (queueState.areas && queueState.areas[name]) || { active: 0, pending: 0, limit: 1 };
   state.totalLimit = queueState.totalLimit || 3;
 
-  // The watched folder is followed separately, because it starts and finishes
-  // on its own schedule. Its end is not the batch's end and must not close a
-  // dialog or write a final summary over there.
-  const watchBusy = watch.active > 0 || watch.pending > 0;
-  const watchWas = state.watchRunning;
-  state.watchRunning = watchBusy;
-  if (watchWas && !watchBusy) {
-    state.watchStopping = false;
-    // The next find, if one turned up while this one was converting.
-    maybeStartWatchRun();
-  }
-
-  const busy = state.active > 0 || state.pending > 0;
-  const wasRunning = state.running;
-  state.running = busy;
-
-  if (wasRunning && !busy) {
-    // A dialog may still be standing there — the run it belonged to is over,
-    // so there is nobody left to answer.
-    closeQuestion();
-    state.answerAllThisRun = false;
-    state.stopClicks = 0;
-    note("NVENCForge finished.");
-    showFinalSummary();
-    // The INI is written by NVENCForge itself, so on a fresh installation it
-    // only exists from the first run onwards — read it again now.
-    refreshConfig();
-    // A list left standing after a finished run is an invitation to press
-    // Start again and convert everything a second time. It is cleared away —
-    // but only when the run really went through, because after a stop or a
-    // failure the list is the one place that still says which file it was.
-    if (runWentThroughCleanly()) clearFinishedList();
-  }
+  // Every area is followed on its own, because every area starts and finishes
+  // on its own schedule. One ending is not another one ending: it must not
+  // close their dialogs or write a final line into their display.
+  AREA_NAMES.forEach((name) => {
+    const area = areaOf(name);
+    const report = reportFor(name);
+    area.active = report.active;
+    area.pending = report.pending;
+    const busy = report.active > 0 || report.pending > 0;
+    const wasRunning = area.running;
+    area.running = busy;
+    if (wasRunning && !busy) finishArea(area);
+  });
   updateButtons();
 }
 
+// finishArea is what happens when one area has nothing left running and
+// nothing left waiting.
+function finishArea(area) {
+  // The watched folder has no end to report on — it is a standing order. All
+  // that ends is the file it just did, and the next find can start.
+  if (area.name === "watch") {
+    area.stopping = false;
+    maybeStartWatchRun();
+    return;
+  }
+
+  // A dialog of THIS area may still be standing there — the run it belonged to
+  // is over, so there is nobody left to answer.
+  closeQuestions(area);
+  area.answerAll = false;
+  area.stopClicks = 0;
+  note("NVENCForge finished.", area.name);
+  showFinalSummary(area);
+  // The INI is written by NVENCForge itself, so on a fresh installation it
+  // only exists from the first run onwards — read it again now.
+  refreshConfig();
+  // A list left standing after a finished run is an invitation to press Start
+  // again and do everything a second time. It is cleared away — but only when
+  // the run really went through, because after a stop or a failure the list is
+  // the one place that still says which file it was.
+  if (runWentThroughCleanly(area)) clearFinishedList(area);
+  // The progress area is emptied: bars of a run that is over say nothing, and
+  // a finished lane standing next to an idle window looks like work still to
+  // come. What the run DID stays — in the result line and in the log.
+  clearLanes(area);
+  renderLanes();
+}
+
+// clearLanes takes the finished converters off the display and puts the
+// overall bar away with them. area.finished keeps the space empty instead of
+// falling back to "Idle." — the result line underneath is the answer now.
+function clearLanes(area) {
+  area.slots = {};
+  area.finished = true;
+  if (area.hasBar) el(area, "barline").hidden = true;
+}
+
 // runWentThroughCleanly: did every file get where it was going? A stopped run
-// does not count, nor does one with a file that failed or never reported.
-function runWentThroughCleanly() {
-  if (state.stopping) return false;
-  if (state.tally.failed) return false;
-  return !state.queue.some((entry) =>
+// does not count, nor does one with a file that failed or never reported, nor
+// one whose converter ended badly.
+function runWentThroughCleanly(area) {
+  if (area.stopping) return false;
+  if (area.trouble) return false;
+  if (area.tally.failed) return false;
+  return !area.queue.some((entry) =>
     entry.status === "failed" || entry.note === "no result reported");
 }
 
 // clearFinishedList empties the list the finished run was working from — the
-// queue on most pages, the join list on the Join page. Bars, summary and log
-// stay exactly as they are: the question "what did it just do?" still has to
-// have an answer on screen.
-function clearFinishedList() {
-  if (isJoinMode(state.runMode)) {
+// queue on the pages that have one, the join list on the Join page. Bars,
+// summary and log stay exactly as they are: the question "what did it just
+// do?" still has to have an answer on screen.
+function clearFinishedList(area) {
+  if (area.name === "join") {
     state.joinFiles = [];
     state.joinBasePath = "";
     afterJoinChange();
   } else {
-    state.queue = [];
-    state.byIndex = {};
-    afterQueueChange();
+    area.queue = [];
+    area.byIndex = {};
+    afterQueueChange(area);
   }
-  note("List cleared — that run is done. What it did stays in the summary and the log.");
+  note("List cleared — that run is done. What it did stays in the summary and the log.", area.name);
 }
 
 /* ---------- status badges ---------- */
@@ -2723,8 +2914,8 @@ async function saveSettings() {
     await loadSettings();
     // The convert page shows caps and defaults from the same file.
     refreshConfig();
-    if (state.running) {
-      note("A conversion is running — it keeps the settings it started with.");
+    if (anyRunning()) {
+      note("Something is running — it keeps the settings it started with.");
     }
   } catch (err) {
     showError(String(err));
@@ -2833,11 +3024,14 @@ function addSRTPhrase() {
   const text = field.value.trim();
   if (text === "") return;
   if (text.startsWith("#")) {
-    // Would land in the file as a comment and quietly do nothing.
-    showError("A phrase cannot start with \"#\" — that would make it a comment.");
+    // Would land in the file as a comment and quietly do nothing. It is said
+    // right under the box it was typed into: the error lines belong to the
+    // areas that run something, and the settings page is not one of them — a
+    // refusal shown on another page is a refusal nobody ever reads.
+    $("srt-state").textContent = "A phrase cannot start with \"#\" — that would make it a comment.";
     return;
   }
-  showError("");
+  $("srt-state").textContent = "";
   state.srt.phrases.push({ text: text, exact: $("srt-new-exact").checked });
   field.value = "";
   $("srt-new-exact").checked = false;
@@ -2869,14 +3063,6 @@ function noteGPUAdvice(text) {
 
 /* ---------- pages ---------- */
 
-// MODE_PAGES lists the pages that actually start the converter: which mode
-// they run and what their start button should say. Settings is not in here —
-// that page starts nothing.
-const MODE_PAGES = {
-  convert: { mode: "", start: "Start" },
-  join: { mode: "join", start: "Join into one MKV" }
-};
-
 /* ---------- the two ways of joining ----------
    Both take the same files and hand the converter the same list, but they are
    not the same job: -join copies everything as it is, -davinci re-encodes the
@@ -2901,16 +3087,13 @@ function joinMode() {
   const chosen = $("join-mode").value;
   return JOIN_MODES[chosen] ? chosen : "join";
 }
-function isJoinMode(mode) { return mode === "join" || mode === "joindavinci"; }
 function applyJoinMode() {
   const mode = joinMode();
   $("join-mode-hint").textContent = JOIN_MODES[mode].hint;
-  // Only take over the running mode while the Join page is the one on show —
-  // otherwise a change here would rename another page's start button.
-  if (state.page === "join") {
-    state.mode = mode;
-    $("btn-start").textContent = JOIN_MODES[mode].start;
-  }
+  // The area remembers its own route, and the button it renames is its own.
+  // Which page is on show has nothing to do with it any more.
+  areaOf("join").mode = mode;
+  $("btn-join-start").textContent = JOIN_MODES[mode].start;
 }
 /* ---------- the two ways of taking a file apart ----------
    The mirror image of JOIN_MODES above, and deliberately so: both routes pull
@@ -2942,16 +3125,15 @@ function applySplitMode() {
   // text that is written by the script is a text nobody proof-reads.
   $("split-details-1to1").hidden = mode !== "split";
   $("split-details-davinci").hidden = mode !== "davinci";
-  // Only take over the running mode while this page is the one on show —
-  // otherwise a change here would rename another page's start button.
-  if (state.page === "split") {
-    state.mode = mode;
-    $("btn-start").textContent = SPLIT_MODES[mode].start;
-  }
+  areaOf("split").mode = mode;
+  $("btn-split-start").textContent = SPLIT_MODES[mode].start;
 }
 
 const PAGES = ["convert", "split", "join", "watch", "settings"];
 
+// showPage only shows and hides now. Nothing moves between pages any more:
+// every area owns its list, its progress display, its log and its buttons, so
+// switching pages cannot change what a running job reports to.
 function showPage(name) {
   state.page = name;
   PAGES.forEach((page) => { $("page-" + page).hidden = page !== name; });
@@ -2963,32 +3145,7 @@ function showPage(name) {
     button.classList.toggle("active", button.dataset.page === name);
   });
 
-  // Queue, progress and log exist ONCE and move to whichever mode page is on
-  // show. A second copy would mean a second list to keep in step, while the
-  // run they describe is only ever a single one.
-  const page = $("page-" + name);
-  const queueSlot = page.querySelector('[data-slot="queue"]');
-  if (queueSlot) queueSlot.appendChild($("panel-queue"));
-  const runSlot = page.querySelector('[data-slot="run"]');
-  if (runSlot) {
-    runSlot.appendChild($("panel-progress"));
-    runSlot.appendChild($("panel-log"));
-  }
-
-  // The chosen mode survives a trip to the settings page: the start button
-  // travels with the panels and must not quietly change what it starts.
-  const mode = MODE_PAGES[name];
-  if (mode) {
-    state.mode = mode.mode;
-    $("btn-start").textContent = mode.start;
-  }
-  // Join and Split each decide between their two routes themselves.
-  if (name === "join") applyJoinMode();
-  if (name === "split") applySplitMode();
-
   hideTip();
-  // Each page has its own condition for starting (the queue on most, the join
-  // list on one), so the button is re-judged on every switch.
   updateButtons();
   if (name === "settings" && (!state.settingsFile || !state.settingsFile.found)) loadSettings();
 }
@@ -3022,15 +3179,26 @@ function collectWatchRequest(files) {
 }
 
 /* ---------- actions ---------- */
-// collectRequest reads the options as they stand. The three arguments are only
-// used by the watched folder: it converts whatever page is on show, with its
-// own list of files, and never shuts the machine down.
-function collectRequest(modeOverride, filesOverride, extra) {
-  const mode = modeOverride === undefined ? state.mode : modeOverride;
-  return Object.assign({
-    mode: mode,
-    // Joining draws from its own list — the queue belongs to the other pages.
-    files: filesOverride || (isJoinMode(mode) ? joinRunFiles() : state.queue.map((entry) => entry.path)),
+// collectRequest builds what one area sends off. Which files, which mode and
+// which slot it will land on all follow from the area itself.
+//
+// The areas that only copy — splitting, joining, the DaVinci routes — send no
+// encoding options at all. The converter would ignore them (runargs.go returns
+// early for those modes), and sending a codec with a job that never encodes
+// would be a promise nobody keeps. It is also what their pages say: "there are
+// no other options here".
+function collectRequest(area) {
+  const files = area.name === "join" ? joinRunFiles() : area.queue.map((entry) => entry.path);
+  if (area.mode !== "") {
+    // Only converting runs several at a time. The copying modes ask about
+    // tracks — there is nothing to win and a second dialog to lose (the
+    // reasoning is in runargs.go, buildJobs).
+    return { area: area.name, mode: area.mode, files: files, parallel: 1 };
+  }
+  return {
+    area: area.name,
+    mode: "",
+    files: files,
     codec: $("opt-codec").value,
     encoder: $("opt-encoder").value,
     container: $("opt-container").value,
@@ -3042,42 +3210,44 @@ function collectRequest(modeOverride, filesOverride, extra) {
     maxBitrate: parseInt($("opt-bitrate").value, 10) || 0,
     keepSource: $("opt-keep").checked,
     shutdown: $("opt-shutdown").checked,
-    // Only converting runs several at a time. Split, Join and DaVinci copy
-    // instead of encoding and ask about tracks — there is nothing to win and a
-    // second dialog to lose (the reasoning is in runargs.go, buildJobs).
-    parallel: mode === "" ? parallelSetting() : 1
-  }, extra || {});
+    parallel: parallelSetting()
+  };
 }
 
 function parallelSetting() { return parseInt($("opt-parallel").value, 10) || 1; }
 
-async function start() {
-  showError("");
-  const request = collectRequest();
+async function start(areaName) {
+  const area = areaOf(areaName);
+  showError("", area.name);
+  const request = collectRequest(area);
   // Cleared once for the whole batch — not on every "run" event, since with
   // several converters each one sends its own and would wipe out the others.
-  resetProgress();
-  startBatch(request.files);
-  state.parallel = request.parallel;
+  resetProgress(area);
+  startBatch(area, request.files);
+  area.parallel = request.parallel;
   try {
     await api().StartRun(request);
   } catch (err) {
-    showError(String(err));
-    note("Start refused: " + err);
+    showError(String(err), area.name);
+    note("Start refused: " + err, area.name);
   }
 }
-async function stop() {
+
+// stop ends ONE area cleanly. The others carry on: stopping your batch is not
+// a reason to drop the files another page is taking apart at the same time.
+async function stop(areaName) {
+  const area = areaOf(areaName);
   // Marked before asking Go, exactly like stopSlot: the button was clicked, so
   // the window should say so at once instead of after the answer comes back.
-  state.stopClicks++;
-  state.stopping = true;
-  Object.values(state.slots).forEach((lane) => { if (!lane.done) lane.stopping = true; });
+  area.stopClicks++;
+  area.stopping = true;
+  Object.values(area.slots).forEach((lane) => { if (!lane.done) lane.stopping = true; });
   renderLanes();
   updateButtons();
   try {
-    await api().StopRun();
+    await api().StopArea(area.name);
   } catch (err) {
-    showError(String(err));
+    showError(String(err), area.name);
   }
 }
 // download fetches the latest release. It never silently replaces a converter
@@ -3136,19 +3306,42 @@ function chooseTheme(theme) {
 }
 
 function wire() {
-  $("btn-files").onclick = async () => { try { addItems(await api().PickFiles()); } catch (e) { showError(String(e)); } };
-  $("btn-folder").onclick = async () => { try { addItems(await api().PickFolder()); } catch (e) { showError(String(e)); } };
-  // Clearing the list or the log also wipes the progress display. It shows the
-  // last run until then, which is right while you are still reading it — but
-  // once you clear up, leaving old bars and a stale summary standing would be
-  // pretending a finished run is still current.
-  $("btn-clear").onclick = () => { state.queue = []; clearProgress(); afterQueueChange(); };
-  $("btn-log-copy").onclick = copyLog;
+  // The two areas that work from a queue of video files get the same three
+  // buttons, wired to their own list. Written once rather than twice: two
+  // copies would be two places to forget the next change in.
+  ["convert", "split"].forEach((name) => {
+    const area = areaOf(name);
+    $("btn-" + name + "-files").onclick = async () => {
+      try { addItems(await api().PickFiles(), area); } catch (e) { showError(String(e), name); }
+    };
+    $("btn-" + name + "-folder").onclick = async () => {
+      try { addItems(await api().PickFolder(), area); } catch (e) { showError(String(e), name); }
+    };
+    // Clearing the list or the log also wipes the progress display. It shows
+    // the last run until then, which is right while you are still reading it —
+    // but once you clear up, leaving old bars and a stale result line standing
+    // would be pretending a finished run is still current.
+    $("btn-" + name + "-clear").onclick = () => { area.queue = []; clearProgress(area); afterQueueChange(area); };
+  });
+
+  // Start, stop and the log belong to every area that runs something by hand.
+  ["convert", "split", "join"].forEach((name) => {
+    const area = areaOf(name);
+    $("btn-" + name + "-start").onclick = () => start(name);
+    $("btn-" + name + "-stop").onclick = () => stop(name);
+    $("btn-" + name + "-log-copy").onclick = () => copyAreaLog(area);
+    $("btn-" + name + "-log-clear").onclick = () => {
+      el(area, "logbox").innerHTML = "";
+      area.lastLogSlot = 0;
+      clearProgress(area);
+    };
+  });
+
   $("btn-join-files").onclick = async () => {
     try {
       const picked = await api().PickJoinFiles();
       if (picked && picked.length) await addJoinPaths(picked.map((file) => file.path));
-    } catch (e) { showError(String(e)); }
+    } catch (e) { showError(String(e), "join"); }
   };
   $("btn-join-clear").onclick = () => { state.joinFiles = []; state.joinBasePath = ""; afterJoinChange(); };
   $("btn-watch-pick").onclick = pickWatchFolder;
@@ -3157,12 +3350,9 @@ function wire() {
   $("btn-watch-stop-run").onclick = stopWatchRun;
   $("wopt-quality").onchange = (e) => { $("wfield-cq").hidden = e.target.value !== "fixed"; };
   $("wopt-encoder").onchange = updateButtons;
-  $("btn-watch-log-copy").onclick = () => copyOneLog("watch-logbox", "watch-log-copied");
+  $("btn-watch-log-copy").onclick = () => copyAreaLog(areaOf("watch"));
   $("btn-watch-log-clear").onclick = clearWatchArea;
-  $("btn-start").onclick = start;
-  $("btn-stop").onclick = stop;
   $("btn-download").onclick = download;
-  $("btn-log-clear").onclick = () => { $("logbox").innerHTML = ""; state.lastLogSlot = 0; clearProgress(); };
   $("btn-settings-save").onclick = saveSettings;
   $("btn-settings-defaults").onclick = restoreDefaults;
   $("join-mode").onchange = applyJoinMode;
@@ -3184,7 +3374,11 @@ function wire() {
 
   $("btn-ask-ok").onclick = () => sendAnswer(askSelection());
   $("btn-ask-all").onclick = () => sendAnswer("");
-  $("btn-ask-always").onclick = () => { state.answerAllThisRun = true; sendAnswer(""); };
+  $("btn-ask-always").onclick = () => {
+    const pending = state.questions[0];
+    if (pending) areaOfSlot(pending.slot).answerAll = true;
+    sendAnswer("");
+  };
 
   document.querySelectorAll(".nav-item[data-page]").forEach((button) => {
     button.onclick = () => showPage(button.dataset.page);
@@ -3218,27 +3412,48 @@ function wire() {
   // web view simply opens the dropped file for viewing, and the queue never
   // hears about it. The second argument false means "the whole window takes
   // files", not just one marked element.
-  const zone = $("dropzone");
-  const joinZone = $("join-dropzone");
+  const dropZones = ["convert", "split", "join"].map((name) => $(name + "-dropzone"));
+  const coolDown = () => dropZones.forEach((z) => z.classList.remove("hot"));
+
+  // dropTarget is the area a dropped file belongs to: the one whose page is on
+  // show. Every area keeps its own list now, so the same file dropped on two
+  // pages really is two jobs — which is the point of the separation.
+  function dropTarget() {
+    const area = state.areas[state.page];
+    if (!area) return null;                       // the settings page takes nothing
+    return area.hasQueue || area.name === "join" ? area : null;
+  }
+
   window.runtime.OnFileDrop(async (x, y, paths) => {
-    zone.classList.remove("hot");
-    joinZone.classList.remove("hot");
+    coolDown();
     if (!paths || !paths.length) return;
+    const area = dropTarget();
+    // The watched folder is the one page that takes no files by hand — saying
+    // so is better than swallowing the drop without a word.
+    if (!area) {
+      if (state.page === "watch") {
+        watchNote("Nothing is dropped in here — this folder is watched, and it takes its files itself.");
+      }
+      return;
+    }
     try {
-      // Whichever page is on show catches the files. Everything dropped on the
-      // join page goes into its own list — putting it in the queue would send
-      // audio files to a list that only ever runs videos.
-      if (state.page === "join") await addJoinPaths(paths);
-      else addItems(await api().AddPaths(paths));
+      // Everything dropped on the join page goes into its own list — putting
+      // it in a queue would send audio files to a list that only runs videos.
+      if (area.name === "join") await addJoinPaths(paths);
+      else addItems(await api().AddPaths(paths), area);
     } catch (err) {
-      showError(String(err));
+      showError(String(err), area.name);
     }
   }, false);
 
-  const dropZones = [zone, joinZone];
-  window.addEventListener("dragover", (e) => { e.preventDefault(); dropZones.forEach((z) => z.classList.add("hot")); });
-  window.addEventListener("dragleave", () => dropZones.forEach((z) => z.classList.remove("hot")));
-  window.addEventListener("drop", () => dropZones.forEach((z) => z.classList.remove("hot")));
+  // Only the zone that would actually catch the file lights up.
+  window.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    const area = dropTarget();
+    if (area) $(area.name + "-dropzone").classList.add("hot");
+  });
+  window.addEventListener("dragleave", coolDown);
+  window.addEventListener("drop", coolDown);
 
   window.runtime.EventsOn("watch:files", onWatchFiles);
   window.runtime.EventsOn("conv:event", onConverterEvent);
@@ -3265,8 +3480,14 @@ async function boot() {
 
   wire();
   showPage("convert");
-  afterQueueChange();
+  afterQueueChange(areaOf("convert"));
+  afterQueueChange(areaOf("split"));
   afterJoinChange();
+  // Both routes name their own start button, so both are asked once at the
+  // start — otherwise a button would stand there with the label from the HTML
+  // while the area behind it means something else.
+  applySplitMode();
+  applyJoinMode();
   showWatch(null);
   try {
     const info = await api().GetStartupInfo();

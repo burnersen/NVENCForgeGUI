@@ -1,7 +1,7 @@
 // wiring_check.js — does the window's script talk to elements that exist?
 //
 // This check exists because of a real failure, and because none of the other
-// nine could have caught it. The stand-in document in check_harness.js hands
+// checks could have caught it. The stand-in document in check_harness.js hands
 // back an element for ANY id ever asked for; the real browser hands back null.
 // So a button that was removed from the page while its wiring stayed behind
 // looks perfectly fine in every other check here — and in the real window it
@@ -30,8 +30,9 @@ const script = html.slice(scriptAt);
 
 const defined = new Set([...markup.matchAll(/id="([^"]+)"/g)].map((m) => m[1]));
 
-// Only literal ids can be checked. Something like $("field-" + key) is built at
-// runtime and is left alone rather than guessed at.
+// Only literal ids can be checked here. Something like $("field-" + key) is
+// built at runtime; the ids an area builds for itself are checked further
+// down, by name.
 const asked = [...new Set([...script.matchAll(/\$\("([^"]+)"\)/g)].map((m) => m[1]))];
 const selected = [...new Set(
   [...script.matchAll(/querySelector\("#([A-Za-z0-9_-]+)"\)/g)].map((m) => m[1])
@@ -51,11 +52,55 @@ const missingSelectors = selected.filter((id) => !defined.has(id));
 if (missingSelectors.length) console.log("  missing selectors: " + missingSelectors.join(", "));
 checker.check("every #selector exists    ", missingSelectors.length, 0);
 
-// The four ids that keep the window usable at all. Named one by one, so that
-// removing one of them fails here with its own name rather than as a number.
-console.log("\nThe pieces the window cannot work without");
-for (const id of ["btn-start", "btn-stop", "logbox", "queue", "watch-logbox",
-                  "watch-lanes", "btn-watch-start", "btn-watch-stop", "lanes"]) {
+/* Every area builds its own element ids: el(area, "lanes") asks for
+   "convert-lanes", "split-lanes" and so on. Those never appear as a literal
+   $("...") anywhere, so the list above cannot see them — this is the new blind
+   spot, and it is the same kind of hole the whole file was written for. So the
+   ids are spelled out here, area by area, and matched against the page.
+
+   The lists mirror what the script really does: hasQueue decides whether an
+   area has a list of files, hasBar whether it has an overall bar. */
+const AREAS = {
+  convert: { queue: true, bar: true, runs: true },
+  split:   { queue: true, bar: true, runs: true },
+  join:    { queue: false, bar: false, runs: true },
+  watch:   { queue: false, bar: false, runs: false }
+};
+
+console.log("\nEvery area owns the elements its own code reaches for");
+for (const [area, has] of Object.entries(AREAS)) {
+  // The display each area needs whatever it does: its own log and its own
+  // progress area, with a running total under it.
+  const roles = ["logbox", "autoscroll", "log-copied", "error", "summary", "lanes"];
+  const buttons = ["log-copy", "log-clear"];
+  if (has.runs) {
+    roles.push("stop-hint");
+    buttons.push("start", "stop");
+  }
+  if (has.queue) {
+    roles.push("queue", "queue-info", "dropzone");
+    buttons.push("files", "folder", "clear");
+  }
+  if (has.bar) roles.push("bar", "pct", "barline");
+
+  const wanted = roles.map((role) => area + "-" + role)
+    .concat(buttons.map((name) => "btn-" + area + "-" + name));
+  const absent = wanted.filter((id) => !defined.has(id));
+  if (absent.length) console.log("  " + area + " is missing: " + absent.join(", "));
+  checker.check("  " + area.padEnd(18), absent.length, 0);
+}
+
+// The join page keeps a list of a different shape, so it does not follow the
+// naming above. Named separately rather than left out.
+console.log("\nThe join page keeps its own kind of list");
+for (const id of ["join-list", "join-dropzone", "join-info", "join-result",
+                  "btn-join-files", "btn-join-clear"]) {
+  checker.check("  " + id.padEnd(18), defined.has(id), true);
+}
+
+// The watched folder is worked by its own three buttons, not by a start button.
+console.log("\nThe watched folder is switched on and off by hand");
+for (const id of ["btn-watch-pick", "btn-watch-start", "btn-watch-stop", "btn-watch-stop-run"]) {
   checker.check("  " + id.padEnd(18), defined.has(id), true);
 }
 
@@ -64,26 +109,52 @@ for (const id of ["btn-start", "btn-stop", "logbox", "queue", "watch-logbox",
 // dropping a video plays it instead of queueing it.
 console.log("\nFile dropping is taken over from the web view");
 checker.check("OnFileDrop is registered ", /runtime\.OnFileDrop\(/.test(script), true);
-checker.check("and drops reach the queue", /OnFileDrop\(\s*\(/.test(script) || script.includes("OnFileDrop("), true);
+checker.check("and drops reach a list   ", /addItems\(|addJoinPaths\(/.test(script), true);
 
-// The watched folder has a twin of every display the Convert page has. Each
-// twin needs the same styling, and CSS says nothing when it does not: the rule
-// simply does not apply. That is how its log first appeared as a white,
-// sizeless box with unreadable terminal colours in it.
-console.log("\nEvery twin display is styled, not just the original");
+/* Every display exists four times over now, and they are styled by class
+   instead of by id — one rule for all of them. That moves the old danger
+   rather than removing it: a copy that forgets its class is styled by nothing
+   at all, and CSS says nothing when a rule does not apply. That is exactly how
+   the watched folder's log first turned up as a white, sizeless box with
+   unreadable terminal colours in it.
+
+   So every copy is checked for its class, and every class for a rule that
+   actually exists. */
+console.log("\nEvery copy carries the class that styles it");
 const css = markup.slice(markup.indexOf("<style>"), markup.indexOf("</style>"));
-const countOf = (name) => css.split("#" + name).length - 1;
-for (const [one, twin] of [["logbox", "watch-logbox"], ["lanes", "watch-lanes"], ["summary", "watch-summary"]]) {
-  // Counted, not merely looked for: naming the twin in one rule and forgetting
-  // it in the next is the same bug in a smaller size, and a plain "is it
-  // mentioned anywhere" would sail straight past it.
-  const forOne = countOf(one);
-  const forTwin = countOf(twin);
-  if (forOne !== forTwin) {
-    console.log("  #" + one + " is styled " + forOne + " time(s), #" + twin + " " + forTwin);
-  }
-  checker.check("  #" + twin.padEnd(16), forTwin, forOne);
+
+function tagOf(id) {
+  const found = markup.match(new RegExp("<[^>]*\\sid=\"" + id + "\"[^>]*>"));
+  return found ? found[0] : "";
 }
+function wears(id, className) {
+  const attribute = tagOf(id).match(/class="([^"]*)"/);
+  return !!attribute && attribute[1].split(/\s+/).includes(className);
+}
+
+const styled = [
+  ["convert-logbox", "logbox"], ["split-logbox", "logbox"],
+  ["join-logbox", "logbox"], ["watch-logbox", "logbox"],
+  ["convert-lanes", "lanes"], ["split-lanes", "lanes"],
+  ["join-lanes", "lanes"], ["watch-lanes", "lanes"],
+  ["convert-summary", "summary"], ["split-summary", "summary"],
+  ["join-summary", "summary"], ["watch-summary", "summary"],
+  ["convert-queue", "filelist"], ["split-queue", "filelist"], ["join-list", "filelist"],
+  ["convert-dropzone", "dropzone"], ["split-dropzone", "dropzone"], ["join-dropzone", "dropzone"]
+];
+const bare = styled.filter(([id, className]) => !wears(id, className));
+if (bare.length) console.log("  without their class: " + bare.map(([id]) => id).join(", "));
+checker.check("every copy is dressed    ", bare.length, 0);
+
+const classes = [...new Set(styled.map(([, className]) => className))];
+const unruled = classes.filter((className) => !css.includes("." + className));
+if (unruled.length) console.log("  classes with no rule: " + unruled.join(", "));
+checker.check("and every class has rules", unruled.length, 0);
+
+// The result line is the one thing a finished run leaves behind, so the rule
+// that makes it stand out has to exist — the script writes that class on.
+checker.check("the result line has a look", css.includes(".summary.final"), true);
+checker.check("and the script puts it on ", script.includes('"summary final"'), true);
 
 // Second guard, and a different one: actually RUN wire(). The stand-in hands
 // back an element for any id, so this cannot see a missing element - but it

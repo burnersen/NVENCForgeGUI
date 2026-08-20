@@ -63,7 +63,7 @@ async function main() {
   element("srt-new").value = "# not a phrase";
   gui.addSRTPhrase();
   check("it was refused               ", gui.state.srt.phrases.length, before);
-  contains("and the reason is shown  ", element("error-text").textContent, "comment");
+  contains("and the reason is shown  ", element("srt-state").textContent, "comment");
 
   console.log("\n=== what is sent is what is on screen ===");
   await gui.saveSRTPhrases();
