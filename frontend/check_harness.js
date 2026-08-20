@@ -91,7 +91,7 @@ function loadGui() {
   // Everything the window would hand to the Go side is recorded instead. That
   // is how a check can see WHICH answer a button really sends — the one thing
   // that decides whether the user gets the tracks they picked.
-  const calls = { answers: [], answerSlots: [], runs: [], joinSorts: [], stops: [], srtSaves: [], themes: [], clipboard: [], savingsResets: [] };
+  const calls = { answers: [], answerSlots: [], runs: [], joinSorts: [], stops: [], srtSaves: [], themes: [], clipboard: [], savingsResets: [], frame: [] };
   // Was das Sparbuch der Go-Seite antworten soll; je Prüfung gesetzt.
   let savingsReply = { weekMB: 0, weekFiles: 0, monthMB: 0, monthFiles: 0 };
   // What GetSRTCleaner should answer; set per check with setSRTReply.
@@ -136,6 +136,13 @@ function loadGui() {
             savingsReply = { weekMB: 0, weekFiles: 0, monthMB: 0, monthFiles: 0 };
             return Promise.resolve(savingsReply);
           },
+          // Der Fensterrahmen: Prozent im Titel, Balken im Taskleisten-Knopf,
+          // Blinken am Ende. Aufgezeichnet wird die REIHENFOLGE — dass am Ende
+          // eines Stapels wirklich abgeräumt und gemeldet wird, ist der Punkt.
+          ShowProgress(percent) { calls.frame.push("percent:" + percent); return Promise.resolve(); },
+          ShowBusy() { calls.frame.push("busy"); return Promise.resolve(); },
+          HideProgress() { calls.frame.push("idle"); return Promise.resolve(); },
+          SignalDone() { calls.frame.push("done"); return Promise.resolve(); },
           SaveTheme(theme) { calls.themes.push(theme); return Promise.resolve(); },
           GetSRTCleaner() { return Promise.resolve(srtReply); },
           SaveSRTCleaner(phrases) {
@@ -155,7 +162,7 @@ function loadGui() {
     " onQuestion, sendAnswer, askSelection, isExtraOption, isToolRun, collectRequest, resetProgress," +
     " updateButtons, afterJoinChange, addJoinPaths, joinBase, joinOfKind," +
     " joinReady, joinRunFiles, onWatchFiles, maybeStartWatchRun, showWatch, clearWatchArea, runWentThroughCleanly, clearFinishedList, stopWatching, stopWatchRun, collectWatchRequest, onQueueState, renderWatchSummary, isWatchSlot, WATCH_SLOT, limitParallelChoice, watchNote," +
-    " startBatch, clearProgress, updateOverall, stopSlot, stop, start, renderLanes, copyAreaLog," +
+    " startBatch, clearProgress, updateOverall, batchProgress, updateFrame, stopSlot, stop, start, renderLanes, copyAreaLog," +
     " loadSRTCleaner, renderSRTCleaner, addSRTPhrase, saveSRTPhrases, srtSignature," +
     " joinMode, applyJoinMode, JOIN_MODES, applyTheme, chooseTheme, THEMES," +
     " splitMode, applySplitMode, SPLIT_MODES," +

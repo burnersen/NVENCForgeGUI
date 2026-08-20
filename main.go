@@ -58,7 +58,9 @@ func main() {
 	}
 
 	err := wails.Run(&options.App{
-		Title:            "NVENCForge v" + guiVersion,
+		// Genau der Titel, den HideProgress später wiederherstellt. Er steht
+		// deshalb nur an einer Stelle (taskbar.go).
+		Title:            baseWindowTitle(),
 		Width:            window.Width,
 		Height:           window.Height,
 		MinWidth:         minWindowWidth,

@@ -24,6 +24,8 @@ export function GetStartupInfo():Promise<main.StartupInfo>;
 
 export function GetTheme():Promise<string>;
 
+export function HideProgress():Promise<void>;
+
 export function IsRunning():Promise<boolean>;
 
 export function NeedsSetup():Promise<boolean>;
@@ -45,6 +47,12 @@ export function SaveSRTCleaner(arg1:Array<main.SRTPhrase>):Promise<main.SaveResu
 export function SaveSettings(arg1:Record<string, string>):Promise<main.SaveResult>;
 
 export function SaveTheme(arg1:string):Promise<void>;
+
+export function ShowBusy():Promise<void>;
+
+export function ShowProgress(arg1:number):Promise<void>;
+
+export function SignalDone():Promise<void>;
 
 export function SortJoinFiles(arg1:Array<string>):Promise<Array<main.JoinFile>>;
 

@@ -1088,6 +1088,9 @@ const state = {
   totalLimit: 3,         // how many may work the card at once, as the dispatcher says
   savings: null,         // what the Go side has counted; null = not asked yet
   savingsResetAsked: false, // the reset button was clicked once and is waiting
+  // What the window frame is showing right now (see updateFrame). "" is not a
+  // state the frame can be in, so the very first run always gets through.
+  frame: { mode: "", percent: -1 },
   watch: { folder: "", active: false },
   watchPending: [],   // paths the watcher found that have not run yet
   joinFiles: [],      // the join area's own list, sorted by Go (joinfiles.go)
@@ -1912,10 +1915,27 @@ function updateOverall(area) {
   // Only where there is a bar at all: joining builds one file and the watched
   // folder never ends, so neither has an overall bar to fill.
   if (!area.hasBar) return;
-  if (!area.batch || !area.batch.size) {
-    setBar(area, 0, false);
-    return;
-  }
+  const share = batchProgress(area);
+  if (share.total <= 0) { setBar(area, 0, false); return; }
+  setBar(area, share.done / share.total * 100, true);
+  updateFrame();
+}
+
+// batchProgress weighs one area's running batch in megabytes: how much of it
+// is through, and how much there is altogether.
+//
+// It is worked out from the queue every time instead of adding finished files
+// up as they go by. The counting version was wrong and looked it: when a
+// converter closed, its file dropped out of the sum — the bar FELL BACK while
+// a file had just been finished, and ended at 44.5 % on a batch that was
+// completely done (reported 2026-08-18). Read from the queue, a file that is
+// done stays done: the bar can only ever go up.
+//
+// Two callers need the same figure — the bar on the page and the progress on
+// the taskbar button — and they must never disagree.
+function batchProgress(area) {
+  const nothing = { done: 0, total: 0 };
+  if (!area.hasBar || !area.batch || !area.batch.size) return nothing;
   let total = 0;
   let done = 0;
   area.queue.forEach((entry) => {
@@ -1931,8 +1951,56 @@ function updateOverall(area) {
     const lane = laneFor(area, entry);
     if (lane && lane.known) done += size * (lane.pct || 0) / 100;
   });
-  if (total <= 0) { setBar(area, 0, false); return; }
-  setBar(area, done / total * 100, true);
+  return { done: done, total: total };
+}
+
+/* ---------- the window frame as a progress display ----------
+   Whoever starts a batch minimises the window and gets on with something else.
+   So the frame itself carries the state: the percentage in the title, the bar
+   inside the taskbar button, and one flash of that button when a batch is
+   through. No sound — that was the user's decision.
+
+   Everything here is decoration. If a call fails, nothing about the conversion
+   changes, which is why the error is swallowed on purpose rather than shown.
+   --------------------------------------------------------------------------- */
+function tellFrame(call) {
+  try {
+    const answer = call();
+    if (answer && answer.catch) answer.catch(() => {});
+  } catch (err) {
+    /* the frame is decoration — a conversion must never fail over it */
+  }
+}
+
+// updateFrame works out ONE figure for the whole window: the taskbar button
+// exists once, however many areas are working.
+//
+// Only whole percent are sent on, and only when that number really changed.
+// Without that guard this would cross over to the Go side ten times a second
+// per running converter — for a picture that cannot show the difference.
+function updateFrame() {
+  let done = 0;
+  let total = 0;
+  let busy = false;
+  AREA_NAMES.forEach((name) => {
+    const area = areaOf(name);
+    if (!area.running) return;
+    busy = true;
+    const share = batchProgress(area);
+    done += share.done;
+    total += share.total;
+  });
+
+  // Joining and the watched folder have no total to count towards, so a run
+  // made only of those says "working" instead of inventing a number.
+  const mode = !busy ? "idle" : (total > 0 ? "percent" : "busy");
+  const percent = mode === "percent" ? Math.round(done / total * 100) : 0;
+  if (mode === state.frame.mode && percent === state.frame.percent) return;
+  state.frame = { mode: mode, percent: percent };
+
+  if (mode === "idle") { tellFrame(() => api().HideProgress()); return; }
+  if (mode === "busy") { tellFrame(() => api().ShowBusy()); return; }
+  tellFrame(() => api().ShowProgress(percent));
 }
 
 /* ---------- converter events ---------- */
@@ -2424,6 +2492,10 @@ function onQueueState(queueState) {
     if (wasRunning && !busy) finishArea(area);
   });
   updateButtons();
+  // After the loop, never inside it: the frame carries ONE figure for the
+  // whole window, and halfway through the round the areas do not yet agree on
+  // what that figure is.
+  updateFrame();
 }
 
 // finishArea is what happens when one area has nothing left running and
@@ -2464,6 +2536,10 @@ function finishArea(area) {
   // come. What the run DID stays — in the result line and in the log.
   clearLanes(area);
   renderLanes();
+  // The taskbar button flashes until the window is looked at — whatever the
+  // outcome. Stopped, failed or finished, the machine is free again, and that
+  // is the news. It stays quiet if the window is at the front anyway.
+  tellFrame(() => api().SignalDone());
 }
 
 // clearLanes takes the finished converters off the display and puts the

@@ -82,6 +82,50 @@ func (a *App) restoreWindowPlace() {
 	wailsruntime.WindowSetPosition(a.ctx, a.window.X, a.window.Y)
 }
 
+// ----------------------------------------------------------------------------
+// Der Fensterrahmen als Fortschrittsanzeige
+//
+// Wer einen Stapel anwirft, verkleinert das Fenster und arbeitet weiter. Damit
+// er nicht dauernd nachsehen muss, trägt der Rahmen selbst den Stand: die
+// Prozentzahl im Titel (Windows zeigt ihn am Taskleisten-Knopf) und der Balken
+// im Knopf. Am Ende eines Stapels blinkt der Knopf — ohne Ton, so gewünscht.
+//
+// Wie viel Prozent es sind, rechnet die Fensterseite aus: Nur sie kennt alle
+// Listen und meldet sich erst, wenn sich die ganze Zahl wirklich geändert hat.
+// ----------------------------------------------------------------------------
+
+// ShowProgress meldet den Gesamtfortschritt der laufenden Stapel.
+func (a *App) ShowProgress(percent int) {
+	a.setWindowTitle(progressTitle(percent))
+	showTaskbarProgress(percent)
+}
+
+// ShowBusy meldet "es läuft", wo es keine ehrliche Prozentzahl gibt: Beim
+// Zusammenfügen entsteht EINE Datei, da ist nichts abzuzählen.
+func (a *App) ShowBusy() {
+	a.setWindowTitle(busyTitle())
+	showTaskbarBusy()
+}
+
+// HideProgress stellt den Ruhezustand her — Titel wie beim Start, kein Balken.
+func (a *App) HideProgress() {
+	a.setWindowTitle(baseWindowTitle())
+	hideTaskbarProgress()
+}
+
+// SignalDone ist die Fertig-Meldung am Ende eines Stapels.
+func (a *App) SignalDone() {
+	flashTaskbar()
+}
+
+// setWindowTitle schreibt den Titel, sobald es ein Fenster gibt.
+func (a *App) setWindowTitle(title string) {
+	if a.ctx == nil {
+		return
+	}
+	wailsruntime.WindowSetTitle(a.ctx, title)
+}
+
 // rememberWindow schreibt Größe und Platz des Fensters weg.
 //
 // Ist das Fenster maximiert oder zum Symbol verkleinert, bleiben die Maße

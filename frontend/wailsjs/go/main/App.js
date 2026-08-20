@@ -46,6 +46,10 @@ export function GetTheme() {
   return window['go']['main']['App']['GetTheme']();
 }
 
+export function HideProgress() {
+  return window['go']['main']['App']['HideProgress']();
+}
+
 export function IsRunning() {
   return window['go']['main']['App']['IsRunning']();
 }
@@ -88,6 +92,18 @@ export function SaveSettings(arg1) {
 
 export function SaveTheme(arg1) {
   return window['go']['main']['App']['SaveTheme'](arg1);
+}
+
+export function ShowBusy() {
+  return window['go']['main']['App']['ShowBusy']();
+}
+
+export function ShowProgress(arg1) {
+  return window['go']['main']['App']['ShowProgress'](arg1);
+}
+
+export function SignalDone() {
+  return window['go']['main']['App']['SignalDone']();
 }
 
 export function SortJoinFiles(arg1) {
