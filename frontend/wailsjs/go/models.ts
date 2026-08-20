@@ -319,6 +319,24 @@ export namespace main {
 	        this.note = source["note"];
 	    }
 	}
+	export class SavingsReport {
+	    weekMB: number;
+	    weekFiles: number;
+	    monthMB: number;
+	    monthFiles: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new SavingsReport(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.weekMB = source["weekMB"];
+	        this.weekFiles = source["weekFiles"];
+	        this.monthMB = source["monthMB"];
+	        this.monthFiles = source["monthFiles"];
+	    }
+	}
 	export class SettingEntry {
 	    key: string;
 	    value: string;

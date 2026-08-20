@@ -1,3 +1,7 @@
+// NVENCForgeGUI — Required Notice: Copyright (c) 2026 burnersen — NVENCForgeGUI
+// Licensed under the PolyForm Noncommercial License 1.0.0 (non-commercial use only).
+// Full terms: LICENSE.md · https://polyformproject.org/licenses/noncommercial/1.0.0
+
 // parallel_check.js — several converters at once, without a browser.
 //
 // Every mistake in here is one you only notice after the fact: a progress bar

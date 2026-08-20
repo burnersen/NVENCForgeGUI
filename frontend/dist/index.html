@@ -266,14 +266,32 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
 [data-help] > label, .check[data-help] { cursor: help; }
 
 /* ---------- settings page ----------
-   One row per setting, always in the same order: name, value, undo, default.
-   The eye should be able to run down a single column to spot what was
-   changed. */
+   Twenty-seven settings in one column made this the page you scroll longest.
+   They stand in two columns wherever the window is wide enough — nothing is
+   hidden, the page is simply half as long. A narrow window falls back to one
+   column on its own, because the columns are asked for by minimum width and
+   not by number.
+
+   Each setting keeps its name and its default value above one another, so a
+   column stays narrow enough for two of them to fit side by side. */
+.settings-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 0 26px; align-items: start;
+}
+/* A section heading always spans the full width — otherwise it would sit in
+   one column and the settings under it would start in the other. */
+.settings-grid > .sec-title { grid-column: 1 / -1; }
+
 .setting {
-  display: grid; grid-template-columns: 210px 190px 28px 1fr;
-  align-items: center; gap: 12px;
+  display: grid; grid-template-columns: minmax(0, 1fr) 132px 24px;
+  align-items: center; gap: 2px 10px;
   padding: 7px 8px; border-bottom: 1px solid var(--line);
 }
+.setting > .name { grid-column: 1; grid-row: 1; }
+.setting > select, .setting > input { grid-column: 2; grid-row: 1 / span 2; }
+.setting > .revert { grid-column: 3; grid-row: 1 / span 2; }
+.setting > .std { grid-column: 1; grid-row: 2; }
+.setting[hidden] { display: none; }
 .setting:last-child { border-bottom: none; }
 .setting > .name { font-size: 12.5px; cursor: help; overflow-wrap: anywhere; }
 .setting.changed { background: var(--wash-mid); }
@@ -291,6 +309,8 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
   margin: 14px 0 2px; font-size: 11px; text-transform: uppercase;
   letter-spacing: .6px; color: var(--muted);
 }
+.sec-title[hidden] { display: none; }
+#settings-filter { flex: 1; min-width: 200px; }
 #settings-expert-box { margin-top: 16px; }
 #settings-expert-box > summary {
   cursor: pointer; padding: 8px 0; font-size: 13px; color: var(--muted);
@@ -900,11 +920,19 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
         </div>
         <div class="hint" id="settings-path"></div>
 
-        <div id="settings-common"></div>
+        <!-- Twenty-seven settings are more than anyone reads through. Typing
+             part of a name is the shortest way to the one you mean; nothing is
+             hidden for good, an empty box shows everything again. -->
+        <div class="row" style="margin:10px 0 4px">
+          <input type="text" id="settings-filter" placeholder="Find a setting — type part of its name, e.g. cq" />
+          <span class="hint" id="settings-filter-note" style="margin:0"></span>
+        </div>
+
+        <div class="settings-grid" id="settings-common"></div>
 
         <details id="settings-expert-box">
           <summary>Expert settings — safe to ignore, here for tinkering</summary>
-          <div id="settings-expert"></div>
+          <div class="settings-grid" id="settings-expert"></div>
         </details>
 
         <details id="srt-box">
@@ -2879,12 +2907,73 @@ function renderSettings() {
       lastSection[group] = setting.section;
       const title = document.createElement("div");
       title.className = "sec-title";
+      title.id = sectionId(group, setting.section);
       title.textContent = setting.section;
       box.appendChild(title);
     }
     box.appendChild(settingRow(setting));
   });
+  applySettingsFilter();
   updateSettingsButtons();
+}
+
+// sectionId ist der Name einer Abschnittsüberschrift im Fenster. Der Abschnitt
+// selbst kommt aus der INI und darf alles Mögliche enthalten — Leerzeichen und
+// Umlaute ergäben eine Kennung, die sich nicht mehr ansprechen lässt.
+function sectionId(group, section) {
+  return "sec-" + group + "-" + String(section).toLowerCase().replace(/[^a-z0-9]+/g, "-");
+}
+
+/* ---------- finding a setting ----------
+   Searched is the name of the setting and the section it stands in — not the
+   explanation. The explanations are long sentences; a word like "file" appears
+   in half of them, and a filter that answers with half the page has not
+   filtered anything. */
+function settingMatches(setting, query) {
+  if (!query) return true;
+  const haystack = (setting.key + " " + (setting.section || "")).toLowerCase();
+  return haystack.includes(query);
+}
+
+// applySettingsFilter shows what matches and hides the rest — including the
+// section headings that would otherwise stand over nothing.
+function applySettingsFilter() {
+  const file = state.settingsFile;
+  if (!file || !file.settings) return;
+  const query = $("settings-filter").value.trim().toLowerCase();
+
+  const sectionsWithHits = new Set();
+  let shown = 0;
+  file.settings.forEach((setting) => {
+    const matches = settingMatches(setting, query);
+    const row = $("row-" + setting.key);
+    if (row) row.hidden = !matches;
+    if (!matches) return;
+    shown++;
+    const group = setting.group === "expert" ? "expert" : "common";
+    if (setting.section) sectionsWithHits.add(sectionId(group, setting.section));
+  });
+
+  file.settings.forEach((setting) => {
+    if (!setting.section) return;
+    const group = setting.group === "expert" ? "expert" : "common";
+    const id = sectionId(group, setting.section);
+    const title = $(id);
+    if (title) title.hidden = !sectionsWithHits.has(id);
+  });
+
+  // A hit among the expert settings would sit inside a closed box, and the
+  // search would look as if it had found nothing. So the box opens itself —
+  // and closes again once the search is over.
+  const expertHit = file.settings.some(
+    (setting) => setting.group === "expert" && settingMatches(setting, query));
+  if (query) $("settings-expert-box").open = expertHit;
+
+  $("settings-filter-note").textContent = !query
+    ? ""
+    : (shown === 0
+        ? "nothing is called that"
+        : shown + " of " + file.settings.length + " shown");
 }
 function settingRow(setting) {
   const model = settingModel(setting);
@@ -3445,6 +3534,7 @@ function wire() {
   $("btn-download").onclick = download;
   $("btn-settings-save").onclick = saveSettings;
   $("btn-savings-reset").onclick = resetSavings;
+  $("settings-filter").oninput = applySettingsFilter;
   $("btn-settings-defaults").onclick = restoreDefaults;
   $("join-mode").onchange = applyJoinMode;
   $("split-mode").onchange = applySplitMode;

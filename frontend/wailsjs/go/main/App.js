@@ -30,6 +30,10 @@ export function GetSRTCleaner() {
   return window['go']['main']['App']['GetSRTCleaner']();
 }
 
+export function GetSavings() {
+  return window['go']['main']['App']['GetSavings']();
+}
+
 export function GetSettingsFile() {
   return window['go']['main']['App']['GetSettingsFile']();
 }
@@ -64,6 +68,10 @@ export function PickJoinFiles() {
 
 export function PickWatchFolder() {
   return window['go']['main']['App']['PickWatchFolder']();
+}
+
+export function ResetSavings() {
+  return window['go']['main']['App']['ResetSavings']();
 }
 
 export function RunSetup() {

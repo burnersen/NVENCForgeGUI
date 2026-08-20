@@ -16,6 +16,8 @@ export function GetQueueStatus():Promise<main.QueueState>;
 
 export function GetSRTCleaner():Promise<main.SRTCleanerView>;
 
+export function GetSavings():Promise<main.SavingsReport>;
+
 export function GetSettingsFile():Promise<main.SettingsFile>;
 
 export function GetStartupInfo():Promise<main.StartupInfo>;
@@ -33,6 +35,8 @@ export function PickFolder():Promise<Array<main.QueueItem>>;
 export function PickJoinFiles():Promise<Array<main.JoinFile>>;
 
 export function PickWatchFolder():Promise<string>;
+
+export function ResetSavings():Promise<main.SavingsReport>;
 
 export function RunSetup():Promise<void>;
 

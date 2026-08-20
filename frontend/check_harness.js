@@ -1,3 +1,7 @@
+// NVENCForgeGUI — Required Notice: Copyright (c) 2026 burnersen — NVENCForgeGUI
+// Licensed under the PolyForm Noncommercial License 1.0.0 (non-commercial use only).
+// Full terms: LICENSE.md · https://polyformproject.org/licenses/noncommercial/1.0.0
+
 // check_harness.js — runs the window's own script without a browser.
 //
 // Shared by progress_check.js and options_check.js. The logic under test lives
@@ -157,7 +161,7 @@ function loadGui() {
     " splitMode, applySplitMode, SPLIT_MODES," +
     " areaOf, areaOfSlot, areaNameOfSlot, anyRunning, addItems, afterQueueChange," +
     " AREA_NAMES, AREA_SLOTS, finishArea, clearLanes, renderList, showFinalSummary, el," +
-    " showSavings, resetSavings, onRunState };"
+    " showSavings, resetSavings, applySettingsFilter, settingMatches, sectionId, onRunState };"
   )(windowStub, documentStub);
 
   return {

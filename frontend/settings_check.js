@@ -1,3 +1,7 @@
+// NVENCForgeGUI — Required Notice: Copyright (c) 2026 burnersen — NVENCForgeGUI
+// Licensed under the PolyForm Noncommercial License 1.0.0 (non-commercial use only).
+// Full terms: LICENSE.md · https://polyformproject.org/licenses/noncommercial/1.0.0
+
 // settings_check.js — checks the settings page without touching a real INI.
 //
 // Run it with:  node frontend\settings_check.js
@@ -145,5 +149,58 @@ check("settings visible             ", element("page-settings").hidden, false);
 check("convert hidden               ", element("page-convert").hidden, true);
 gui.showPage("convert");
 check("back to convert              ", element("page-convert").hidden, false);
+
+console.log("\n=== finding a setting among twenty-seven ===");
+// Searched are the name and the section — not the explanations. A word like
+// "file" appears in half of those, and a filter that answers with half the
+// page has filtered nothing.
+reset();
+const filter = (text) => { element("settings-filter").value = text; gui.applySettingsFilter(); };
+const rowHidden = (key) => element("row-" + key).hidden;
+
+filter("cq");
+check("a CQ setting stays          ", rowHidden("targetCQ"), false);
+check("and the other one too       ", rowHidden("autoCQTolerance"), false);
+check("something else goes         ", rowHidden("gpuDecode"), true);
+contains("and it says how many       ", element("settings-filter-note").textContent, "of 13 shown");
+
+// The section a setting stands in counts as its name too: someone looking
+// for "encoder" means the whole group, not one line.
+filter("encoder internals");
+check("a whole section can be found", rowHidden("bFrames"), false);
+check("and its neighbours come too ", rowHidden("nvencPreset"), false);
+check("the rest is out             ", rowHidden("retireMode"), true);
+
+// A heading with nothing under it would stand over an empty space.
+filter("cpupreset");
+check("the section with the hit stays", element("sec-expert-cpu-mode").hidden, false);
+check("an empty section is hidden  ", element("sec-expert-speed").hidden, true);
+
+/* A hit among the expert settings sits inside a closed box. Without opening
+   it the search would look as if it had found nothing at all — the worst
+   kind of wrong answer, because it reads like the setting does not exist. */
+element("settings-expert-box").open = false;
+filter("bframes");
+check("the expert box opens itself ", element("settings-expert-box").open, true);
+
+// Nothing found is said in words. An empty page with no explanation looks
+// like the settings failed to load.
+filter("gibtesnicht");
+contains("nothing found is said      ", element("settings-filter-note").textContent, "nothing is called that");
+
+// An empty box shows everything again — nothing is hidden for good.
+filter("");
+check("everything is back          ", rowHidden("gpuDecode"), false);
+check("headings too                ", element("sec-expert-speed").hidden, false);
+check("and the note is quiet       ", element("settings-filter-note").textContent, "");
+
+// The two columns are asked for by minimum width, so a narrow window falls
+// back to one on its own. Checked in the markup, since there is no layout
+// engine here to measure.
+const { html } = require("./check_harness").loadGui();
+contains("the settings stand in a grid", html, 'class="settings-grid" id="settings-common"');
+contains("the expert ones as well    ", html, 'class="settings-grid" id="settings-expert"');
+contains("two columns where it fits  ", html, "repeat(auto-fit, minmax(400px, 1fr))");
+contains("a heading spans them both  ", html, ".settings-grid > .sec-title { grid-column: 1 / -1; }");
 
 finish();
