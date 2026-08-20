@@ -10,6 +10,10 @@ export function AnswerQuestion(arg1, arg2) {
   return window['go']['main']['App']['AnswerQuestion'](arg1, arg2);
 }
 
+export function CancelShutdown() {
+  return window['go']['main']['App']['CancelShutdown']();
+}
+
 export function DeleteProfile(arg1) {
   return window['go']['main']['App']['DeleteProfile'](arg1);
 }
@@ -106,12 +110,20 @@ export function SaveTheme(arg1) {
   return window['go']['main']['App']['SaveTheme'](arg1);
 }
 
+export function SetShutdownWhenDone(arg1) {
+  return window['go']['main']['App']['SetShutdownWhenDone'](arg1);
+}
+
 export function ShowBusy() {
   return window['go']['main']['App']['ShowBusy']();
 }
 
 export function ShowProgress(arg1) {
   return window['go']['main']['App']['ShowProgress'](arg1);
+}
+
+export function ShutdownStatus() {
+  return window['go']['main']['App']['ShutdownStatus']();
 }
 
 export function SignalDone() {

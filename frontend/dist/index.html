@@ -417,6 +417,23 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
 .ask-option.extra { color: var(--muted); }
 .ask-buttons { margin-top: 14px; }
 
+/* ---------- the shutdown warning ----------
+   Same box as the track chooser, so it is recognisably part of this window -
+   but framed in the warning colour and with the seconds big enough to read
+   from across the room. Somebody who walks past has to be able to tell what
+   is about to happen without stepping closer. */
+#shutdown-alert {
+  position: fixed; inset: 0; z-index: 70; display: flex;
+  align-items: center; justify-content: center;
+  background: var(--overlay);
+}
+#shutdown-alert[hidden] { display: none; }
+.shutdown-box { border-color: var(--danger-line); width: min(460px, 92vw); text-align: center; }
+.shutdown-box h3 { color: var(--danger-text); }
+.shutdown-count { margin: 10px 0 6px; color: var(--muted); font-size: 13px; }
+.shutdown-count b { display: block; font-size: 44px; line-height: 1.1; color: var(--text); }
+.shutdown-box .ask-buttons { justify-content: center; }
+
 /* ---------- day / night ----------
    Bottom left, below everything that does real work: easy to find, impossible
    to hit by accident while clicking through the pages. Both halves are always
@@ -1113,6 +1130,25 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
   </div>
 </div>
 
+<!-- The shutdown warning. It only appears once Windows is really counting
+     down, and it covers everything on purpose: at this point there is nothing
+     left to do in this window except decide whether the machine stays on.
+     The countdown belongs to Windows - this is a second, unmissable place to
+     stop it, not a second timer. -->
+<div id="shutdown-alert" hidden>
+  <div class="ask-box shutdown-box">
+    <h3>The PC is shutting down</h3>
+    <div class="shutdown-count"><b id="shutdown-seconds">60</b> seconds left</div>
+    <div class="hint">
+      Everything is converted and nothing else is running. Windows is doing the
+      shutdown, so “shutdown /a” in a command prompt stops it as well.
+    </div>
+    <div class="row ask-buttons">
+      <button class="btn danger" id="btn-shutdown-cancel">Cancel — keep the PC on</button>
+    </div>
+  </div>
+</div>
+
 <script>
 "use strict";
 
@@ -1201,6 +1237,9 @@ const state = {
   profiles: [],              // the saved option sets, as the Go side keeps them
   profileDeleteAsked: false, // the delete button was clicked once and is waiting
   watch: { folder: "", active: false },
+  // "Shut down the PC when finished", as the Go side keeps it (shutdown.go).
+  // armed = the wish stands, counting = Windows is already counting down.
+  shutdown: { armed: false, counting: false, seconds: 60 },
   watchPending: [],   // paths the watcher found that have not run yet
   joinFiles: [],      // the join area's own list, sorted by Go (joinfiles.go)
   joinBasePath: "",   // path of the video file the join is built on
@@ -1786,13 +1825,20 @@ function updateButtons() {
   // written next to it rather than left to guess.
   limitParallelChoice();
   // "Shut down when finished" and a standing order do not go together: the
-  // machine would switch itself off after the first video and every one after
-  // it would never be converted. The box says why it is out of reach.
+  // next find would need the machine on, so the box is out of reach while a
+  // folder is watched — with the reason on it. Otherwise it stays clickable
+  // throughout, including mid-batch: the decision is only acted on at the end
+  // (shutdown.go), so a late change of mind still counts.
+  //
+  // The one moment it is locked as well is while Windows is counting down.
+  // Then the wish cannot be taken back with a tick any more, only with the
+  // cancel button on the warning — a box that looked clickable would promise
+  // something it no longer does.
   const shutdownBox = $("opt-shutdown");
-  shutdownBox.disabled = state.watch.active;
+  shutdownBox.disabled = state.watch.active || state.shutdown.counting;
   shutdownBox.title = state.watch.active
     ? "Not available while a folder is being watched — the next video needs the machine on."
-    : "";
+    : (state.shutdown.counting ? "The shutdown is already running — use the cancel button." : "");
   if (state.watch.active) shutdownBox.checked = false;
 }
 
@@ -2918,7 +2964,7 @@ const HELP = {
   },
   shutdown: () => ({
     title: "Shut down when finished",
-    text: "Shuts the PC down once the last file in the queue is done.",
+    text: "Switches the PC off once there is nothing left to do — not just this list, but every area of this window, and only if nothing is converting outside it either. Windows does the shutdown and gives you a minute; a warning with a cancel button appears here as well. You can tick or untick this at any time, even in the middle of a batch. Stopping a batch by hand clears it, and while a folder is being watched it is out of reach: the next find would need the machine on.",
     now: "Default: off"
   }),
   parallel: () => ({
@@ -3768,6 +3814,78 @@ function resetProfileDelete() {
   $("btn-profile-delete").textContent = "Delete";
 }
 
+/* ---------- shutting the PC down ----------
+   The decision itself is made in Go (shutdown.go): only that side knows
+   whether every area is really empty and whether anything is still converting
+   outside this window. This page does two things — it passes the box on the
+   moment it is clicked, and it shows the countdown with a way out.
+
+   The box may be clicked at any time, including in the middle of a batch:
+   nothing is frozen at the start any more, and "I am going to bed after all"
+   is exactly when this gets ticked.
+   --------------------------------------------------------------------------- */
+
+// Handle of the ticking display. Not part of state: it is a timer, not a fact
+// about the run, and clearing it must not depend on anything else being right.
+let shutdownTicker = null;
+
+// setShutdownWish passes the box on. Sent right away rather than with the next
+// run, because there may not be a next run — the batch is usually already
+// going when somebody decides to go to bed.
+async function setShutdownWish() {
+  try {
+    onShutdownState(await api().SetShutdownWhenDone($("opt-shutdown").checked));
+  } catch (err) {
+    showError("Could not pass on the shutdown setting: " + err);
+  }
+}
+
+// onShutdownState takes the Go side's word for it — including a box that was
+// cleared there. That happens when something speaks against shutting down (a
+// batch stopped by hand, a folder being watched, another converter running),
+// and the reason is written into the log by the same code. A tick left
+// standing here would promise something that will not happen.
+function onShutdownState(next) {
+  if (!next) return;
+  state.shutdown = next;
+  $("opt-shutdown").checked = next.armed;
+  showShutdownAlert();
+  updateButtons();
+}
+
+// showShutdownAlert brings the warning up while Windows counts down.
+//
+// The seconds here are only a display: the countdown itself belongs to
+// Windows, and this window does not decide when the machine goes off. That is
+// why the number is never allowed to restart a shutdown or stop one — only
+// the button does that.
+function showShutdownAlert() {
+  const overlay = $("shutdown-alert");
+  if (!state.shutdown.counting) {
+    overlay.hidden = true;
+    if (shutdownTicker) { clearInterval(shutdownTicker); shutdownTicker = null; }
+    return;
+  }
+  if (shutdownTicker) return;  // already up and counting
+
+  let left = state.shutdown.seconds || 60;
+  const paint = () => { $("shutdown-seconds").textContent = String(Math.max(left, 0)); };
+  overlay.hidden = false;
+  paint();
+  shutdownTicker = setInterval(() => { left -= 1; paint(); }, 1000);
+}
+
+// cancelShutdown asks Windows to drop it ("shutdown /a"). If that fails, the
+// warning deliberately stays up: the machine is still going to switch off, and
+// the one thing that helps then is the command spelled out.
+async function cancelShutdown() {
+  try {
+    onShutdownState(await api().CancelShutdown());
+  } catch (err) {
+    showError("Could not cancel the shutdown: " + err + " — type \"shutdown /a\" in a command prompt.");
+  }
+}
+
 /* ---------- actions ---------- */
 // collectRequest builds what one area sends off. Which files, which mode and
 // which slot it will land on all follow from the area itself.
@@ -3934,6 +4052,9 @@ function wire() {
     } catch (e) { showError(String(e), "join"); }
   };
   $("btn-join-clear").onclick = () => { state.joinFiles = []; state.joinBasePath = ""; afterJoinChange(); };
+  // The shutdown box reports every click straight away — see setShutdownWish.
+  $("opt-shutdown").onchange = setShutdownWish;
+  $("btn-shutdown-cancel").onclick = cancelShutdown;
   $("btn-watch-pick").onclick = pickWatchFolder;
   $("btn-watch-start").onclick = startWatching;
   $("btn-watch-stop").onclick = stopWatching;
@@ -4064,6 +4185,7 @@ function wire() {
   window.runtime.EventsOn("conv:queue", onQueueState);
   window.runtime.EventsOn("conv:setup", onSetupDone);
   window.runtime.EventsOn("conv:savings", showSavings);
+  window.runtime.EventsOn("conv:shutdown", onShutdownState);
   window.runtime.EventsOn("conv:download", (info) => {
     if (!info.total) return;
     const done = (info.done / info.total * 100).toFixed(0);
@@ -4096,6 +4218,15 @@ async function boot() {
   // The drop-downs are empty in the markup on purpose: what is in them depends
   // on the file next to the exe, not on the page.
   await loadProfiles();
+  try {
+    // Asked once at the start so the box matches what the Go side really
+    // holds. It is "off" after a fresh start, but this window can also be
+    // reloaded while the program keeps running.
+    onShutdownState(await api().ShutdownStatus());
+  } catch (err) {
+    // An older build without this call. The box then simply starts unticked,
+    // which is what it says in the markup anyway.
+  }
   try {
     // The savings bar is filled from its own small call rather than out of the
     // startup report: that report asks the graphics card about itself and can

@@ -91,7 +91,10 @@ function loadGui() {
   // Everything the window would hand to the Go side is recorded instead. That
   // is how a check can see WHICH answer a button really sends — the one thing
   // that decides whether the user gets the tracks they picked.
-  const calls = { answers: [], answerSlots: [], runs: [], joinSorts: [], stops: [], srtSaves: [], themes: [], clipboard: [], savingsResets: [], frame: [], profileSaves: [], profileDeletes: [], opened: [] };
+  const calls = { answers: [], answerSlots: [], runs: [], joinSorts: [], stops: [], srtSaves: [], themes: [], clipboard: [], savingsResets: [], frame: [], profileSaves: [], profileDeletes: [], opened: [], shutdownWishes: [], shutdownCancels: [] };
+  // Was die Go-Seite über das Ausschalten antworten soll. Sie führt den Stand,
+  // das Fenster zeigt ihn nur — eine Prüfung muss also beides trennen können.
+  let shutdownReply = { armed: false, counting: false, seconds: 60, note: "" };
   // Die Profilablage. Sie führt wirklich Buch, statt nur zu bestätigen:
   // Eine Prüfung muss sehen, was NACH dem Speichern im Auswahlfeld steht.
   let profileList = [];
@@ -148,6 +151,20 @@ function loadGui() {
             profileList = profileList.filter((kept) => kept.name !== name);
             return Promise.resolve(sortProfiles(profileList));
           },
+          // Das Ausschalten des Rechners entscheidet die Go-Seite. Hier wird
+          // festgehalten, WAS das Fenster ihr dazu schickt — ein Häkchen, das
+          // nie ankommt, wäre sonst nicht von einem wirkenden zu unterscheiden.
+          SetShutdownWhenDone(on) {
+            calls.shutdownWishes.push(on);
+            shutdownReply = { ...shutdownReply, armed: on };
+            return Promise.resolve(shutdownReply);
+          },
+          CancelShutdown() {
+            calls.shutdownCancels.push(true);
+            shutdownReply = { ...shutdownReply, armed: false, counting: false };
+            return Promise.resolve(shutdownReply);
+          },
+          ShutdownStatus() { return Promise.resolve(shutdownReply); },
           // Das Sparbuch führt die Go-Seite. Das Fenster zeigt nur an — und
           // WAS es beim Zurücksetzen wirklich losschickt, steht hier.
           GetSavings() { return Promise.resolve(savingsReply); },
@@ -188,7 +205,8 @@ function loadGui() {
     " splitMode, applySplitMode, SPLIT_MODES," +
     " areaOf, areaOfSlot, areaNameOfSlot, anyRunning, addItems, afterQueueChange," +
     " AREA_NAMES, AREA_SLOTS, finishArea, clearLanes, renderList, showFinalSummary, el," +
-    " showSavings, resetSavings, applySettingsFilter, settingMatches, sectionId, onRunState };"
+    " showSavings, resetSavings, applySettingsFilter, settingMatches, sectionId, onRunState," +
+    " setShutdownWish, onShutdownState, cancelShutdown, showShutdownAlert };"
   )(windowStub, documentStub);
 
   return {

@@ -6,6 +6,8 @@ export function AddPaths(arg1:Array<string>):Promise<Array<main.QueueItem>>;
 
 export function AnswerQuestion(arg1:number,arg2:string):Promise<void>;
 
+export function CancelShutdown():Promise<main.ShutdownState>;
+
 export function DeleteProfile(arg1:string):Promise<Array<main.Profile>>;
 
 export function DownloadConverter(arg1:boolean):Promise<main.DownloadResult>;
@@ -54,9 +56,13 @@ export function SaveSettings(arg1:Record<string, string>):Promise<main.SaveResul
 
 export function SaveTheme(arg1:string):Promise<void>;
 
+export function SetShutdownWhenDone(arg1:boolean):Promise<main.ShutdownState>;
+
 export function ShowBusy():Promise<void>;
 
 export function ShowProgress(arg1:number):Promise<void>;
+
+export function ShutdownStatus():Promise<main.ShutdownState>;
 
 export function SignalDone():Promise<void>;
 

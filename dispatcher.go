@@ -111,6 +111,30 @@ type Dispatcher struct {
 	exePath string
 	workDir string
 	emit    func(name string, data ...any)
+
+	// onIdle wird gerufen, sobald nirgends mehr etwas läuft oder wartet. Der
+	// Verteiler ist die einzige Stelle, die das über alle vier Bereiche hinweg
+	// weiß — das Ausschalten des Rechners hängt genau daran (shutdown.go).
+	onIdle func()
+}
+
+// SetIdleHandler hinterlegt, was beim Leerlauf geschehen soll.
+//
+// Getrennt vom Erzeugen, weil der Empfänger seinerseits den Verteiler braucht:
+// Er fragt ihn nach einer kurzen Karenz noch einmal, ob wirklich nichts mehr
+// zu tun ist.
+func (d *Dispatcher) SetIdleHandler(handler func()) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.onIdle = handler
+}
+
+// idleHandler holt den Empfänger unter der Sperre heraus. Gerufen wird er
+// danach ohne Sperre — er fragt den Verteiler selbst noch einmal ab.
+func (d *Dispatcher) idleHandler() func() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.onIdle
 }
 
 // NewDispatcher erzeugt den Verteiler mit seinen Plätzen. Die Läufer entstehen
@@ -154,6 +178,12 @@ func (d *Dispatcher) forward(name string, data ...any) {
 	}
 	d.fill()
 	d.announceQueue()
+
+	// Erst nach dem Nachrücken fragen: War noch ein Auftrag im Vorrat, läuft
+	// er jetzt — dann war der Leerlauf keiner.
+	if handler := d.idleHandler(); handler != nil && !d.Busy() {
+		handler()
+	}
 }
 
 // Submit nimmt Aufträge an und startet, was auf die freien Plätze passt.

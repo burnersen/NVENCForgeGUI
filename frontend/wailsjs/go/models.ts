@@ -429,6 +429,24 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class ShutdownState {
+	    armed: boolean;
+	    counting: boolean;
+	    seconds: number;
+	    note: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ShutdownState(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.armed = source["armed"];
+	        this.counting = source["counting"];
+	        this.seconds = source["seconds"];
+	        this.note = source["note"];
+	    }
+	}
 	export class StartupInfo {
 	    guiVersion: string;
 	    gpu: GPUInfo;

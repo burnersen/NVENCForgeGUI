@@ -41,6 +41,10 @@ type App struct {
 
 	// profiles sind die gespeicherten Optionssätze der Konvertieren-Seite.
 	profiles *profileStore
+
+	// shutdown hält den Wunsch "PC ausschalten, wenn alles fertig ist" und
+	// führt ihn aus, sobald wirklich nichts mehr zu tun ist (shutdown.go).
+	shutdown *shutdownGuard
 }
 
 // NewApp erzeugt die Anwendung mit dem Fensterzustand, mit dem sie startet.
@@ -59,6 +63,16 @@ func NewApp(window windowState, windowRemembered bool) *App {
 		func(items []QueueItem) { app.emit("watch:files", items) },
 		app.noteWatch,
 	)
+	// Das Ausschalten hängt an drei Auskünften, die nur hier zusammenkommen:
+	// ob der Verteiler leer ist, ob ein Ordner beobachtet wird, und wohin die
+	// Meldung darüber gehört.
+	app.shutdown = newShutdownGuard(
+		app.dispatcher.Busy,
+		app.watcher.Watching,
+		app.note,
+		func(state ShutdownState) { app.emit("conv:shutdown", state) },
+	)
+	app.dispatcher.SetIdleHandler(app.shutdown.MaybeFire)
 	return app
 }
 
@@ -528,6 +542,10 @@ func (a *App) StartWatching(folder string) (WatchState, error) {
 		return a.WatchStatus(), fmt.Errorf("app.go: StartWatching: %w", err)
 	}
 	a.noteWatch("Watching " + folder + " and its subfolders. New videos are converted once they stop growing.")
+	// Ein Dauerauftrag und "danach ausschalten" schließen einander aus: Der
+	// nächste Fund braucht den Rechner. Die Fensterseite sperrt das Kästchen
+	// zwar, aber der Wunsch kann schon stehen, bevor die Beobachtung angeht.
+	a.shutdown.Disarm("a folder is being watched now")
 	return a.WatchStatus(), nil
 }
 
@@ -578,6 +596,15 @@ func (a *App) StartRun(request RunRequest) error {
 	// Ob auf der CPU gerechnet wird, steht ausschließlich in dieser Anfrage:
 	// Der Prozessor-Modus ist ein Schalter der Befehlszeile, kein Wert aus der
 	// INI. Eine INI kann ihn also nicht heimlich einschalten.
+	//
+	// Der Abschalt-Wunsch wird nur vom Umwandeln von Hand gesetzt: Nur dort
+	// steht das Kästchen. Käme er auch aus den anderen Bereichen, löschte ein
+	// Fund des beobachteten Ordners den Wunsch, weil dessen Anfrage ihn
+	// grundsätzlich auf "aus" stehen hat.
+	if areaOf(request.Area) == areaConvert {
+		a.shutdown.Arm(request.Shutdown)
+	}
+
 	return a.dispatcher.Submit(
 		status.Path,
 		filepath.Dir(status.Path),
@@ -606,17 +633,50 @@ func areaOf(area string) string {
 // Die anderen Bereiche bleiben unberührt. Wer seinen Stapel abbricht, will
 // nicht nebenbei den beobachteten Ordner stilllegen oder das Zusammenfügen —
 // von denen auf seiner Seite gar nichts zu sehen ist.
+// Ein Abbruch nimmt außerdem den Wunsch "danach ausschalten" zurück. Wer einen
+// Stapel anhält, greift ein — dann darf sich der Rechner nicht eine Minute
+// später abschalten, weil er nun einmal "fertig" ist.
 func (a *App) StopArea(area string) error {
 	if !knownArea(area) {
 		return fmt.Errorf("app.go: StopArea: unknown area %q", area)
 	}
+	a.shutdown.Disarm("the batch was stopped by hand")
 	return a.dispatcher.RequestStopArea(area)
 }
 
 // StopSlot hält nur einen einzelnen Konverter an. Die anderen laufen weiter,
 // und der nächste wartende Auftrag rückt auf den frei werdenden Platz nach.
+//
+// Anders als beim Abbruch eines ganzen Bereichs bleibt der Abschalt-Wunsch
+// hier bestehen: Eine einzelne Datei zu überspringen — weil sie kaputt ist
+// oder zu lange braucht — ist kein Abbruch des Abends.
 func (a *App) StopSlot(slot int) error {
 	return a.dispatcher.StopSlot(slot)
+}
+
+// ----------------------------------------------------------------------------
+// PC ausschalten, wenn alles fertig ist
+//
+// Drei kleine Aufrufe statt eines großen: Das Kästchen meldet jede Änderung
+// sofort, der Abbrechen-Knopf braucht seinen eigenen Weg, und beim Start des
+// Fensters fragt die Oberfläche einmal nach dem Stand. Warum das Ausschalten
+// nicht mehr über den Konverter läuft, steht im Kopf von shutdown.go.
+// ----------------------------------------------------------------------------
+
+// SetShutdownWhenDone setzt oder löscht den Wunsch — auch mitten in einem
+// laufenden Stapel, denn entschieden wird erst an dessen Ende.
+func (a *App) SetShutdownWhenDone(on bool) ShutdownState {
+	return a.shutdown.Arm(on)
+}
+
+// CancelShutdown blässt einen laufenden Countdown ab ("shutdown /a").
+func (a *App) CancelShutdown() (ShutdownState, error) {
+	return a.shutdown.CancelCountdown()
+}
+
+// ShutdownStatus sagt, ob der Wunsch steht und ob schon heruntergezählt wird.
+func (a *App) ShutdownStatus() ShutdownState {
+	return a.shutdown.Status()
 }
 
 // AnswerQuestion beantwortet eine Rückfrage des Konverters.

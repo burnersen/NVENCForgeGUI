@@ -104,7 +104,13 @@ type RunRequest struct {
 	FixedCQ    int      `json:"fixedCQ"`
 	MaxBitrate int      `json:"maxBitrate"` // 0 = Wert aus der INI
 	KeepSource bool     `json:"keepSource"`
-	Shutdown   bool     `json:"shutdown"`
+
+	// Shutdown ist der WUNSCH "PC ausschalten, wenn alles fertig ist" — kein
+	// Schalter für die Befehlszeile. Er geht ausdrücklich NICHT an den
+	// Konverter: Der kennt nur seine eine Datei und würde nach ihr abschalten,
+	// mitten in der Arbeit der übrigen. Ausgeführt wird der Wunsch von
+	// shutdown.go, wenn wirklich alles leer ist.
+	Shutdown bool `json:"shutdown"`
 }
 
 // buildJobs macht aus einer Anfrage die einzelnen Aufträge für den Verteiler.
@@ -220,9 +226,12 @@ func buildConverterArgs(request RunRequest, eventChannel bool) ([]string, error)
 	if request.KeepSource {
 		args = append(args, "-keep")
 	}
-	if request.Shutdown {
-		args = append(args, "-shutdown")
-	}
+
+	// Hier fehlt mit Absicht "-shutdown". Der Schalter fährt den Rechner
+	// herunter, sobald DIESER Aufruf fertig ist — und dieses Fenster ruft den
+	// Konverter je Datei einmal auf. Bis v1.0.1 schaltete deshalb die erste
+	// fertige Datei den Rechner ab und riss den Rest des Stapels mit.
+	// Zuständig ist jetzt shutdown.go.
 
 	return append(args, request.Files...), nil
 }

@@ -57,7 +57,7 @@ func TestEveryOptionReachesTheCommandLine(t *testing.T) {
 	got := joined(args)
 	for _, expected := range []string{
 		"-json", "-av1", "-cpu", "-mp4", "-original", "-copyaudio", "-8bit",
-		"-cq 40", "-9000", "-keep", "-shutdown", "one.mkv two.mkv",
+		"-cq 40", "-9000", "-keep", "one.mkv two.mkv",
 	} {
 		if !strings.Contains(got, expected) {
 			t.Errorf("missing %q in %q", expected, got)
@@ -66,6 +66,43 @@ func TestEveryOptionReachesTheCommandLine(t *testing.T) {
 	// Die Dateien müssen ganz hinten stehen: Alles davor ist eine Option.
 	if !strings.HasSuffix(got, "one.mkv two.mkv") {
 		t.Errorf("files must come last, got %q", got)
+	}
+}
+
+// Der Abschalt-Wunsch darf NIE in einer Befehlszeile landen.
+//
+// Warum das eine eigene Prüfung wert ist: Genau hier lag der Fehler. Das
+// Fenster ruft den Konverter je Datei einmal auf; mit "-shutdown" schaltete
+// die erste fertige Datei den Rechner ab und riss den Rest des Stapels mit.
+// Ausgeführt wird der Wunsch jetzt in shutdown.go, wenn wirklich alles leer
+// ist — die Befehlszeile darf davon nichts wissen.
+func TestShutdownNeverReachesTheConverter(t *testing.T) {
+	request := RunRequest{
+		Files:    []string{"one.mkv", "two.mkv", "three.mkv"},
+		Quality:  qualityAuto,
+		Shutdown: true,
+	}
+
+	args, err := buildConverterArgs(request, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(joined(args), "-shutdown") {
+		t.Errorf("-shutdown must never be passed to the converter: %q", joined(args))
+	}
+
+	// Und ebenso wenig in einem der Einzelaufträge, in die ein Stapel zerfällt.
+	jobs, err := buildJobs(request, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(jobs) != len(request.Files) {
+		t.Fatalf("expected one job per file, got %d", len(jobs))
+	}
+	for _, singleJob := range jobs {
+		if strings.Contains(joined(singleJob.args), "-shutdown") {
+			t.Errorf("job %q carries -shutdown: %q", singleJob.label, joined(singleJob.args))
+		}
 	}
 }
 
