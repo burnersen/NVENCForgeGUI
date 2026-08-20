@@ -2,61 +2,57 @@
 // Licensed under the PolyForm Noncommercial License 1.0.0 (non-commercial use only).
 // Full terms: LICENSE.md · https://polyformproject.org/licenses/noncommercial/1.0.0
 
-// savings.go — wie viel Platz das Umwandeln bisher eingespart hat.
+// savings.go — was das Umwandeln bisher gebracht hat: gesparter Platz und
+// aufgewendete Zeit, beides seit der allerersten Benutzung.
 //
-// Buch geführt wird TAGEWEISE, nicht als zwei fertige Summen "diese Woche" und
-// "diesen Monat". Zwei Summen müssten am Montag und am Monatsersten von selbst
-// zurückspringen — dafür bräuchte das Programm einen Wecker, und wer sein
-// Fenster über den Wochenwechsel offen lässt oder eine Woche gar nicht startet,
-// bekäme falsche Zahlen. Aus Tageszeilen rechnet die Anzeige beide Werte
-// jederzeit richtig aus, ganz gleich wann zuletzt jemand hingesehen hat.
+// Bis Version 0.9.4 wurde tageweise Buch geführt, damit die Leiste "diese
+// Woche" und "diesen Monat" zeigen konnte. Das ist auf Wunsch des Nutzers
+// entfallen: Zwei Gesamtsummen brauchen keine Wochen- und Monatsgrenzen, keine
+// Zeitzonen und keinen Gedanken daran, wann zuletzt jemand hingesehen hat.
+// Was bleibt, sind zwei Zahlen, die nur wachsen — und an denen jeder selbst
+// ablesen kann, was ihm das Programm wert ist.
 //
-// Die Datei liegt neben der exe, aus demselben Grund wie der Fensterzustand:
-// Das Programm verspricht, nichts zu installieren und nichts in der
-// Registrierung zu hinterlassen (siehe windowstate.go).
+// Gebucht wird nach JEDER fertigen Datei und sofort auf die Platte
+// geschrieben. Stürzt mitten im Stapel etwas ab, ist alles bis dahin
+// Erreichte gesichert.
+//
+// Die Datei liegt im tools-Ordner neben der exe (siehe datadir.go).
 package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
-	"path/filepath"
 	"sync"
 	"time"
 )
 
-const (
-	// savingsFileName ist das Sparbuch neben der exe.
-	savingsFileName = "NVENCForgeGUI.savings"
+// savingsFileName ist das Sparbuch.
+const savingsFileName = "NVENCForgeGUI.savings"
 
-	// savingsKeepDays ist, wie lange Tageszeilen aufgehoben werden. Gebraucht
-	// wird höchstens der laufende Monat; ein gutes Jahr Vorrat kostet nichts
-	// (eine Zeile ist ein paar Dutzend Bytes) und lässt Raum für eine spätere
-	// Jahresansicht, ohne dass heute Zahlen weggeworfen werden.
-	savingsKeepDays = 400
+// savingsBook ist der Inhalt der Datei.
+//
+// Days ist das abgelöste Tagesformat und steht nur noch hier, um eine ältere
+// Datei einlesen zu können: Was jemand vor dem Umbau gespart hat, soll nicht
+// verfallen. Nach dem ersten Schreiben ist das Feld verschwunden.
+type savingsBook struct {
+	Files   int     `json:"files"`
+	MB      float64 `json:"mb"`
+	Seconds float64 `json:"seconds"`
 
-	// savingsDayFormat ist der Schlüssel einer Tageszeile. Sortierbar und für
-	// einen Menschen lesbar, falls jemand die Datei öffnet.
-	savingsDayFormat = "2006-01-02"
-)
+	Days map[string]savingsDay `json:"days,omitempty"`
+}
 
-// savingsDay ist die Bilanz EINES Tages.
+// savingsDay ist eine Zeile aus dem alten Tagesformat.
 type savingsDay struct {
 	Files int     `json:"files"`
 	MB    float64 `json:"mb"`
 }
 
-// savingsBook ist der Inhalt der Datei.
-type savingsBook struct {
-	Days map[string]savingsDay `json:"days"`
-}
-
 // SavingsReport ist, was die Leiste unten im Fenster anzeigt.
 type SavingsReport struct {
-	WeekMB     float64 `json:"weekMB"`
-	WeekFiles  int     `json:"weekFiles"`
-	MonthMB    float64 `json:"monthMB"`
-	MonthFiles int     `json:"monthFiles"`
+	TotalMB      float64 `json:"totalMB"`
+	TotalFiles   int     `json:"totalFiles"`
+	TotalSeconds float64 `json:"totalSeconds"`
 }
 
 // savingsLedger führt das Sparbuch. Die Ergebnisse kommen aus mehreren
@@ -66,19 +62,15 @@ type savingsLedger struct {
 	mu   sync.Mutex
 	book savingsBook
 
-	// now ist die Uhr. Als Feld, damit die Tests einen Wochen- oder
-	// Monatswechsel nachstellen können, ohne die Systemzeit anzufassen.
-	now func() time.Time
-
 	// path ist die Datei. Leer heißt: nur im Speicher (Tests).
 	path string
 }
 
-// newSavingsLedger öffnet das Sparbuch neben der exe. Lässt es sich nicht
-// lesen, fängt das Programm bei null an, statt den Start zu verweigern — eine
-// Statistik ist nichts, wofür ein Fenster nicht aufgehen darf.
+// newSavingsLedger öffnet das Sparbuch. Lässt es sich nicht lesen, fängt das
+// Programm bei null an, statt den Start zu verweigern — eine Statistik ist
+// nichts, wofür ein Fenster nicht aufgehen darf.
 func newSavingsLedger() *savingsLedger {
-	ledger := &savingsLedger{now: time.Now, book: savingsBook{Days: map[string]savingsDay{}}}
+	ledger := &savingsLedger{}
 	path, err := savingsPath()
 	if err != nil {
 		return ledger
@@ -92,40 +84,52 @@ func newSavingsLedger() *savingsLedger {
 // beschädigt, geht es bei null los: Eine Statistik ist nichts, wofür ein
 // Fenster nicht aufgehen darf.
 func loadSavingsBook(path string) savingsBook {
-	empty := savingsBook{Days: map[string]savingsDay{}}
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return empty
+		return savingsBook{}
 	}
 	var book savingsBook
-	if json.Unmarshal(raw, &book) != nil || book.Days == nil {
-		return empty
+	if json.Unmarshal(raw, &book) != nil {
+		return savingsBook{}
 	}
+	return mergeLegacyDays(book)
+}
+
+// mergeLegacyDays rechnet die Tageszeilen einer älteren Datei in die
+// Gesamtsummen ein und wirft sie danach weg.
+//
+// Ein Rückweg ist nicht vorgesehen und wird auch nicht gebraucht: Aus zwei
+// Summen lassen sich keine Tage mehr machen, aber aus Tagen jederzeit Summen.
+// Die Zeit fängt zwangsläufig bei null an — sie wurde vorher nie gemessen.
+func mergeLegacyDays(book savingsBook) savingsBook {
+	for _, day := range book.Days {
+		book.Files += day.Files
+		book.MB += day.MB
+	}
+	book.Days = nil
 	return book
 }
 
+// savingsPath nennt den Ort des Sparbuchs.
 func savingsPath() (string, error) {
-	exe, err := os.Executable()
-	if err != nil {
-		return "", fmt.Errorf("savings.go: savingsPath: %w", err)
-	}
-	return filepath.Join(filepath.Dir(exe), savingsFileName), nil
+	return dataFilePath(savingsFileName)
 }
 
-// Add bucht eine fertige Datei ein. savedMB darf negativ sein: Auch das ist
-// ein ehrliches Ergebnis (eine Datei kann größer werden), und es stillschweigend
-// als Null zu zählen würde die Bilanz schönen.
-func (l *savingsLedger) Add(savedMB float64) SavingsReport {
+// Add bucht eine fertig umgewandelte Datei ein und schreibt sofort weg.
+//
+// savedMB darf negativ sein: Auch das ist ein ehrliches Ergebnis (eine Datei
+// kann größer werden), und es stillschweigend als Null zu zählen würde die
+// Bilanz schönen. Eine negative Dauer dagegen kann es nicht geben — sie wäre
+// immer ein Messfehler (etwa eine zurückgestellte Uhr) und wird verworfen.
+func (l *savingsLedger) Add(savedMB, seconds float64) SavingsReport {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	key := l.now().Format(savingsDayFormat)
-	day := l.book.Days[key]
-	day.Files++
-	day.MB += savedMB
-	l.book.Days[key] = day
-
-	l.forgetOldDays()
+	l.book.Files++
+	l.book.MB += savedMB
+	if seconds > 0 {
+		l.book.Seconds += seconds
+	}
 	l.write()
 	return l.report()
 }
@@ -137,59 +141,23 @@ func (l *savingsLedger) Report() SavingsReport {
 	return l.report()
 }
 
-// Reset leert das Sparbuch. Der Nutzer hat sich das auf der Einstellungsseite
-// gewünscht und nicht in der Leiste selbst: Was nicht rückgängig zu machen ist,
-// gehört nicht neben eine Anzeige, an der man täglich vorbeisieht.
+// Reset leert das Sparbuch. Der Knopf dafür steht auf der Einstellungsseite
+// und nicht in der Leiste selbst: Was nicht rückgängig zu machen ist, gehört
+// nicht neben eine Anzeige, an der man täglich vorbeisieht.
 func (l *savingsLedger) Reset() SavingsReport {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.book.Days = map[string]savingsDay{}
+	l.book = savingsBook{}
 	l.write()
 	return l.report()
 }
 
-// report rechnet Woche und Monat aus den Tageszeilen aus. Erwartet die Sperre.
+// report macht aus dem Buch die Anzeige. Erwartet die Sperre.
 func (l *savingsLedger) report() SavingsReport {
-	now := l.now()
-	weekStart := startOfWeek(now)
-	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-
-	var report SavingsReport
-	for key, day := range l.book.Days {
-		when, err := time.ParseInLocation(savingsDayFormat, key, now.Location())
-		if err != nil {
-			continue // beschädigte Zeile: überspringen, nicht raten
-		}
-		if !when.Before(weekStart) {
-			report.WeekMB += day.MB
-			report.WeekFiles += day.Files
-		}
-		if !when.Before(monthStart) {
-			report.MonthMB += day.MB
-			report.MonthFiles += day.Files
-		}
-	}
-	return report
-}
-
-// startOfWeek ist Montag 00:00 — die Woche, wie sie hierzulande gezählt wird.
-// Gos Wochentage fangen bei Sonntag an, deshalb die Sonderbehandlung: ohne sie
-// stünde der Sonntag am ANFANG einer neuen Woche statt am Ende der alten.
-func startOfWeek(now time.Time) time.Time {
-	daysSinceMonday := (int(now.Weekday()) + 6) % 7
-	day := now.AddDate(0, 0, -daysSinceMonday)
-	return time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, now.Location())
-}
-
-// forgetOldDays hält die Datei klein. Erwartet die Sperre.
-func (l *savingsLedger) forgetOldDays() {
-	oldest := l.now().AddDate(0, 0, -savingsKeepDays).Format(savingsDayFormat)
-	for key := range l.book.Days {
-		// Das Datumsformat ist so gebaut, dass der Textvergleich der
-		// Zeitvergleich ist — deshalb reicht hier ein "kleiner als".
-		if key < oldest {
-			delete(l.book.Days, key)
-		}
+	return SavingsReport{
+		TotalMB:      l.book.MB,
+		TotalFiles:   l.book.Files,
+		TotalSeconds: l.book.Seconds,
 	}
 }
 
@@ -226,4 +194,81 @@ func savedMBFromEvent(event map[string]any) (float64, bool) {
 		return 0, false
 	}
 	return saved, true
+}
+
+// ----------------------------------------------------------------------------
+// Wie lange eine Datei gebraucht hat
+// ----------------------------------------------------------------------------
+
+// fileClock misst die Zeit je umgewandelter Datei: von der Meldung "diese
+// Datei ist dran" bis zu ihrem Ergebnis.
+//
+// Warum je Datei und nicht je Stapel, obwohl der Konverter am Ende selbst eine
+// Gesamtzeit meldet: Nur so ist die Zahl genauso absturzsicher wie die
+// Ersparnis. Wer nach zehn von zwölf Dateien abstürzt, hat die zehn wirklich
+// gerechnet — eine erst am Stapelende gebuchte Zeit wäre weg.
+//
+// Ehrlich dazugesagt: Laufen zwei Konverter gleichzeitig, ist die Summe größer
+// als die Zeit, die am Fenster gewartet wurde. Gezählt wird die Arbeit, nicht
+// die Wanduhr.
+//
+// Jeder Konverter hat seine eigene Platznummer, deshalb ist es eine Zuordnung
+// und keine einzelne Zeitangabe — sonst würde die zweite gestartete Datei die
+// Startzeit der ersten überschreiben.
+type fileClock struct {
+	mu      sync.Mutex
+	started map[int]time.Time
+
+	// now ist die Uhr. Als Feld, damit Tests eine Dauer nachstellen können,
+	// ohne wirklich zu warten.
+	now func() time.Time
+}
+
+func newFileClock() *fileClock {
+	return &fileClock{started: map[int]time.Time{}, now: time.Now}
+}
+
+// Start hält fest, wann der Konverter auf diesem Platz mit einer Datei
+// angefangen hat. Eine noch offene Messung desselben Platzes wird dabei
+// überschrieben: Fängt dort eine neue Datei an, ist die alte nicht mehr zu
+// Ende zu messen.
+func (c *fileClock) Start(slot int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.started[slot] = c.now()
+}
+
+// Stop liefert die vergangenen Sekunden und vergisst die Messung.
+//
+// Ist kein Anfang bekannt, kommt 0 zurück statt einer geschätzten Dauer: Eine
+// erfundene Zahl in einer Statistik, die nie wieder korrigiert wird, ist
+// schlimmer als eine fehlende.
+func (c *fileClock) Stop(slot int) float64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	began, known := c.started[slot]
+	if !known {
+		return 0
+	}
+	delete(c.started, slot)
+	return c.now().Sub(began).Seconds()
+}
+
+// slotFromEvent holt die Platznummer aus einem Ereignis. Sie wird in Go
+// gesetzt (siehe Runner.emit) und ist deshalb ein echter int; der zweite Zweig
+// fängt den Fall ab, dass sie einmal doch durch JSON gelaufen ist.
+func slotFromEvent(event map[string]any) int {
+	switch slot := event["slot"].(type) {
+	case int:
+		return slot
+	case float64:
+		return int(slot)
+	}
+	return 0
+}
+
+// eventIsFileStart meldet, ob mit diesem Ereignis eine neue Datei anfängt.
+func eventIsFileStart(event map[string]any) bool {
+	kind, _ := event["ev"].(string)
+	return kind == "file"
 }

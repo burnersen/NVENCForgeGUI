@@ -32,8 +32,12 @@ type App struct {
 	window           windowState
 	windowRemembered bool
 
-	// savings ist das Sparbuch: wie viel Platz das Umwandeln gebracht hat.
+	// savings ist das Sparbuch: wie viel Platz das Umwandeln gebracht hat und
+	// wie viel Zeit es gekostet hat.
 	savings *savingsLedger
+
+	// clock misst die Zeit je Datei, damit das Sparbuch sie buchen kann.
+	clock *fileClock
 
 	// profiles sind die gespeicherten Optionssätze der Konvertieren-Seite.
 	profiles *profileStore
@@ -43,6 +47,7 @@ type App struct {
 func NewApp(window windowState, windowRemembered bool) *App {
 	app := &App{window: window, windowRemembered: windowRemembered}
 	app.savings = newSavingsLedger()
+	app.clock = newFileClock()
 	app.profiles = newProfileStore()
 	// Der Verteiler meldet NICHT mehr geradewegs an die Oberfläche, sondern
 	// über bookAndForward: Was gespart wurde, wird im Vorbeigehen eingetragen.
@@ -207,11 +212,20 @@ func (a *App) noteWatch(text string) {
 // wenn niemand hinsieht. Die Oberfläche zeigt nur an, was hier gezählt wurde —
 // eine zweite Buchführung im Fenster wäre eine zweite Wahrheit, und beim
 // nächsten Start wäre nicht mehr zu sagen, welche die richtige war.
+//
+// Hier läuft auch die Stoppuhr mit: Der Anfang einer Datei startet sie, ihr
+// Ergebnis hält sie an. Beide Meldungen kommen durch dieselbe Stelle, also
+// gibt es keinen Weg, auf dem eine Datei gebucht wird, ohne dass ihre Zeit
+// dazugehört.
 func (a *App) bookAndForward(name string, data ...any) {
 	if name == "conv:event" && len(data) == 1 {
 		if event, ok := data[0].(map[string]any); ok {
+			if eventIsFileStart(event) {
+				a.clock.Start(slotFromEvent(event))
+			}
 			if savedMB, counted := savedMBFromEvent(event); counted {
-				a.emit("conv:savings", a.savings.Add(savedMB))
+				seconds := a.clock.Stop(slotFromEvent(event))
+				a.emit("conv:savings", a.savings.Add(savedMB, seconds))
 			}
 		}
 	}

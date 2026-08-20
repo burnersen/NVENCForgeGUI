@@ -354,10 +354,9 @@ export namespace main {
 	    }
 	}
 	export class SavingsReport {
-	    weekMB: number;
-	    weekFiles: number;
-	    monthMB: number;
-	    monthFiles: number;
+	    totalMB: number;
+	    totalFiles: number;
+	    totalSeconds: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new SavingsReport(source);
@@ -365,10 +364,9 @@ export namespace main {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.weekMB = source["weekMB"];
-	        this.weekFiles = source["weekFiles"];
-	        this.monthMB = source["monthMB"];
-	        this.monthFiles = source["monthFiles"];
+	        this.totalMB = source["totalMB"];
+	        this.totalFiles = source["totalFiles"];
+	        this.totalSeconds = source["totalSeconds"];
 	    }
 	}
 	export class SettingEntry {

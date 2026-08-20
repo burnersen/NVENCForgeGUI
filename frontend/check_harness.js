@@ -99,7 +99,7 @@ function loadGui() {
     list.slice().sort((a, b) => a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1);
 
   // Was das Sparbuch der Go-Seite antworten soll; je Prüfung gesetzt.
-  let savingsReply = { weekMB: 0, weekFiles: 0, monthMB: 0, monthFiles: 0 };
+  let savingsReply = { totalMB: 0, totalFiles: 0, totalSeconds: 0 };
   // What GetSRTCleaner should answer; set per check with setSRTReply.
   let srtReply = { found: false, path: "", note: "not set", phrases: [] };
   // Sorting the join list happens in Go (joinfiles.go) and is tested there.
@@ -153,7 +153,7 @@ function loadGui() {
           GetSavings() { return Promise.resolve(savingsReply); },
           ResetSavings() {
             calls.savingsResets.push(true);
-            savingsReply = { weekMB: 0, weekFiles: 0, monthMB: 0, monthFiles: 0 };
+            savingsReply = { totalMB: 0, totalFiles: 0, totalSeconds: 0 };
             return Promise.resolve(savingsReply);
           },
           // Der Fensterrahmen: Prozent im Titel, Balken im Taskleisten-Knopf,

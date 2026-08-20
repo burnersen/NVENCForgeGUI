@@ -106,7 +106,10 @@ func TestLoadWindowStateWithoutFile(t *testing.T) {
 	}
 }
 
-func TestWindowStateFileSitsNextToTheExe(t *testing.T) {
+// TestWindowStateFileSitsInTheToolsFolder: Seit 1.0.0 liegen die drei
+// Merkdateien im tools-Ordner neben der exe statt frei daneben (siehe
+// datadir.go). Tragbar bleibt das Programm dadurch genauso — nur aufgeräumter.
+func TestWindowStateFileSitsInTheToolsFolder(t *testing.T) {
 	path, err := windowStatePath()
 	if err != nil {
 		t.Fatalf("windowStatePath: %v", err)
@@ -115,9 +118,9 @@ func TestWindowStateFileSitsNextToTheExe(t *testing.T) {
 	if err != nil {
 		t.Fatalf("os.Executable: %v", err)
 	}
-	if filepath.Dir(path) != filepath.Dir(exe) {
-		t.Errorf("Merkdatei liegt in %q, erwartet neben der exe in %q",
-			filepath.Dir(path), filepath.Dir(exe))
+	want := filepath.Join(filepath.Dir(exe), dataDirName)
+	if filepath.Dir(path) != want {
+		t.Errorf("Merkdatei liegt in %q, erwartet in %q", filepath.Dir(path), want)
 	}
 }
 

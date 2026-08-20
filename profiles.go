@@ -25,7 +25,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -90,12 +89,10 @@ func newProfileStore() *profileStore {
 	return store
 }
 
+// profilesPath nennt den Ort der Profildatei: der tools-Ordner neben der exe
+// (siehe datadir.go).
 func profilesPath() (string, error) {
-	exe, err := os.Executable()
-	if err != nil {
-		return "", fmt.Errorf("profiles.go: profilesPath: %w", err)
-	}
-	return filepath.Join(filepath.Dir(exe), profilesFileName), nil
+	return dataFilePath(profilesFileName)
 }
 
 // loadProfiles liest die Datei und wirft weg, was unbrauchbar ist.

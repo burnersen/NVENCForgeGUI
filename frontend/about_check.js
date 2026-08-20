@@ -41,10 +41,15 @@ gui.wire();
 element("btn-about-gui-repo").onclick();
 element("btn-about-converter-repo").onclick();
 element("btn-about-licence").onclick();
-check("three addresses opened    ", calls.opened.length, 3);
+element("btn-about-coffee").onclick();
+check("four addresses opened     ", calls.opened.length, 4);
 contains("the window's own repo     ", calls.opened[0], "github.com/burnersen/NVENCForgeGUI");
 contains("the converter's repo      ", calls.opened[1], "github.com/burnersen/NVENCForge");
-contains("and the licence           ", calls.opened[2], "polyformproject.org");
+contains("the licence               ", calls.opened[2], "polyformproject.org");
+// The donation link goes the same way as every other one. A plain <a href>
+// here would be the worst of the lot: the program would vanish behind a
+// payment page with no way back.
+contains("and the coffee            ", calls.opened[3], "ko-fi.com/burnersen");
 
 console.log("\n=== the versions come from the startup report ===");
 gui.showAbout({

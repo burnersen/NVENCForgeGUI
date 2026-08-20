@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"unsafe"
 )
 
@@ -87,13 +86,10 @@ func (s windowState) sizeIsSensible() bool {
 	return s.Width <= maxWindowExtent && s.Height <= maxWindowExtent
 }
 
-// windowStatePath nennt den Ort der Merkdatei: der Ordner der eigenen exe.
+// windowStatePath nennt den Ort der Merkdatei: der tools-Ordner neben der
+// eigenen exe (siehe datadir.go).
 func windowStatePath() (string, error) {
-	exe, err := os.Executable()
-	if err != nil {
-		return "", fmt.Errorf("windowstate.go: windowStatePath: %w", err)
-	}
-	return filepath.Join(filepath.Dir(exe), windowStateFileName), nil
+	return dataFilePath(windowStateFileName)
 }
 
 // loadWindowState holt den gemerkten Zustand.

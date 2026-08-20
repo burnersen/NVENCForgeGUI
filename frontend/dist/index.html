@@ -572,8 +572,8 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
           <div class="field" data-help="parallel">
             <label for="opt-parallel">At the same time</label>
             <select id="opt-parallel">
-              <option value="1">1 video</option>
-              <option value="2" selected>2 videos</option>
+              <option value="1" selected>1 video</option>
+              <option value="2">2 videos</option>
               <option value="3">3 videos</option>
             </select>
             <!-- Filled in when a choice here is not available: a watched folder
@@ -997,12 +997,12 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
           The version before your last save is kept as NVENCForge_Config.ini.bak.
         </div>
 
-        <!-- The savings counter is written next to the exe and survives every
+        <!-- The savings counter runs from the first ever use and survives every
              restart, so the only way back to zero is this button. It asks
              twice, because there is nothing to undo it with. -->
         <div class="row" style="margin-top:16px">
           <button class="btn" id="btn-savings-reset">Reset the savings counter</button>
-          <span class="hint" id="savings-reset-note" style="margin:0">The figures along the bottom edge start again at zero.</span>
+          <span class="hint" id="savings-reset-note" style="margin:0">Both figures along the bottom edge start again at zero — the space saved and the time spent.</span>
         </div>
       </section>
     </div>
@@ -1055,12 +1055,28 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
       <section class="panel">
         <h2>What it puts on your disk</h2>
         <p class="about-text">
-          Nothing is installed and nothing is written to the registry. Next to the program file it keeps
-          three small files: <b>NVENCForgeGUI.window</b> (size, place and whether it is day or night),
-          <b>NVENCForgeGUI.savings</b> (how much space was saved) and <b>NVENCForgeGUI.profiles</b>
-          (your saved option sets). The converter and FFmpeg live in the <b>tools</b> folder.
-          Delete the folder and it is gone.
+          Nothing is installed and nothing is written to the registry. Next to the program file there is
+          only the <b>tools</b> folder. It holds the converter and FFmpeg, and three small files of its
+          own: <b>NVENCForgeGUI.window</b> (size, place and whether it is day or night),
+          <b>NVENCForgeGUI.savings</b> (space saved and time spent) and <b>NVENCForgeGUI.profiles</b>
+          (your saved option sets). Delete the folder and it is gone — including the savings figures,
+          so if you ever clear it out to fetch a fresh FFmpeg, those three files are worth keeping.
         </p>
+      </section>
+
+      <!-- Last panel on purpose: it is an offer, not a request, and it should
+           never be the first thing on the page. Same route as every other
+           link here, through BrowserOpenURL. -->
+      <section class="panel">
+        <h2>Buy the author a coffee</h2>
+        <p class="about-text">
+          Both programs are free and stay free. If they have saved you a weekend of waiting —
+          the bar along the bottom edge says how much — a coffee is a friendly way to say so.
+          Entirely optional: nothing in the program is locked, limited or nagging without it.
+        </p>
+        <div class="row">
+          <button class="btn" id="btn-about-coffee">Buy me a coffee on Ko-fi</button>
+        </div>
       </section>
     </div>
     </main>
@@ -1072,11 +1088,9 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
        lives on the settings page, not here: a figure you walk past every day
        should not sit next to a button that wipes it. -->
   <footer id="savings">
-    <span>Saved</span>
+    <span><b id="savings-total">—</b> saved in total<span class="files" id="savings-files"></span></span>
     <span class="sep">·</span>
-    <span><b id="savings-week">—</b> this week<span class="files" id="savings-week-files"></span></span>
-    <span class="sep">·</span>
-    <span><b id="savings-month">—</b> this month<span class="files" id="savings-month-files"></span></span>
+    <span><b id="savings-time">—</b> spent converting</span>
   </footer>
 </div>
 <div id="tip"></div>
@@ -2350,34 +2364,50 @@ function renderWatchSummary() {
 
 /* ---------- the savings bar ----------
    The figures come from the Go side, which counts them as the results come in
-   and writes them next to the exe. The window only shows them: a second set of
-   books here would be a second truth, and after a restart nobody could say
-   which of the two was right. */
+   and writes them into the tools folder. The window only shows them: a second
+   set of books here would be a second truth, and after a restart nobody could
+   say which of the two was right.
 
-// showSavings draws the bar. A week with nothing in it says so instead of
+   Both figures run from the very first use and never reset themselves. That is
+   what the user asked for: no week and no month boundary to get wrong, just
+   two numbers that grow — what the tool saved, and what it cost in time. */
+
+// fmtDuration turns seconds into something a person reads at a glance.
+//
+// Hours and minutes are enough here: this figure grows into days, and nobody
+// walking past the bottom edge cares about the seconds. Below a minute it says
+// the seconds, so the very first short file does not read as "0 min".
+function fmtDuration(seconds) {
+  const total = Math.round(seconds);
+  if (total < 60) return total + " s";
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  if (hours === 0) return minutes + " min";
+  return hours + " h " + minutes + " min";
+}
+
+// showSavings draws the bar. A bar with nothing in it says so instead of
 // showing "0.0 MB" — a zero looks like something went wrong, and nothing
 // having been converted yet is not a fault.
 function showSavings(report) {
   if (report) state.savings = report;
   const saved = state.savings;
-  const figure = (mb) => (mb > 0 ? fmtMB(mb) : "nothing yet");
   const files = (count) => (count > 0 ? "  (" + count + (count === 1 ? " file)" : " files)") : "");
 
-  $("savings-week").textContent = saved ? figure(saved.weekMB) : "—";
-  $("savings-month").textContent = saved ? figure(saved.monthMB) : "—";
-  $("savings-week-files").textContent = saved ? files(saved.weekFiles) : "";
-  $("savings-month-files").textContent = saved ? files(saved.monthFiles) : "";
+  $("savings-total").textContent = saved ? (saved.totalMB > 0 ? fmtMB(saved.totalMB) : "nothing yet") : "—";
+  $("savings-files").textContent = saved ? files(saved.totalFiles) : "";
+  $("savings-time").textContent = saved && saved.totalSeconds > 0 ? fmtDuration(saved.totalSeconds) : "—";
 }
 
 // resetSavings asks twice. There is no way back from it: the counter lives in
-// a file next to the exe, and nothing else in the window could restore it.
+// a file in the tools folder, and nothing else in the window could restore it.
 async function resetSavings() {
   const button = $("btn-savings-reset");
   const note = $("savings-reset-note");
   if (!state.savingsResetAsked) {
     state.savingsResetAsked = true;
     button.textContent = "Click again to reset";
-    note.textContent = "This cannot be undone — both figures start again at zero.";
+    note.textContent = "This cannot be undone — everything counted since the first ever run is gone.";
     return;
   }
   state.savingsResetAsked = false;
@@ -2893,8 +2923,8 @@ const HELP = {
   }),
   parallel: () => ({
     title: "How many videos at the same time",
-    text: "Starts several converters side by side, each on its own file. Measured on this machine with four 90-second clips: two at a time took 52 seconds instead of 72 — the quality analysis of one runs on the processor while the other one encodes on the graphics card. A third brought nothing more, the card is busy by then. The tool modes (Split, Join, DaVinci) always run one at a time; they only copy.",
-    now: "Measured here: 1 → 72 s · 2 → 52 s · 3 → 51 s"
+    text: "Starts several converters side by side, each on its own file. One at a time is the default: every file is finished as fast as the machine can, and the log stays easy to follow. Measured on this machine with four 90-second clips: two at a time took 52 seconds instead of 72 — the quality analysis of one runs on the processor while the other one encodes on the graphics card. A third brought nothing more, the card is busy by then. The tool modes (Split, Join, DaVinci) always run one at a time; they only copy.",
+    now: "Default: 1 video · measured here: 1 → 72 s · 2 → 52 s · 3 → 51 s"
   })
 };
 
@@ -3539,7 +3569,8 @@ function collectWatchRequest(files) {
 const LINKS = {
   gui: "https://github.com/burnersen/NVENCForgeGUI",
   converter: "https://github.com/burnersen/NVENCForge",
-  licence: "https://polyformproject.org/licenses/noncommercial/1.0.0"
+  licence: "https://polyformproject.org/licenses/noncommercial/1.0.0",
+  coffee: "https://ko-fi.com/burnersen"
 };
 
 function openLink(url) {
@@ -3949,6 +3980,7 @@ function wire() {
   $("btn-about-gui-repo").onclick = () => openLink(LINKS.gui);
   $("btn-about-converter-repo").onclick = () => openLink(LINKS.converter);
   $("btn-about-licence").onclick = () => openLink(LINKS.licence);
+  $("btn-about-coffee").onclick = () => openLink(LINKS.coffee);
 
   $("opt-profile").onchange = () => chooseProfile("opt");
   $("wopt-profile").onchange = () => chooseProfile("wopt");

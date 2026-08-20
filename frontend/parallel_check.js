@@ -43,9 +43,11 @@ function startBatch(queue, parallel) {
 console.log("\nThe setting is on the Convert page and offers 1 to 3");
 checker.check("the field exists", html.includes('id="opt-parallel"'), true);
 checker.check("three choices", (html.match(/<option value="[123]"/g) || []).length >= 3, true);
-// Two is the measured sweet spot (72 s → 52 s with four clips); three brought
-// nothing more, so it may be chosen but is not the default.
-checker.contains("two is preselected", html, '<option value="2" selected>');
+// One at a time is the default, at the user's request: every file gets the whole
+// machine and the log stays easy to follow. Two is the measured sweet spot
+// (72 s → 52 s with four clips) and stays available, it is just not preselected.
+checker.contains("one is preselected", html, '<option value="1" selected>');
+checker.check("and two is not", html.includes('<option value="2" selected>'), false);
 
 console.log("\nOnly converting runs several at a time");
 gui.showPage("convert");
