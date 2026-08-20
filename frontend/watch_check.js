@@ -27,6 +27,15 @@ const found = (name) => ({
 // what really left the window.
 function lastRun() { return calls.runs[calls.runs.length - 1]; }
 
+// allIdle: a dispatcher report in which nothing is running anywhere. Every
+// area has to be named — one left out looks like it has just finished, and
+// finishing is something the window acts on.
+function allIdle() {
+  const areas = {};
+  gui.AREA_NAMES.forEach((name) => { areas[name] = { active: 0, pending: 0, limit: 1 }; });
+  return areas;
+}
+
 function reset() {
   calls.runs.length = 0;
   // Both areas are put back to a standing start. They run side by side now,
@@ -224,5 +233,39 @@ gui.state.watch = { folder: "D:\\Privat\\Serien", active: true };
 gui.showWatch(null);
 gui.clearWatchArea();
 checker.check("while watching it stays  ", gui.state.watch.folder, "D:\\Privat\\Serien");
+
+/* Reported by the user, 2026-08-20: after "stop watching" and then "stop
+   this file", the finished video was still sitting in the progress area
+   with no way to get rid of it. A standing order that is switched off never
+   starts another file, so nothing would ever have replaced that lane. */
+console.log("\nA finished file leaves the progress area");
+reset();
+gui.onWatchFiles([found("fertig.mkv")]);
+gui.onConverterEvent({ ev: "run", slot: gui.WATCH_SLOT, mode: "convert", codec: "h265", encoder: "nvidia", files: 1, version: "t" });
+gui.onConverterEvent({ ev: "file", slot: gui.WATCH_SLOT, index: 1, total: 1, name: "fertig.mkv", path: "D:\\Downloads\\fertig.mkv", in_mb: 700 });
+gui.onConverterEvent({ ev: "result", slot: gui.WATCH_SLOT, index: 1, status: "success", name: "fertig.mkv", in_mb: 700, out_mb: 300, saved_mb: 400, saved_pct: 57 });
+checker.check("while it runs it is shown", Object.keys(watch.slots).length, 1);
+// Watching is switched off, exactly as the user had it.
+gui.state.watch.active = false;
+watch.running = true;
+gui.onQueueState({ areas: allIdle(), totalLimit: 3 });
+checker.check("afterwards the lane is gone", Object.keys(watch.slots).length, 0);
+// …but what it did is still readable: the bars are cleared away, the books
+// are not.
+checker.contains("the running total stays   ", element("watch-summary").textContent, "saved");
+
+/* The log goes to the clipboard line by line. Taken as one block it arrives
+   as a single endless line — which is exactly how it turned up when the user
+   pasted one into a message. */
+console.log("\nCopying the log keeps its lines apart");
+calls.clipboard.length = 0;
+element("watch-logbox").children.length = 0;
+gui.watchNote("erste Zeile");
+gui.watchNote("zweite Zeile");
+gui.watchNote("dritte Zeile");
+gui.copyAreaLog(watch);
+checker.check("one copy went out        ", calls.clipboard.length, 1);
+checker.check("with a line each         ", (calls.clipboard[0].match(/\n/g) || []).length, 2);
+checker.contains("and the text is all there", calls.clipboard[0], "zweite Zeile");
 
 checker.finish();

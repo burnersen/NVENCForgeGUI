@@ -1697,7 +1697,13 @@ function clearProgress(area) {
 // whose button was pressed — copying the wrong one would be a quiet way to
 // hand over the wrong evidence.
 async function copyAreaLog(area) {
-  const text = el(area, "logbox").textContent || "";
+  // Line by line, not the box as a whole: textContent of the box runs every
+  // line into the next one, and a log pasted into a message as one endless
+  // line is no use to anybody trying to read it. The colours cannot come
+  // along — the clipboard takes text, and text has no colours.
+  const text = Array.from(el(area, "logbox").children)
+    .map((row) => row.textContent)
+    .join("\n");
   if (!text.trim()) return;
   try {
     await window.runtime.ClipboardSetText(text);
@@ -2320,8 +2326,15 @@ function onQueueState(queueState) {
 function finishArea(area) {
   // The watched folder has no end to report on — it is a standing order. All
   // that ends is the file it just did, and the next find can start.
+  //
+  // Its lane goes with it, exactly like everywhere else: a finished file left
+  // standing there looks like work still in progress, and once watching is
+  // switched off nothing would ever replace it. What it DID stays in the
+  // running total below and in the log.
   if (area.name === "watch") {
     area.stopping = false;
+    area.slots = {};
+    renderLanes();
     maybeStartWatchRun();
     return;
   }

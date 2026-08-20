@@ -21,11 +21,11 @@ function fakeElement(id) {
     // redraw really deleted something — the log's own way of overwriting
     // itself, and the one thing two converters can ruin for each other.
     removed: 0,
-    removeChild() { store.removed++; },
+    removeChild() { store.removed++; store.children.pop(); },
     // Lines added are counted as well: with two logs in the window, WHICH box
     // a line landed in is the only way to see that they really are separate.
     appended: 0,
-    appendChild() { store.appended++; return fakeElement("child"); },
+    appendChild(child) { store.appended++; store.children.push(child); return child; },
     // Attributes are kept rather than swallowed: whether a button says it is
     // switched on is the only thing that tells the user which theme is
     // running, and a stand-in that forgets it could not check that.
@@ -87,7 +87,7 @@ function loadGui() {
   // Everything the window would hand to the Go side is recorded instead. That
   // is how a check can see WHICH answer a button really sends — the one thing
   // that decides whether the user gets the tracks they picked.
-  const calls = { answers: [], answerSlots: [], runs: [], joinSorts: [], stops: [], srtSaves: [], themes: [] };
+  const calls = { answers: [], answerSlots: [], runs: [], joinSorts: [], stops: [], srtSaves: [], themes: [], clipboard: [] };
   // What GetSRTCleaner should answer; set per check with setSRTReply.
   let srtReply = { found: false, path: "", note: "not set", phrases: [] };
   // Sorting the join list happens in Go (joinfiles.go) and is tested there.
@@ -96,7 +96,10 @@ function loadGui() {
   let joinReply = [];
   const windowStub = {
     addEventListener() {},
-    runtime: { OnFileDrop() {}, EventsOn() {} },
+    runtime: {
+      OnFileDrop() {}, EventsOn() {},
+      ClipboardSetText(text) { calls.clipboard.push(text); return Promise.resolve(); }
+    },
     go: {
       main: {
         App: {
@@ -138,7 +141,7 @@ function loadGui() {
     " onQuestion, sendAnswer, askSelection, isExtraOption, isToolRun, collectRequest, resetProgress," +
     " updateButtons, afterJoinChange, addJoinPaths, joinBase, joinOfKind," +
     " joinReady, joinRunFiles, onWatchFiles, maybeStartWatchRun, showWatch, clearWatchArea, runWentThroughCleanly, clearFinishedList, stopWatching, stopWatchRun, collectWatchRequest, onQueueState, renderWatchSummary, isWatchSlot, WATCH_SLOT, limitParallelChoice, watchNote," +
-    " startBatch, clearProgress, updateOverall, stopSlot, stop, start, renderLanes," +
+    " startBatch, clearProgress, updateOverall, stopSlot, stop, start, renderLanes, copyAreaLog," +
     " loadSRTCleaner, renderSRTCleaner, addSRTPhrase, saveSRTPhrases, srtSignature," +
     " joinMode, applyJoinMode, JOIN_MODES, applyTheme, chooseTheme, THEMES," +
     " splitMode, applySplitMode, SPLIT_MODES," +
