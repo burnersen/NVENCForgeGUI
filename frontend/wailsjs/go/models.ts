@@ -483,6 +483,46 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class UpdateCheck {
+	    newer: boolean;
+	    current: string;
+	    latest: string;
+	    sizeBytes: number;
+	    note: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new UpdateCheck(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.newer = source["newer"];
+	        this.current = source["current"];
+	        this.latest = source["latest"];
+	        this.sizeBytes = source["sizeBytes"];
+	        this.note = source["note"];
+	    }
+	}
+	export class UpdateResult {
+	    installed: boolean;
+	    restarting: boolean;
+	    version: string;
+	    backupPath: string;
+	    message: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new UpdateResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.installed = source["installed"];
+	        this.restarting = source["restarting"];
+	        this.version = source["version"];
+	        this.backupPath = source["backupPath"];
+	        this.message = source["message"];
+	    }
+	}
 	export class WatchState {
 	    watching: boolean;
 	    folder: string;

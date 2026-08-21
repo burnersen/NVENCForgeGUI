@@ -11,6 +11,7 @@ package main
 
 import (
 	"embed"
+	"os"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -24,7 +25,7 @@ var assets embed.FS
 // guiVersion ist die einzige Stelle, an der die Version dieses Fensters
 // steht. Angezeigt wird sie im Fensterkopf (Titelleiste) und in der
 // Kopfzeile der Oberfläche selbst (siehe StartupInfo in app.go).
-const guiVersion = "1.0.2"
+const guiVersion = "1.1.0"
 
 // singleInstanceID hält die Startsperre. Der Name muss auf dem Rechner
 // einmalig sein und darf sich nie ändern — sonst erkennt eine neue Ausgabe die
@@ -45,6 +46,12 @@ func startBackground(theme string) *options.RGBA {
 }
 
 func main() {
+	// Ganz am Anfang: Kommt dieser Start aus einem Selbst-Update, läuft die alte
+	// Ausgabe im Augenblick des Starts noch. Erst wenn sie beendet ist, gibt sie
+	// die Startsperre weiter unten frei (siehe selfupdate.go). Bei einem ganz
+	// normalen Start kostet der Aufruf nichts.
+	waitForPredecessor(predecessorPID(os.Args), predecessorWait)
+
 	// Muss vor dem Fenster passieren: ohne eigene Konsole gibt es später keinen
 	// sauberen Abbruch (siehe wincon.go).
 	setupHiddenConsole()

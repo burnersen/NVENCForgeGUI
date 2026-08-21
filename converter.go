@@ -213,44 +213,71 @@ type releaseInfo struct {
 	Assets  []releaseAsset `json:"assets"`
 }
 
-// fetchLatestRelease fragt GitHub nach der neuesten Veröffentlichung.
+// fetchLatestRelease fragt GitHub nach der neuesten Veröffentlichung des
+// Konverters.
 func fetchLatestRelease(ctx context.Context) (releaseInfo, error) {
+	return fetchRelease(ctx, latestReleaseURL)
+}
+
+// fetchRelease fragt ein beliebiges GitHub-Verzeichnis nach einer
+// Veröffentlichung.
+//
+// Der Umweg über die Adresse als Übergabewert ist der Grund, warum das
+// Selbst-Update (selfupdate.go) dieselbe Leitung benutzen kann: Zwei Kopien
+// dieser Abfrage würden früher oder später auseinanderlaufen.
+func fetchRelease(ctx context.Context, url string) (releaseInfo, error) {
 	var release releaseInfo
 
-	requestCtx, cancel := context.WithTimeout(ctx, apiTimeout)
+	requestCtx, cancel := context.WithTimeout(callContext(ctx), apiTimeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(requestCtx, http.MethodGet, latestReleaseURL, nil)
+	req, err := http.NewRequestWithContext(requestCtx, http.MethodGet, url, nil)
 	if err != nil {
-		return release, fmt.Errorf("converter.go: fetchLatestRelease (NewRequest): %w", err)
+		return release, fmt.Errorf("converter.go: fetchRelease (NewRequest): %w", err)
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("User-Agent", "NVENCForgeGUI")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return release, fmt.Errorf("converter.go: fetchLatestRelease (Do): %w", err)
+		return release, fmt.Errorf("converter.go: fetchRelease (Do): %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return release, fmt.Errorf("converter.go: fetchLatestRelease: GitHub answered %s", resp.Status)
+		return release, fmt.Errorf("converter.go: fetchRelease: GitHub answered %s", resp.Status)
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
-		return release, fmt.Errorf("converter.go: fetchLatestRelease (Decode): %w", err)
+		return release, fmt.Errorf("converter.go: fetchRelease (Decode): %w", err)
 	}
 	return release, nil
 }
 
+// callContext hält einen fehlenden Zusammenhang ab.
+//
+// Nötig, weil der Zusammenhang des Fensters erst beim Start entsteht: Ein
+// Aufruf davor käme mit nil an, und context.WithTimeout stürzt damit ab.
+func callContext(ctx context.Context) context.Context {
+	if ctx == nil {
+		return context.Background()
+	}
+	return ctx
+}
+
 // pickConverterAsset sucht die Programmdatei unter den angehängten Dateien.
 func pickConverterAsset(release releaseInfo) (releaseAsset, error) {
+	return pickAsset(release, converterExeName)
+}
+
+// pickAsset sucht eine angehängte Datei nach ihrem Namen.
+func pickAsset(release releaseInfo, name string) (releaseAsset, error) {
 	for _, asset := range release.Assets {
-		if strings.EqualFold(asset.Name, converterExeName) {
+		if strings.EqualFold(asset.Name, name) {
 			return asset, nil
 		}
 	}
 	return releaseAsset{}, fmt.Errorf(
-		"converter.go: pickConverterAsset: release %s has no %s attached", release.TagName, converterExeName)
+		"converter.go: pickAsset: release %s has no %s attached", release.TagName, name)
 }
 
 // progressWriter meldet den Fortschritt weiter, während geschrieben wird.
@@ -270,6 +297,57 @@ func (w *progressWriter) Write(p []byte) (int, error) {
 		w.report(w.done, w.total)
 	}
 	return len(p), nil
+}
+
+// downloadToFile holt eine angehängte Datei an den angegebenen Platz und meldet
+// dabei den Fortschritt.
+//
+// Geschrieben wird genau dorthin, wohin der Aufrufer zeigt; dass das eine
+// Teildatei ist und was danach mit ihr geschieht, entscheidet er. Scheitert der
+// Download, bleibt nichts liegen — eine halbe Datei, die niemand mehr aufräumt,
+// wäre schlimmer als gar keine.
+func downloadToFile(ctx context.Context, asset releaseAsset, targetPath string, report func(done, total int64)) error {
+	downloadCtx, cancel := context.WithTimeout(callContext(ctx), downloadTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(downloadCtx, http.MethodGet, asset.URL, nil)
+	if err != nil {
+		return fmt.Errorf("converter.go: downloadToFile (NewRequest): %w", err)
+	}
+	req.Header.Set("User-Agent", "NVENCForgeGUI")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("converter.go: downloadToFile (Do): %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("converter.go: downloadToFile: download answered %s", resp.Status)
+	}
+
+	file, err := os.Create(targetPath)
+	if err != nil {
+		return fmt.Errorf("converter.go: downloadToFile (Create): %w", err)
+	}
+
+	counter := &progressWriter{total: asset.Size, report: report}
+	_, copyErr := io.Copy(io.MultiWriter(file, counter), resp.Body)
+	closeErr := file.Close()
+
+	if copyErr != nil {
+		_ = os.Remove(targetPath)
+		return fmt.Errorf("converter.go: downloadToFile (Copy): %w", copyErr)
+	}
+	if closeErr != nil {
+		_ = os.Remove(targetPath)
+		return fmt.Errorf("converter.go: downloadToFile (Close): %w", closeErr)
+	}
+
+	if report != nil {
+		report(asset.Size, asset.Size)
+	}
+	return nil
 }
 
 // DownloadResult sagt der Oberfläche, was der Download bewirkt hat.
@@ -316,42 +394,8 @@ func downloadConverter(ctx context.Context, force bool, report func(done, total 
 	targetPath := filepath.Join(dir, converterExeName)
 	partPath := targetPath + ".part"
 
-	downloadCtx, cancel := context.WithTimeout(ctx, downloadTimeout)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(downloadCtx, http.MethodGet, asset.URL, nil)
-	if err != nil {
-		return result, fmt.Errorf("converter.go: downloadConverter (NewRequest): %w", err)
-	}
-	req.Header.Set("User-Agent", "NVENCForgeGUI")
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return result, fmt.Errorf("converter.go: downloadConverter (Do): %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return result, fmt.Errorf(
-			"converter.go: downloadConverter: download answered %s", resp.Status)
-	}
-
-	part, err := os.Create(partPath)
-	if err != nil {
-		return result, fmt.Errorf("converter.go: downloadConverter (Create): %w", err)
-	}
-
-	counter := &progressWriter{total: asset.Size, report: report}
-	_, copyErr := io.Copy(io.MultiWriter(part, counter), resp.Body)
-	closeErr := part.Close()
-
-	if copyErr != nil {
-		_ = os.Remove(partPath)
-		return result, fmt.Errorf("converter.go: downloadConverter (Copy): %w", copyErr)
-	}
-	if closeErr != nil {
-		_ = os.Remove(partPath)
-		return result, fmt.Errorf("converter.go: downloadConverter (Close): %w", closeErr)
+	if err := downloadToFile(ctx, asset, partPath, report); err != nil {
+		return result, err
 	}
 
 	if !force && wouldLoseEventChannel(before, partPath) {
@@ -374,9 +418,6 @@ func downloadConverter(ctx context.Context, force bool, report func(done, total 
 		_ = err
 	}
 
-	if report != nil {
-		report(asset.Size, asset.Size)
-	}
 	result.Replaced = true
 	result.Status = converterStatus()
 	result.Message = "NVENCForge " + release.TagName + " installed."

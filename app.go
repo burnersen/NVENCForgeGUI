@@ -13,8 +13,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/options"
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -422,6 +424,61 @@ func (a *App) DownloadConverter(force bool) (DownloadResult, error) {
 	return downloadConverter(a.ctx, force, func(done, total int64) {
 		a.emit("conv:download", map[string]any{"done": done, "total": total})
 	})
+}
+
+// CheckForUpdate fragt GitHub, ob es eine neuere Ausgabe dieses Fensters gibt.
+//
+// Nur auf Knopfdruck, nie von selbst: Ein Programm, das beim Start ungefragt
+// ins Netz greift, soll es nicht sein.
+func (a *App) CheckForUpdate() (UpdateCheck, error) {
+	return checkForUpdate(a.ctx)
+}
+
+// InstallUpdate lädt die neuere Ausgabe, legt die laufende als Sicherung in den
+// tools-Ordner und startet das Fenster neu.
+//
+// Die beiden Sperren stehen hier und nicht nur als graue Schaltfläche in der
+// Oberfläche: Ein Neustart mitten im Lauf würde den Konverter von seinem
+// Fenster trennen — er liefe unsichtbar weiter, und niemand könnte ihn noch
+// sauber anhalten. Verlassen kann man sich dabei nur auf die Seite, die den
+// Zustand wirklich kennt.
+func (a *App) InstallUpdate() (UpdateResult, error) {
+	if a.dispatcher.Busy() {
+		return UpdateResult{}, errors.New(
+			"a conversion is still running — let it finish or stop it first, then update")
+	}
+	if a.watcher.Watching() {
+		return UpdateResult{}, errors.New(
+			"a folder is being watched — stop watching first, then update")
+	}
+
+	result, err := installUpdate(a.ctx, func(done, total int64) {
+		a.emit("gui:update", map[string]any{"done": done, "total": total})
+	})
+	if err != nil || !result.Installed {
+		return result, err
+	}
+
+	self, err := os.Executable()
+	if err != nil {
+		result.Message += " Starting it again failed (" + err.Error() + ") — please start the program yourself."
+		return result, nil
+	}
+	if err := startSuccessor(self); err != nil {
+		result.Message += " Starting it again failed (" + err.Error() + ") — please start the program yourself."
+		return result, nil
+	}
+	result.Restarting = true
+	result.Message += " Restarting now."
+
+	// Erst antworten, dann gehen: Ein Quit an dieser Stelle würde das Fenster
+	// schließen, bevor die Oberfläche das Ergebnis bekommen hat — der Nutzer
+	// sähe nur ein verschwindendes Fenster ohne jede Erklärung.
+	go func() {
+		time.Sleep(closeDelayAfterUpdate)
+		wailsruntime.Quit(a.ctx)
+	}()
+	return result, nil
 }
 
 // AddPaths nimmt Pfade entgegen, die ins Fenster gezogen wurden, und macht

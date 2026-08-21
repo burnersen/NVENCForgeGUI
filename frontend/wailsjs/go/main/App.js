@@ -14,6 +14,10 @@ export function CancelShutdown() {
   return window['go']['main']['App']['CancelShutdown']();
 }
 
+export function CheckForUpdate() {
+  return window['go']['main']['App']['CheckForUpdate']();
+}
+
 export function DeleteProfile(arg1) {
   return window['go']['main']['App']['DeleteProfile'](arg1);
 }
@@ -60,6 +64,10 @@ export function GetTheme() {
 
 export function HideProgress() {
   return window['go']['main']['App']['HideProgress']();
+}
+
+export function InstallUpdate() {
+  return window['go']['main']['App']['InstallUpdate']();
 }
 
 export function IsRunning() {

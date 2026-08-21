@@ -8,6 +8,8 @@ export function AnswerQuestion(arg1:number,arg2:string):Promise<void>;
 
 export function CancelShutdown():Promise<main.ShutdownState>;
 
+export function CheckForUpdate():Promise<main.UpdateCheck>;
+
 export function DeleteProfile(arg1:string):Promise<Array<main.Profile>>;
 
 export function DownloadConverter(arg1:boolean):Promise<main.DownloadResult>;
@@ -31,6 +33,8 @@ export function GetStartupInfo():Promise<main.StartupInfo>;
 export function GetTheme():Promise<string>;
 
 export function HideProgress():Promise<void>;
+
+export function InstallUpdate():Promise<main.UpdateResult>;
 
 export function IsRunning():Promise<boolean>;
 

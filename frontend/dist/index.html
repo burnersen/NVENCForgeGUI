@@ -1044,6 +1044,26 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
         </div>
       </section>
 
+      <!-- Updates. The window never asks GitHub on its own — it looks only
+           when this button is pressed. The install button stays hidden until
+           there really is something newer, so on a day with no news the panel
+           says nothing. -->
+      <section class="panel">
+        <h2>Updates</h2>
+        <p class="about-text">
+          This window can fetch its own new releases. Nothing happens on its own: it asks
+          GitHub only when you press the button. The version you are running now is kept as
+          a backup in the <b>tools</b> folder, so there is always a way back. Updating is not
+          possible while a conversion is running or a folder is being watched — a restart in
+          the middle of a run would cut the converter off from its window.
+        </p>
+        <div class="row">
+          <button class="btn" id="btn-update-check">Check for updates</button>
+          <button class="btn" id="btn-update-install" hidden>Update and restart</button>
+          <span class="hint" id="update-note" style="margin:0"></span>
+        </div>
+      </section>
+
       <section class="panel">
         <h2>Licence</h2>
         <p class="about-text">
@@ -1078,6 +1098,12 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
           <b>NVENCForgeGUI.savings</b> (space saved and time spent) and <b>NVENCForgeGUI.profiles</b>
           (your saved option sets). Delete the folder and it is gone — including the savings figures,
           so if you ever clear it out to fetch a fresh FFmpeg, those three files are worth keeping.
+        </p>
+        <p class="about-text">
+          After an update there is one more file in there: the version you were running before,
+          kept as <b>NVENCForgeGUI-&lt;version&gt;.exe.bak</b>. It is your way back — rename it to
+          <b>NVENCForgeGUI.exe</b> and move it up one folder, and you are running the old version
+          again. It is never deleted on its own, so if you do not want it, it is yours to remove.
         </p>
       </section>
 
@@ -3641,6 +3667,62 @@ function showAbout(info) {
   $("about-converter-path").textContent = converter.found ? converter.path : "—";
 }
 
+/* ---------- updates ----------
+   Two steps on purpose: looking is harmless, replacing the program that is
+   running is not. The install button appears only after a look that found
+   something newer — and the Go side looks again before it downloads anything,
+   because a button that has been sitting on screen for an hour proves nothing.
+
+   Whether an update is allowed at all is decided on the Go side too: it is the
+   only place that really knows whether a conversion is still running. */
+async function checkUpdate() {
+  const check = $("btn-update-check");
+  const install = $("btn-update-install");
+  check.disabled = true;
+  install.hidden = true;
+  $("update-note").textContent = "Asking GitHub…";
+  try {
+    const answer = await api().CheckForUpdate();
+    $("update-note").textContent = answer.note || "";
+    if (answer.newer) {
+      install.textContent = "Update to " + answer.latest + " and restart";
+      install.disabled = false;
+      install.hidden = false;
+    }
+  } catch (err) {
+    $("update-note").textContent = "Could not ask GitHub: " + err;
+  } finally {
+    check.disabled = false;
+  }
+}
+
+// installUpdate replaces this program and starts the new one. The window
+// closes itself a moment later, which is why the label says so rather than
+// going back to normal.
+async function installUpdate() {
+  const install = $("btn-update-install");
+  const label = install.textContent;
+  install.disabled = true;
+  $("btn-update-check").disabled = true;
+  $("update-note").textContent = "Downloading the new version…";
+  try {
+    const result = await api().InstallUpdate();
+    $("update-note").textContent = result.message || "";
+    if (result.restarting) {
+      install.textContent = "restarting…";
+      return;
+    }
+    install.textContent = label;
+    install.disabled = false;
+  } catch (err) {
+    $("update-note").textContent = "Update failed: " + err;
+    install.textContent = label;
+    install.disabled = false;
+  } finally {
+    $("btn-update-check").disabled = false;
+  }
+}
+
 /* ---------- profiles ----------
    One set of options, kept under a name. Whoever always sets the same things
    should set them once.
@@ -4103,6 +4185,9 @@ function wire() {
   $("btn-about-licence").onclick = () => openLink(LINKS.licence);
   $("btn-about-coffee").onclick = () => openLink(LINKS.coffee);
 
+  $("btn-update-check").onclick = checkUpdate;
+  $("btn-update-install").onclick = installUpdate;
+
   $("opt-profile").onchange = () => chooseProfile("opt");
   $("wopt-profile").onchange = () => chooseProfile("wopt");
   $("btn-profile-save").onclick = saveProfile;
@@ -4190,6 +4275,13 @@ function wire() {
     if (!info.total) return;
     const done = (info.done / info.total * 100).toFixed(0);
     $("btn-download").textContent = done + " %";
+  });
+  // The same idea for the window's own download: twelve megabytes take a
+  // moment, and a button that does nothing for that long looks broken.
+  window.runtime.EventsOn("gui:update", (info) => {
+    if (!info.total) return;
+    const done = (info.done / info.total * 100).toFixed(0);
+    $("btn-update-install").textContent = done + " %";
   });
 }
 

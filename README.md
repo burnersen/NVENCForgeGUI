@@ -84,6 +84,7 @@ Nothing is installed, nothing is written to the registry. Delete the folder and 
 - 💰 **See what it has been worth.** A quiet line along the bottom edge counts two things from the very first run: the space saved and the time spent converting. Nothing else — no week, no month, no resetting itself.
 - 📶 **Progress on the taskbar button.** The percentage sits at the front of the window title and fills the taskbar button, so you can send the window away and still see how far it is. When a batch finishes, the button flashes. No sound.
 - ℹ️ **An About page** that says which versions are running, under what licence, what the window is built on, and exactly what it puts on your disk.
+- 🔄 **It can update itself** — on the About page, and only when you press the button: the window never asks GitHub on its own. If there is a newer release it says so, and one click fetches it, puts it in place and restarts the window. The version you were running is kept as a `.bak` file in the `tools` folder, so there is always a way back. Not while a conversion is running or a folder is being watched — a restart in the middle of a run would cut the converter off from its window.
 - 🌗 **Day or night.** A switch at the bottom left turns the window light or dark, and it remembers which you chose. The log keeps its dark ground either way — the colours in there come from the converter itself and are meant for one.
 - 📍 **It stays where you put it.** Size and place are remembered between starts, and starting it a second time brings the open window forward instead of opening a rival that fights over the same files.
 
@@ -98,7 +99,7 @@ Nothing is installed, nothing is written to the registry. Delete the folder and 
 | 🧩 **Join** | Put picture, audio and subtitles back into one file. Same question, same two answers. |
 | 👀 **Watch** | A standing order for one folder: whatever video lands there gets converted, one at a time, with its own options, progress and log. Watching lasts while the window is open. |
 | ⚙️ **Settings** | `NVENCForge_Config.ini`, made readable. Every key explained, with its allowed values and your current one. |
-| ℹ️ **About** | Versions, licences, what the window is built on, and exactly which files it writes to your disk. |
+| ℹ️ **About** | Versions, licences, what the window is built on, which files it writes to your disk — and the button that fetches a new version of the window itself. |
 
 ---
 

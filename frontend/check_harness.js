@@ -91,7 +91,12 @@ function loadGui() {
   // Everything the window would hand to the Go side is recorded instead. That
   // is how a check can see WHICH answer a button really sends — the one thing
   // that decides whether the user gets the tracks they picked.
-  const calls = { answers: [], answerSlots: [], runs: [], joinSorts: [], stops: [], srtSaves: [], themes: [], clipboard: [], savingsResets: [], frame: [], profileSaves: [], profileDeletes: [], opened: [], shutdownWishes: [], shutdownCancels: [] };
+  const calls = { answers: [], answerSlots: [], runs: [], joinSorts: [], stops: [], srtSaves: [], themes: [], clipboard: [], savingsResets: [], frame: [], profileSaves: [], profileDeletes: [], opened: [], shutdownWishes: [], shutdownCancels: [], updateChecks: [], updateInstalls: [] };
+  // Was die Go-Seite zum Selbst-Update antworten soll; je Prüfung gesetzt. Ein
+  // Error steht für "der Aufruf scheitert" — der Fall, in dem das Fenster
+  // seinen Knopf sonst für immer gesperrt ließe.
+  let updateCheckReply = { newer: false, current: "1.1.0", latest: "v1.1.0", note: "This is the newest release (v1.1.0)." };
+  let updateInstallReply = { installed: true, restarting: true, version: "v1.2.0", message: "installed." };
   // Was die Go-Seite über das Ausschalten antworten soll. Sie führt den Stand,
   // das Fenster zeigt ihn nur — eine Prüfung muss also beides trennen können.
   let shutdownReply = { armed: false, counting: false, seconds: 60, note: "" };
@@ -185,6 +190,20 @@ function loadGui() {
           SaveSRTCleaner(phrases) {
             calls.srtSaves.push(phrases);
             return Promise.resolve({ written: phrases.length });
+          },
+          // Looking for a new version and installing one are two separate
+          // calls on purpose, and they are counted separately here: an install
+          // that goes off without a look before it would replace the running
+          // program on nothing but an old button label.
+          CheckForUpdate() {
+            calls.updateChecks.push(true);
+            if (updateCheckReply instanceof Error) return Promise.reject(updateCheckReply);
+            return Promise.resolve(updateCheckReply);
+          },
+          InstallUpdate() {
+            calls.updateInstalls.push(true);
+            if (updateInstallReply instanceof Error) return Promise.reject(updateInstallReply);
+            return Promise.resolve(updateInstallReply);
           }
         }
       }
@@ -206,7 +225,8 @@ function loadGui() {
     " areaOf, areaOfSlot, areaNameOfSlot, anyRunning, addItems, afterQueueChange," +
     " AREA_NAMES, AREA_SLOTS, finishArea, clearLanes, renderList, showFinalSummary, el," +
     " showSavings, resetSavings, applySettingsFilter, settingMatches, sectionId, onRunState," +
-    " setShutdownWish, onShutdownState, cancelShutdown, showShutdownAlert };"
+    " setShutdownWish, onShutdownState, cancelShutdown, showShutdownAlert," +
+    " checkUpdate, installUpdate };"
   )(windowStub, documentStub);
 
   return {
@@ -224,7 +244,11 @@ function loadGui() {
     // setSavingsReply legt fest, was die Go-Seite als Sparbuch meldet.
     setSavingsReply: (report) => { savingsReply = report; },
     // setProfiles legt fest, was die Go-Seite als gespeicherte Sätze meldet.
-    setProfiles: (list) => { profileList = list.slice(); }
+    setProfiles: (list) => { profileList = list.slice(); },
+    // setUpdateCheckReply legt fest, was CheckForUpdate antworten soll.
+    setUpdateCheckReply: (answer) => { updateCheckReply = answer; },
+    // setUpdateInstallReply legt fest, was InstallUpdate antworten soll.
+    setUpdateInstallReply: (answer) => { updateInstallReply = answer; }
   };
 }
 
