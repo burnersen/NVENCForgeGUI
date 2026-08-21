@@ -25,12 +25,37 @@ var assets embed.FS
 // guiVersion ist die einzige Stelle, an der die Version dieses Fensters
 // steht. Angezeigt wird sie im Fensterkopf (Titelleiste) und in der
 // Kopfzeile der Oberfläche selbst (siehe StartupInfo in app.go).
-const guiVersion = "1.1.0"
+const guiVersion = "1.1.1"
 
 // singleInstanceID hält die Startsperre. Der Name muss auf dem Rechner
 // einmalig sein und darf sich nie ändern — sonst erkennt eine neue Ausgabe die
 // bereits laufende alte nicht mehr.
 const singleInstanceID = "NVENCForgeGUI-6f2c1a70-window"
+
+// windowMessages liefert die Meldungen der Fensterbibliothek und ersetzt genau
+// eine davon.
+//
+// Warum: Steigt die Webansicht von Windows aus, zeigt Wails ein kleines Fenster
+// und beendet das Programm. Der Originaltext lautet "The WebView2 process
+// crashed and the application needs to be restarted." — das liest sich wie ein
+// Absturz DIESES Programms und ist keiner. Gemessen am 2026-08-21 über rund 215
+// Starts: Es trifft grob jeden fünften bis zwanzigsten Start, unabhängig von
+// der Programmausgabe (auch v1.0.2), vom Datenordner, von der
+// Grafikbeschleunigung und von der Ausgabe der WebView2-Laufzeit. Behoben ist
+// damit nichts — aber der Satz sagt jetzt die Wahrheit und den nächsten Schritt.
+//
+// Der Umweg über DefaultMessages() ist Pflicht: Ein selbst gebautes
+// Messages-Objekt wäre in allen anderen zehn Feldern leer, und aus einer
+// hilfreichen Meldung ("die Webansicht fehlt, hier ist die Download-Seite")
+// würde ein leeres Fenster.
+func windowMessages() *windows.Messages {
+	messages := windows.DefaultMessages()
+	messages.WebView2ProcessCrash = "The Windows web view (WebView2) stopped. " +
+		"NVENCForgeGUI itself did not crash and no file was harmed — please just start it again. " +
+		"If this keeps happening, repair the web view: Settings → Apps → Installed apps → " +
+		"Microsoft Edge WebView2 Runtime → Modify → Repair."
+	return messages
+}
 
 // startBackground nennt die Farbe, mit der das Fenster aufgeht, bevor die
 // Oberfläche gezeichnet ist.
@@ -88,6 +113,7 @@ func main() {
 		Windows: &windows.Options{
 			WebviewIsTransparent: false,
 			WindowIsTranslucent:  false,
+			Messages:             windowMessages(),
 		},
 		OnStartup:     app.startup,
 		OnBeforeClose: app.beforeClose,
