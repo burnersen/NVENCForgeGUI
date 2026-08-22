@@ -1107,6 +1107,21 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
         </p>
       </section>
 
+      <!-- Stands here because it answers a question the Task Manager raises:
+           why is this program listed twice? Better read here than guessed. -->
+      <section class="panel">
+        <h2>Why it starts twice</h2>
+        <p class="about-text">
+          Task Manager shows two <b>NVENCForgeGUI</b> entries, and that is meant to be. The Windows
+          web view this window is drawn with sometimes stops while starting; when it does, the window
+          is ended and cannot bring itself back. So the program starts once as a small watcher that
+          holds no web view at all, and once as the window you see. If the window ever drops out, the
+          watcher puts it straight back — twice at most — and closes the message for you. On the last
+          try it leaves the message standing, so a lasting problem still says what it is. The watcher
+          does nothing else: it writes no file and costs no start-up time worth measuring.
+        </p>
+      </section>
+
       <!-- Last panel on purpose: it is an offer, not a request, and it should
            never be the first thing on the page. Same route as every other
            link here, through BrowserOpenURL. -->
