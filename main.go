@@ -50,12 +50,24 @@ const singleInstanceID = "NVENCForgeGUI-6f2c1a70-window"
 // würde ein leeres Fenster.
 func windowMessages() *windows.Messages {
 	messages := windows.DefaultMessages()
-	messages.WebView2ProcessCrash = "The Windows web view (WebView2) stopped. " +
+	messages.WebView2ProcessCrash = webViewCrashMessage
+	return messages
+}
+
+const (
+	// webViewCrashMarker ist der Satz, an dem der Start-Wächter diese Meldung
+	// unter allen Fenstern wiedererkennt (watchdog.go). Er MUSS in
+	// webViewCrashMessage stecken — main_test.go hält diese Linie, denn eine
+	// Textänderung ohne den Marker würde das automatische Wegklicken still
+	// abschalten.
+	webViewCrashMarker = "The Windows web view (WebView2) stopped."
+
+	// webViewCrashMessage ist der ganze Text der Meldung. Er steht nur hier.
+	webViewCrashMessage = webViewCrashMarker + " " +
 		"NVENCForgeGUI itself did not crash and no file was harmed — please just start it again. " +
 		"If this keeps happening, repair the web view: Settings → Apps → Installed apps → " +
 		"Microsoft Edge WebView2 Runtime → Modify → Repair."
-	return messages
-}
+)
 
 // startBackground nennt die Farbe, mit der das Fenster aufgeht, bevor die
 // Oberfläche gezeichnet ist.
@@ -71,6 +83,18 @@ func startBackground(theme string) *options.RGBA {
 }
 
 func main() {
+	// Noch vor allem anderen: Steigt die Windows-Webansicht aus, beendet Wails
+	// das Programm hart und ungefragt — es kann sich also nicht selbst retten.
+	// Deshalb läuft das Fenster als Kindprozess, und DIESER Prozess sieht nur
+	// zu und startet es notfalls neu (watchdog.go).
+	if !runsAsWindow(os.Args) {
+		if exitCode, guarded := runWatchdog(); guarded {
+			os.Exit(exitCode)
+		}
+		// Kein Wächter zustande gekommen: Dann öffnet dieser Prozess das
+		// Fenster eben selbst. Ohne Netz ist immer noch besser als gar nicht.
+	}
+
 	// Ganz am Anfang: Kommt dieser Start aus einem Selbst-Update, läuft die alte
 	// Ausgabe im Augenblick des Starts noch. Erst wenn sie beendet ist, gibt sie
 	// die Startsperre weiter unten frei (siehe selfupdate.go). Bei einem ganz
