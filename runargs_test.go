@@ -48,6 +48,7 @@ func TestEveryOptionReachesTheCommandLine(t *testing.T) {
 		FixedCQ:    40,
 		MaxBitrate: 9000,
 		KeepSource: true,
+		Crop:       cropOn,
 		Shutdown:   true,
 	}
 	args, err := buildConverterArgs(request, true)
@@ -57,7 +58,7 @@ func TestEveryOptionReachesTheCommandLine(t *testing.T) {
 	got := joined(args)
 	for _, expected := range []string{
 		"-json", "-av1", "-cpu", "-mp4", "-original", "-copyaudio", "-8bit",
-		"-cq 40", "-9000", "-keep", "one.mkv two.mkv",
+		"-cq 40", "-9000", "-keep", "-crop", "one.mkv two.mkv",
 	} {
 		if !strings.Contains(got, expected) {
 			t.Errorf("missing %q in %q", expected, got)
@@ -210,6 +211,7 @@ func TestModeRunCarriesNoConversionOptions(t *testing.T) {
 		FixedCQ:    28,
 		MaxBitrate: 8000,
 		KeepSource: true,
+		Crop:       cropOn,
 	}, false)
 	if err != nil {
 		t.Fatalf("buildConverterArgs: %v", err)
@@ -296,6 +298,60 @@ func TestEveryModeGetsItsOwnFlag(t *testing.T) {
 			if args[i] != want[i] {
 				t.Fatalf("%s: erwartet %v, bekommen %v", mode, want, args)
 			}
+		}
+	}
+}
+
+// Auto-Crop kennt drei Zustände, und zwei davon dürfen sich nie mischen:
+// "-crop" schneidet, "-cropcheck" schaut nur nach. Kämen beide zusammen an,
+// wüsste der Konverter nicht, ob er die Datei anfassen soll oder nicht.
+func TestCropModes(t *testing.T) {
+	cases := []struct {
+		name    string
+		crop    string
+		want    string
+		notWant string
+	}{
+		{"aus", "", "", "-crop"},
+		{"schneiden", cropOn, "-crop", "-cropcheck"},
+		{"nur nachsehen", cropCheck, "-cropcheck", ""},
+		{"unbekannter Wert wird ignoriert", "vielleicht", "", "-crop"},
+	}
+	for _, c := range cases {
+		args, err := buildConverterArgs(RunRequest{
+			Files: []string{"film.mkv"},
+			Crop:  c.crop,
+		}, false)
+		if err != nil {
+			t.Fatalf("%s: unexpected error: %v", c.name, err)
+		}
+		got := joined(args)
+		if c.want != "" && !strings.Contains(got, c.want) {
+			t.Errorf("%s: missing %q in %q", c.name, c.want, got)
+		}
+		if c.notWant != "" && strings.Contains(got, c.notWant) {
+			t.Errorf("%s: %q must not appear in %q", c.name, c.notWant, got)
+		}
+	}
+}
+
+// Der Prüflauf zerfällt genau wie ein echter Lauf in einen Auftrag je Datei —
+// sonst bekäme man für einen Stapel nur ein einziges Kontrollbild.
+func TestCropCheckReachesEveryFile(t *testing.T) {
+	request := RunRequest{
+		Files: []string{"eins.mkv", "zwei.mkv", "drei.mkv"},
+		Crop:  cropCheck,
+	}
+	jobs, err := buildJobs(request, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(jobs) != len(request.Files) {
+		t.Fatalf("expected one job per file, got %d", len(jobs))
+	}
+	for _, singleJob := range jobs {
+		if !strings.Contains(joined(singleJob.args), "-cropcheck") {
+			t.Errorf("job %q lost -cropcheck: %q", singleJob.label, joined(singleJob.args))
 		}
 	}
 }

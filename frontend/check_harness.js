@@ -217,7 +217,7 @@ function loadGui() {
     " changedValues, defaultFor, noteGPUAdvice, renderSettings, showPage, log, note," +
     " onQuestion, sendAnswer, askSelection, isExtraOption, isToolRun, collectRequest, resetProgress," +
     " updateButtons, afterJoinChange, addJoinPaths, joinBase, joinOfKind," +
-    " joinReady, joinRunFiles, onWatchFiles, maybeStartWatchRun, showWatch, clearWatchArea, runWentThroughCleanly, clearFinishedList, stopWatching, stopWatchRun, collectWatchRequest, onQueueState, renderWatchSummary, isWatchSlot, WATCH_SLOT, limitParallelChoice, watchNote," +
+    " joinReady, joinRunFiles, applyCropCapability, showConverter, onWatchFiles, maybeStartWatchRun, showWatch, clearWatchArea, runWentThroughCleanly, clearFinishedList, stopWatching, stopWatchRun, collectWatchRequest, onQueueState, renderWatchSummary, isWatchSlot, WATCH_SLOT, limitParallelChoice, watchNote," +
     " startBatch, clearProgress, updateOverall, batchProgress, updateFrame, stopSlot, stop, start, renderLanes, copyAreaLog," +
     " loadSRTCleaner, renderSRTCleaner, addSRTPhrase, saveSRTPhrases, srtSignature," +
     " joinMode, applyJoinMode, JOIN_MODES, showAbout, openLink, LINKS, loadProfiles, renderProfiles, chooseProfile, saveProfile, deleteProfile, applyProfile, profileFromOptions, profileNamed, applyTheme, chooseTheme, THEMES," +

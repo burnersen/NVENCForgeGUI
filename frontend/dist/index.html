@@ -600,6 +600,7 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
         </div>
         <div class="checks">
           <label class="check" data-help="keep"><input type="checkbox" id="opt-keep" /> Keep the source file where it is</label>
+          <label class="check" data-help="crop"><input type="checkbox" id="opt-crop" /> Cut off black bars (letterbox)</label>
           <label class="check" data-help="shutdown"><input type="checkbox" id="opt-shutdown" /> Shut down the PC when finished</label>
         </div>
         <div class="hint">
@@ -625,6 +626,10 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
 
         <div class="row" style="margin-top:12px">
           <button class="btn primary" id="btn-convert-start">Start</button>
+          <!-- Converts nothing. It writes one picture per file showing where the
+               black bars would be cut - the only way to check a cut, since the
+               converted file can no longer show what was removed from it. -->
+          <button class="btn" id="btn-convert-cropcheck">Check black bars</button>
           <button class="btn danger" id="btn-convert-stop" disabled>Stop cleanly</button>
           <span class="hint" style="margin:0" id="convert-stop-hint"></span>
           <div class="spacer"></div>
@@ -926,6 +931,7 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
         </div>
         <div class="checks">
           <label class="check"><input type="checkbox" id="wopt-keep" /> Keep the source file where it is</label>
+          <label class="check"><input type="checkbox" id="wopt-crop" /> Cut off black bars (letterbox)</label>
         </div>
         <div class="hint">
           No “shut down when finished” here: a standing order that switches the
@@ -1266,6 +1272,7 @@ const state = {
   questions: [],      // open track questions, one per waiting converter
   eventChannel: false,
   converterFound: false,
+  cropCapable: false,  // the converter knows -crop (NVENCForge 1.21.0 and up)
   forceDownload: false,  // set after a download was held back on purpose
   config: null,          // values read out of NVENCForge_Config.ini, null = not read (yet)
   cqTouched: false,      // true once the CQ box was edited by hand
@@ -1837,6 +1844,12 @@ function updateButtons() {
     const area = areaOf(name);
     $("btn-" + name + "-start").disabled = area.running || !areaHasWork(area) || !state.converterFound;
     $("btn-" + name + "-stop").disabled = !area.running;
+    // The black-bar check needs exactly what a run needs: files in the queue
+    // and a converter to do the looking.
+    if (name === "convert") {
+      $("btn-convert-cropcheck").disabled =
+        area.running || !areaHasWork(area) || !state.converterFound || !state.cropCapable;
+    }
     el(area, "stop-hint").textContent = area.stopping
       ? "Stopping — click again to quit immediately."
       : (area.running ? "Keeps what is already encoded as a playable preview." : "");
@@ -2802,6 +2815,8 @@ function showGPU(gpu) {
 function showConverter(status) {
   state.converterFound = status.found;
   state.eventChannel = status.eventChannel;
+  state.cropCapable = !!status.autoCrop;
+  applyCropCapability();
   const dot = $("exe-dot");
   const text = $("exe-text");
   const download = $("btn-download");
@@ -3000,6 +3015,28 @@ const HELP = {
     return {
       title: "Keep the source file",
       text: "The source stays exactly where it is. Without this it is moved out of the way after a successful run — into the “originals” folder or the recycle bin, whichever your INI says. The result is written to an “output” folder either way, so nothing is ever overwritten.",
+      now: now
+    };
+  },
+  crop: () => {
+    // Der Effekt hängt daran, ob Auto CQ läuft — und das steht in der INI.
+    // Ein Text, der pauschal "spart Platz" verspricht, wäre für die
+    // Voreinstellung schlicht falsch: dort werden die Dateien größer.
+    const config = state.config;
+    let now = "Default: off";
+    if (config && config.found && config.autoCQKnown) {
+      now = config.autoCQ
+        ? "Default: off · with your Auto CQ on, files get larger and better"
+        : "Default: off · with your Auto CQ off, files get about 6 % smaller";
+    }
+    // The converter next door does the cutting. An older one silently ignores
+    // the switch, so the box is out of reach until it is updated.
+    if (!state.cropCapable) {
+      now = "Not available: your NVENCForge.exe is older than 1.21.0. The About page can update it.";
+    }
+    return {
+      title: "Cut off black bars",
+      text: "Removes the black bars of a letterboxed film — a 21:9 picture sitting inside a 16:9 frame. What it does for you depends on Auto CQ. With a fixed CQ the file gets about 6 % smaller and the encode 19 % faster. With Auto CQ on, files get LARGER instead, and that is the feature working: Auto CQ measures quality across the whole picture, and black bars flatter that measurement, so letterboxed films have been getting less quality than the target asks for. Cutting the bars makes the measurement honest. Use “Check black bars” first — a wrong cut cannot be seen in the finished file, only in what is missing from it.",
       now: now
     };
   },
@@ -3640,6 +3677,7 @@ function collectWatchRequest(files) {
     fixedCQ: parseInt($("wopt-cq").value, 10) || 0,
     maxBitrate: parseInt($("wopt-bitrate").value, 10) || 0,
     keepSource: $("wopt-keep").checked,
+    crop: $("wopt-crop").checked ? "on" : "",
     parallel: 1,
     shutdown: false
   };
@@ -3766,6 +3804,7 @@ function profileFromOptions(name) {
     fixedCQ: parseInt($("opt-cq").value, 10) || 0,
     maxBitrate: parseInt($("opt-bitrate").value, 10) || 0,
     keepSource: $("opt-keep").checked,
+    crop: $("opt-crop").checked,
     parallel: parallelSetting()
   };
 }
@@ -3788,6 +3827,7 @@ function applyProfile(prefix, profile) {
   if (profile.fixedCQ) $(prefix + "-cq").value = profile.fixedCQ;
   $(prefix + "-bitrate").value = profile.maxBitrate || "";
   $(prefix + "-keep").checked = !!profile.keepSource;
+  $(prefix + "-crop").checked = !!profile.crop;
   // How many at a time exists on the Convert page only: the watched folder
   // does one video at a time, whatever a profile may say.
   if (prefix === "opt" && profile.parallel) $("opt-parallel").value = String(profile.parallel);
@@ -4014,6 +4054,7 @@ function collectRequest(area) {
     fixedCQ: parseInt($("opt-cq").value, 10) || 0,
     maxBitrate: parseInt($("opt-bitrate").value, 10) || 0,
     keepSource: $("opt-keep").checked,
+    crop: $("opt-crop").checked ? "on" : "",
     shutdown: $("opt-shutdown").checked,
     parallel: parallelSetting()
   };
@@ -4021,15 +4062,48 @@ function collectRequest(area) {
 
 function parallelSetting() { return parseInt($("opt-parallel").value, 10) || 1; }
 
-async function start(areaName) {
+// applyCropCapability hides the black-bar controls when the converter next
+// door is older than 1.21.0. Leaving them clickable would be the worst of both
+// worlds: NVENCForge shrugs an unknown option off as a warning in the log, so
+// the run would look perfectly normal and simply keep the bars.
+// Why it is unticked and not merely greyed out: a ticked box that does nothing
+// is a lie the log would not correct. The reason is told by the help bubble,
+// the same place every other setting explains itself.
+function applyCropCapability() {
+  const able = state.cropCapable;
+  ["opt-crop", "wopt-crop"].forEach((id) => {
+    const box = $(id);
+    if (!box) return;
+    box.disabled = !able;
+    if (!able) box.checked = false;
+    const label = box.closest("label");
+    if (label) label.style.opacity = able ? "" : "0.5";
+  });
+}
+
+// start runs the area's queue. cropCheckOnly turns the same path into the
+// black-bar check: same files, same settings, but the converter only writes a
+// picture of the proposed cut and converts nothing. It goes through here rather
+// than through a path of its own so the queue, the progress lanes and the stop
+// button keep behaving exactly as they do for a normal run.
+async function start(areaName, cropCheckOnly) {
   const area = areaOf(areaName);
   showError("", area.name);
   const request = collectRequest(area);
+  if (cropCheckOnly) {
+    request.crop = "check";
+    // A check must never switch the machine off: nothing was converted, and
+    // the whole point is that somebody looks at the pictures afterwards.
+    request.shutdown = false;
+  }
   // Cleared once for the whole batch — not on every "run" event, since with
   // several converters each one sends its own and would wipe out the others.
   resetProgress(area);
   startBatch(area, request.files);
   area.parallel = request.parallel;
+  if (cropCheckOnly) {
+    note("Checking for black bars — writing one picture per file next to the source, converting nothing.", area.name);
+  }
   try {
     await api().StartRun(request);
   } catch (err) {
@@ -4134,6 +4208,9 @@ function wire() {
     const area = areaOf(name);
     $("btn-" + name + "-start").onclick = () => start(name);
     $("btn-" + name + "-stop").onclick = () => stop(name);
+    // Only Convert has the black-bar check: it is the page where you pick the
+    // files you are unsure about. Split and Join do not re-encode at all.
+    if (name === "convert") $("btn-convert-cropcheck").onclick = () => start(name, true);
     $("btn-" + name + "-log-copy").onclick = () => copyAreaLog(area);
     $("btn-" + name + "-log-clear").onclick = () => {
       el(area, "logbox").innerHTML = "";

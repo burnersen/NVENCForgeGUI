@@ -34,6 +34,11 @@ const (
 	qualityAuto  = "auto"
 	qualityOff   = "off"
 	qualityFixed = "fixed"
+
+	// Auto-Crop: "on" schneidet schwarze Balken weg, "check" schaut nur nach
+	// und legt ein Kontrollbild neben die Quelle, ohne etwas zu konvertieren.
+	cropOn    = "on"
+	cropCheck = "check"
 )
 
 // Grenzen der CQ-Skala, wie der Konverter sie prüft (main.go, parseArgs).
@@ -101,6 +106,7 @@ type RunRequest struct {
 	Audio      string   `json:"audio"`      // "" oder "copy"
 	BitDepth   string   `json:"bitDepth"`   // "" oder "8"
 	Quality    string   `json:"quality"`    // "", "auto", "off" oder "fixed"
+	Crop       string   `json:"crop"`       // "", "on" oder "check"
 	FixedCQ    int      `json:"fixedCQ"`
 	MaxBitrate int      `json:"maxBitrate"` // 0 = Wert aus der INI
 	KeepSource bool     `json:"keepSource"`
@@ -207,6 +213,14 @@ func buildConverterArgs(request RunRequest, eventChannel bool) ([]string, error)
 	}
 	if request.BitDepth == bitDepth8 {
 		args = append(args, "-8bit")
+	}
+	// Der Prüflauf schließt das Schneiden aus: "-cropcheck" legt nur das
+	// Kontrollbild an. Beide Schalter zusammen zu schicken wäre widersprüchlich.
+	switch request.Crop {
+	case cropCheck:
+		args = append(args, "-cropcheck")
+	case cropOn:
+		args = append(args, "-crop")
 	}
 
 	qualityArgs, err := buildQualityArgs(request)

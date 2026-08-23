@@ -41,6 +41,13 @@ const (
 	// das Programm zu starten.
 	jsonFlagMarker = "-json"
 
+	// cropFlagMarker zeigt an, dass die exe Auto-Crop kennt (ab NVENCForge
+	// 1.21.0). Geprüft wird auf "-cropcheck", nicht auf "-crop": das kürzere
+	// Wort steckt im längeren, und beide Schalter kamen zusammen dazu.
+	// Ohne diese Prüfung böte das Fenster Knöpfe an, die eine ältere exe
+	// kommentarlos als unbekannte Option verwirft.
+	cropFlagMarker = "-cropcheck"
+
 	downloadTimeout = 10 * time.Minute
 	apiTimeout      = 30 * time.Second
 )
@@ -52,6 +59,7 @@ type ConverterStatus struct {
 	SizeBytes     int64  `json:"sizeBytes"`
 	Version       string `json:"version"`
 	EventChannel  bool   `json:"eventChannel"`
+	AutoCrop      bool   `json:"autoCrop"`
 	ToolsDir      string `json:"toolsDir"`
 	FFmpegPresent bool   `json:"ffmpegPresent"`
 	Note          string `json:"note"`
@@ -136,6 +144,14 @@ func converterStatus() ConverterStatus {
 	default:
 		status.Note = "This NVENCForge.exe has no event channel (-json). " +
 			"The run still works, but progress can only be read from the log."
+	}
+
+	// Auto-Crop wird nur angeboten, wenn die exe es auch kann. Ein Lesefehler
+	// zählt hier als "kann es nicht": lieber einen Knopf zu wenig als einen,
+	// der nichts tut. Gemeldet wird er nicht noch einmal — der Fehler steht
+	// dann schon oben.
+	if hasCrop, cropErr := fileContainsMarker(path, cropFlagMarker); cropErr == nil && hasCrop {
+		status.AutoCrop = true
 	}
 	return status
 }
