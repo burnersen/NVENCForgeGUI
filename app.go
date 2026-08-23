@@ -638,6 +638,20 @@ func (a *App) StartRun(request RunRequest) error {
 		return errors.New("NVENCForge.exe was not found — download it first")
 	}
 
+	// "Kästchen leer" heißt im Fenster nur "nichts dazu gesagt". Kennt die
+	// Programmdatei die Gegenschalter, wird daraus ein ausdrückliches Nein —
+	// sonst gewönne die Konfigurationsdatei gegen das, was im Fenster steht.
+	//
+	// Für den Codec gibt es das Gegenstück bewusst NICHT: die Datei hat gar
+	// keinen Schlüssel, der AV1 einschaltet (encoder kennt nur "nvidia" und
+	// "cpu"), also kann sie die Auswahl im Fenster auch nicht überstimmen.
+	if status.GuardFlags {
+		request.SuppressConverterShutdown = true
+	}
+	if request.Crop == "" && status.AutoCrop {
+		request.Crop = cropOff
+	}
+
 	jobs, err := buildJobs(request, status.EventChannel)
 	if err != nil {
 		return err

@@ -19,7 +19,8 @@ import (
 // Erlaubte Werte der Auswahlfelder. Als Konstanten, damit ein Tippfehler beim
 // Vergleich auffällt statt still den Standardfall zu wählen.
 const (
-	codecAV1 = "av1"
+	codecAV1  = "av1"
+	codecH265 = "h265"
 
 	encoderCPU = "cpu"
 
@@ -39,6 +40,10 @@ const (
 	// und legt ein Kontrollbild neben die Quelle, ohne etwas zu konvertieren.
 	cropOn    = "on"
 	cropCheck = "check"
+
+	// cropOff heißt "ausdrücklich nicht schneiden" und ist NICHT dasselbe wie
+	// der leere Wert: der bedeutet nur "das Fenster hat nichts dazu gesagt".
+	cropOff = "off"
 )
 
 // Grenzen der CQ-Skala, wie der Konverter sie prüft (main.go, parseArgs).
@@ -99,7 +104,7 @@ type RunRequest struct {
 	Mode       string   `json:"mode"`     // "" = konvertieren, sonst Schlüssel aus modeFlags
 	Parallel   int      `json:"parallel"` // gleichzeitige Läufe (1–3), 0 = einer
 	Files      []string `json:"files"`
-	Codec      string   `json:"codec"`      // "" oder "av1"
+	Codec      string   `json:"codec"`      // "", "av1" oder "h265"
 	Encoder    string   `json:"encoder"`    // "" oder "cpu"
 	Container  string   `json:"container"`  // "" oder "mp4"
 	Resolution string   `json:"resolution"` // "" oder "original"
@@ -117,6 +122,16 @@ type RunRequest struct {
 	// mitten in der Arbeit der übrigen. Ausgeführt wird der Wunsch von
 	// shutdown.go, wenn wirklich alles leer ist.
 	Shutdown bool `json:"shutdown"`
+
+	// SuppressConverterShutdown ist KEINE Wahl aus dem Fenster, sondern ein
+	// Schutz — deshalb steht es auch nicht in der JSON-Schnittstelle.
+	//
+	// Steht autoShutdown=true in der INI, schaltet der Konverter ab, sobald
+	// SEINE eine Datei fertig ist, und reißt den Rest des Stapels mit. Das ist
+	// derselbe Schaden, der bis v1.0.1 im Fenster steckte (siehe unten bei den
+	// Argumenten), nur diesmal von der Konfigurationsdatei ausgelöst. Setzt
+	// app.go, sobald die Programmdatei "-noshutdown" kennt.
+	SuppressConverterShutdown bool `json:"-"`
 }
 
 // buildJobs macht aus einer Anfrage die einzelnen Aufträge für den Verteiler.
@@ -196,8 +211,14 @@ func buildConverterArgs(request RunRequest, eventChannel bool) ([]string, error)
 		return append(append(args, flag), files...), nil
 	}
 
-	if request.Codec == codecAV1 {
+	// Wie bei cropOff: "h265" ist ein ausdrückliches "H.265, egal was in der
+	// INI steht". Ohne den Gegenschalter gewönne encoder=av1 aus der Datei
+	// gegen die Auswahl im Fenster.
+	switch request.Codec {
+	case codecAV1:
 		args = append(args, "-av1")
+	case codecH265:
+		args = append(args, "-h265")
 	}
 	if request.Encoder == encoderCPU {
 		args = append(args, "-cpu")
@@ -216,11 +237,22 @@ func buildConverterArgs(request RunRequest, eventChannel bool) ([]string, error)
 	}
 	// Der Prüflauf schließt das Schneiden aus: "-cropcheck" legt nur das
 	// Kontrollbild an. Beide Schalter zusammen zu schicken wäre widersprüchlich.
+	//
+	// cropOff schickt ausdrücklich "-nocrop", statt sich aufs Weglassen zu
+	// verlassen: steht autoCrop=true in der INI, würde der Konverter sonst
+	// schneiden, obwohl das Kästchen im Fenster leer ist. Ein Bedienelement,
+	// das nur in eine Richtung wirkt, ist schlimmer als gar keines.
+	//
+	// Gesetzt wird cropOff erst in app.go und nur, wenn die vorhandene
+	// Programmdatei den Schalter überhaupt kennt — eine ältere würde ihn als
+	// unbekannte Option anmeckern.
 	switch request.Crop {
 	case cropCheck:
 		args = append(args, "-cropcheck")
 	case cropOn:
 		args = append(args, "-crop")
+	case cropOff:
+		args = append(args, "-nocrop")
 	}
 
 	qualityArgs, err := buildQualityArgs(request)
@@ -246,6 +278,14 @@ func buildConverterArgs(request RunRequest, eventChannel bool) ([]string, error)
 	// Konverter je Datei einmal auf. Bis v1.0.1 schaltete deshalb die erste
 	// fertige Datei den Rechner ab und riss den Rest des Stapels mit.
 	// Zuständig ist jetzt shutdown.go.
+	//
+	// Weglassen allein genügt aber nicht: autoShutdown=true in der INI richtet
+	// denselben Schaden an, ohne dass je ein Schalter geschickt wurde. Kennt
+	// die Programmdatei "-noshutdown", wird das Abschalten deshalb ausdrücklich
+	// abgeschaltet.
+	if request.SuppressConverterShutdown {
+		args = append(args, "-noshutdown")
+	}
 
 	return append(args, request.Files...), nil
 }

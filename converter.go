@@ -48,6 +48,12 @@ const (
 	// kommentarlos als unbekannte Option verwirft.
 	cropFlagMarker = "-cropcheck"
 
+	// guardFlagMarker zeigt an, dass die exe die Gegenschalter kennt (ab
+	// NVENCForge 1.22.0): "-noshutdown" und "-h265". Ohne sie kann das Fenster
+	// nicht durchsetzen, was der Nutzer sieht — die INI gewönne immer.
+	// Geprüft wird an "-noshutdown", weil "-h265" auch in Fließtexten vorkommt.
+	guardFlagMarker = "-noshutdown"
+
 	downloadTimeout = 10 * time.Minute
 	apiTimeout      = 30 * time.Second
 )
@@ -60,6 +66,7 @@ type ConverterStatus struct {
 	Version       string `json:"version"`
 	EventChannel  bool   `json:"eventChannel"`
 	AutoCrop      bool   `json:"autoCrop"`
+	GuardFlags    bool   `json:"guardFlags"`
 	ToolsDir      string `json:"toolsDir"`
 	FFmpegPresent bool   `json:"ffmpegPresent"`
 	Note          string `json:"note"`
@@ -152,6 +159,12 @@ func converterStatus() ConverterStatus {
 	// dann schon oben.
 	if hasCrop, cropErr := fileContainsMarker(path, cropFlagMarker); cropErr == nil && hasCrop {
 		status.AutoCrop = true
+	}
+	// Dieselbe Vorsicht wie oben: kennt die Programmdatei die Gegenschalter
+	// nicht, werden sie auch nicht mitgeschickt — sie landeten sonst als
+	// unbekannte Optionen im Protokoll.
+	if hasGuards, guardErr := fileContainsMarker(path, guardFlagMarker); guardErr == nil && hasGuards {
+		status.GuardFlags = true
 	}
 	return status
 }
