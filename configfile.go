@@ -20,11 +20,18 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"sync"
+	"time"
 )
 
 // backupSuffix hängt an der Sicherungskopie, die vor jedem Schreiben entsteht.
-// Es gibt bewusst nur eine: der Nutzer wollte keine wachsende Sammlung.
+// Sie wird jedes Mal überschrieben und hält deshalb immer den Stand von VOR
+// der letzten Änderung. Daneben entsteht einmal je Programmstart eine zweite,
+// unangetastete Kopie mit Zeitstempel (siehe writeSessionBackup) — seit die
+// Konvertieren-Seite jede Änderung sofort zurückschreibt, wäre eine einzige
+// Sicherung nach ein paar Klicks wertlos.
 const backupSuffix = ".bak"
 
 // Gruppen der INI. Die Datei teilt sich selbst in einen kurzen ersten Teil und
@@ -60,7 +67,10 @@ type SettingsFile struct {
 type SaveResult struct {
 	Written    int    `json:"written"`
 	BackupPath string `json:"backupPath"`
-	Note       string `json:"note"`
+	// SessionBackupPath nennt die Kopie vom Programmstart. Sie steht im
+	// Fenster, damit der Weg zurück bekannt ist, bevor man ihn braucht.
+	SessionBackupPath string `json:"sessionBackupPath"`
+	Note              string `json:"note"`
 }
 
 // readSettingsFile liest die INI und zerlegt sie in Einstellungen.
@@ -199,6 +209,10 @@ func writeSettingsTo(path string, values map[string]string) (SaveResult, error) 
 			strings.Join(missing, ", "))
 	}
 
+	sessionBackup, err := writeSessionBackup(path, original)
+	if err != nil {
+		return SaveResult{}, err
+	}
 	backupPath := path + backupSuffix
 	if err := os.WriteFile(backupPath, original, 0o644); err != nil {
 		return SaveResult{}, fmt.Errorf("configfile.go: writeSettings (backup): %w", err)
@@ -212,7 +226,7 @@ func writeSettingsTo(path string, values map[string]string) (SaveResult, error) 
 		os.Remove(tempPath)
 		return SaveResult{}, fmt.Errorf("configfile.go: writeSettings (replace): %w", err)
 	}
-	return SaveResult{Written: written, BackupPath: backupPath}, nil
+	return SaveResult{Written: written, BackupPath: backupPath, SessionBackupPath: sessionBackup}, nil
 }
 
 // replaceValues ersetzt in jeder betroffenen Zeile nur das, was rechts vom
@@ -253,4 +267,100 @@ func replaceValues(content string, values map[string]string) (updated string, wr
 		missing = append(missing, key)
 	}
 	return strings.Join(lines, "\n"), written, missing
+}
+
+// ----------------------------------------------------------------------------
+// Sicherung je Programmstart
+// ----------------------------------------------------------------------------
+
+// Warum es zwei Sicherungen gibt: Die ".bak" wird bei JEDEM Speichern neu
+// geschrieben. Seit die Konvertieren-Seite ihre Änderungen sofort in die INI
+// zurückschreibt, ist sie nach drei Klicks nur noch der Stand von vor dem
+// dritten Klick — der Zustand vom Morgen wäre unwiederbringlich weg.
+//
+// Deshalb zusätzlich EINE unangetastete Kopie je Programmstart. Sie trägt den
+// Zeitstempel des Starts im Namen, wird in dieser Sitzung nie wieder angefasst
+// und niemals von selbst gelöscht.
+var (
+	sessionBackupMu sync.Mutex
+
+	// Je DATEI einmal, nicht je Sitzung einmal: Der tools-Ordner kann während
+	// des Laufs wechseln (die exe wird nachgeladen, ein Ordner wird ausgetauscht),
+	// und dann bekäme die zweite Datei nie eine Sicherung — obwohl sie genauso
+	// beschrieben wird.
+	sessionBackupPaths = map[string]bool{}
+
+	// sessionStamp steht fest, sobald das Fenster läuft — nicht erst beim
+	// ersten Speichern. Sonst hieße die Datei nach dem Zeitpunkt der Änderung
+	// und nicht nach dem Stand, den sie bewahrt.
+	sessionStamp = time.Now().Format("2006-01-02_1504")
+)
+
+// writeSessionBackup legt die Kopie an, falls diese Datei in dieser Sitzung
+// noch keine hat. Der Pfad kommt zurück, damit das Fenster ihn nennen kann.
+func writeSessionBackup(path string, original []byte) (string, error) {
+	sessionBackupMu.Lock()
+	defer sessionBackupMu.Unlock()
+
+	target := path + backupSuffix + "-" + sessionStamp
+	if sessionBackupPaths[path] {
+		return target, nil
+	}
+	if err := os.WriteFile(target, original, 0o644); err != nil {
+		return "", fmt.Errorf("configfile.go: writeSessionBackup: %w", err)
+	}
+	sessionBackupPaths[path] = true
+	return target, nil
+}
+
+// writeKnownSettings schreibt nur die Werte, für die es in der INI auch eine
+// Zeile gibt.
+//
+// Gedacht für Profile: Ein gespeicherter Satz kann aus einer anderen
+// NVENCForge-Ausgabe stammen und Schlüssel enthalten, die diese Datei (noch)
+// nicht hat. writeSettings lehnt so etwas komplett ab — richtig für die
+// Einstellungsseite, wo jeder Schlüssel gerade erst aus der Datei kam, aber
+// falsch für ein Profil: Dann ließe sich ein älteres Profil gar nicht mehr
+// laden, obwohl 29 seiner 30 Werte passen.
+//
+// Was übersprungen wurde, steht in der Rückmeldung — stillschweigend fehlende
+// Einstellungen wären genau die Art Überraschung, die dieses Fenster vermeiden
+// soll.
+func writeKnownSettings(values map[string]string) (SaveResult, error) {
+	if len(values) == 0 {
+		return SaveResult{Note: "this profile has no settings of its own"}, nil
+	}
+	file := readSettingsFile()
+	if !file.Found {
+		return SaveResult{}, fmt.Errorf("configfile.go: writeKnownSettings: %s", file.Note)
+	}
+
+	known := make(map[string]bool, len(file.Settings))
+	for _, entry := range file.Settings {
+		known[entry.Key] = true
+	}
+
+	usable := make(map[string]string, len(values))
+	var skipped []string
+	for key, value := range values {
+		if known[key] {
+			usable[key] = value
+			continue
+		}
+		skipped = append(skipped, key)
+	}
+	if len(usable) == 0 {
+		return SaveResult{Note: "none of the profile's settings exist in this NVENCForge_Config.ini"}, nil
+	}
+
+	result, err := writeSettings(usable)
+	if err != nil {
+		return SaveResult{}, err
+	}
+	if len(skipped) > 0 {
+		sort.Strings(skipped)
+		result.Note = fmt.Sprintf("%d setting(s) of this profile are not in your NVENCForge_Config.ini and were left out: %s",
+			len(skipped), strings.Join(skipped, ", "))
+	}
+	return result, nil
 }

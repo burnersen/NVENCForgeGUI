@@ -47,6 +47,13 @@ const (
 	maxProfileCQ      = 63
 	maxProfileBitrate = 200000
 	maxProfileRuns    = 3
+
+	// Grenzen für den INI-Abzug. Sie fangen eine von Hand verdorbene oder
+	// fremde Profildatei ab, bevor deren Inhalt in die Konfiguration wandert.
+	// NVENCForge hat 36 Einstellungen; 200 lässt reichlich Luft nach oben.
+	maxProfileSettings      = 200
+	maxProfileSettingKeyLen = 64
+	maxProfileSettingValLen = 512
 )
 
 // Profile ist ein Satz Einstellungen unter einem Namen. Die Feldnamen sind
@@ -65,6 +72,25 @@ type Profile struct {
 	MaxBitrate int    `json:"maxBitrate"`
 	KeepSource bool   `json:"keepSource"`
 	Parallel   int    `json:"parallel"`
+
+	// Crop fehlte bis 1.5.0: Das Fenster schickte das Kästchen zwar mit, die
+	// Struktur hier hatte kein Feld dafür — und damit fiel es beim Speichern
+	// still unter den Tisch. Ein Profil, das eine Einstellung stillschweigend
+	// vergisst, ist schlimmer als keines.
+	Crop bool `json:"crop"`
+
+	// Settings ist ein Abzug der kompletten NVENCForge_Config.ini zum Zeitpunkt
+	// des Speicherns.
+	//
+	// Ohne ihn deckte ein Profil nur die Auswahlfelder der Konvertieren-Seite
+	// ab — die Hälfte dessen, was einen Lauf ausmacht. Qualitätsziel,
+	// Bitraten-Deckel, Encoder-Regler, Schärfe: alles das steht in der INI und
+	// blieb beim Wechsel des Profils einfach stehen. Wer "Archiv" und "schnell"
+	// als Profile anlegt, meint aber genau diese Werte mit.
+	//
+	// Beim Laden werden sie in die INI zurückgeschrieben (app.go, ApplyProfile).
+	// Ältere Profile haben das Feld nicht; dann bleibt die INI unberührt.
+	Settings map[string]string `json:"settings,omitempty"`
 }
 
 // profileStore hält die Profile und die Datei, in der sie stehen.
@@ -128,6 +154,7 @@ func loadProfiles(path string) []Profile {
 // sanitiseProfile schneidet zurecht, was aus der Datei kommt.
 func sanitiseProfile(profile Profile) Profile {
 	profile.Name = strings.TrimSpace(profile.Name)
+	profile.Settings = sanitiseProfileSettings(profile.Settings)
 	if len(profile.Name) > maxProfileNameLength {
 		profile.Name = strings.TrimSpace(profile.Name[:maxProfileNameLength])
 	}
@@ -248,4 +275,36 @@ func (s *profileStore) write() error {
 		return fmt.Errorf("profiles.go: write (WriteFile): %w", err)
 	}
 	return nil
+}
+
+// sanitiseProfileSettings wirft aus dem INI-Abzug alles, was nicht danach
+// aussieht: zu viele Einträge, zu lange Schlüssel oder Werte, leere Namen.
+//
+// Das ist keine Schikane gegen den Nutzer, sondern Schutz der Konfiguration:
+// Was hier durchkommt, wird beim Laden eines Profils in die INI geschrieben.
+func sanitiseProfileSettings(settings map[string]string) map[string]string {
+	if len(settings) == 0 {
+		return nil
+	}
+	clean := make(map[string]string, len(settings))
+	for key, value := range settings {
+		key = strings.TrimSpace(key)
+		value = strings.TrimSpace(value)
+		if key == "" || len(key) > maxProfileSettingKeyLen || len(value) > maxProfileSettingValLen {
+			continue
+		}
+		// Ein Zeilenumbruch im Wert würde beim Schreiben eine zweite Zeile in
+		// die INI setzen und die Datei zerlegen.
+		if strings.ContainsAny(value, "\r\n") {
+			continue
+		}
+		clean[key] = value
+		if len(clean) >= maxProfileSettings {
+			break
+		}
+	}
+	if len(clean) == 0 {
+		return nil
+	}
+	return clean
 }

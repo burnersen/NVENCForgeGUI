@@ -54,6 +54,12 @@ const (
 	// Geprüft wird an "-noshutdown", weil "-h265" auch in Fließtexten vorkommt.
 	guardFlagMarker = "-noshutdown"
 
+	// baseSettingsMarker zeigt an, dass die exe die Grundeinstellungen aus der
+	// INI kennt (ab NVENCForge 1.23.0) und dazu die Gegenschalter -mkv, -aac,
+	// -10bit, -nokeep und -downscale. Geprüft wird an "-downscale": das Wort
+	// kommt in keinem anderen Schalter und in keinem Hilfetext als Teilwort vor.
+	baseSettingsMarker = "-downscale"
+
 	downloadTimeout = 10 * time.Minute
 	apiTimeout      = 30 * time.Second
 )
@@ -67,6 +73,7 @@ type ConverterStatus struct {
 	EventChannel  bool   `json:"eventChannel"`
 	AutoCrop      bool   `json:"autoCrop"`
 	GuardFlags    bool   `json:"guardFlags"`
+	BaseSettings  bool   `json:"baseSettings"`
 	ToolsDir      string `json:"toolsDir"`
 	FFmpegPresent bool   `json:"ffmpegPresent"`
 	Note          string `json:"note"`
@@ -165,6 +172,9 @@ func converterStatus() ConverterStatus {
 	// unbekannte Optionen im Protokoll.
 	if hasGuards, guardErr := fileContainsMarker(path, guardFlagMarker); guardErr == nil && hasGuards {
 		status.GuardFlags = true
+	}
+	if hasBase, baseErr := fileContainsMarker(path, baseSettingsMarker); baseErr == nil && hasBase {
+		status.BaseSettings = true
 	}
 	return status
 }

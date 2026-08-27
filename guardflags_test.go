@@ -84,8 +84,9 @@ func TestCropOnAndCheckStayExclusive(t *testing.T) {
 // hat gar keinen Schlüssel, der AV1 einschaltet.
 func TestCodecH265SendsCounterSwitch(t *testing.T) {
 	args, err := buildConverterArgs(RunRequest{
-		Files: []string{"film.mkv"},
-		Codec: codecH265,
+		Files:        []string{"film.mkv"},
+		Codec:        codecH265,
+		CounterFlags: true,
 	}, false)
 	if err != nil {
 		t.Fatalf("unerwarteter Fehler: %v", err)
@@ -95,6 +96,23 @@ func TestCodecH265SendsCounterSwitch(t *testing.T) {
 	}
 	if hasArg(args, "-av1") {
 		t.Errorf("-av1 darf hier nicht dabei sein: %v", args)
+	}
+}
+
+// TestCodecH265StaysAwayFromOlderConverters: Ohne die Gegenschalter ist "-h265"
+// eine unbekannte Option, über die eine ältere Programmdatei bei JEDEM Lauf
+// meckert. Zu überstimmen gibt es dort auch nichts — codec=av1 in der INI gibt
+// es erst ab NVENCForge 1.23.0.
+func TestCodecH265StaysAwayFromOlderConverters(t *testing.T) {
+	args, err := buildConverterArgs(RunRequest{
+		Files: []string{"film.mkv"},
+		Codec: codecH265,
+	}, false)
+	if err != nil {
+		t.Fatalf("unerwarteter Fehler: %v", err)
+	}
+	if hasArg(args, "-h265") {
+		t.Errorf("-h265 ging an eine exe, die es nicht kennt: %v", args)
 	}
 }
 

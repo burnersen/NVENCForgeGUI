@@ -532,42 +532,42 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
           <div class="field" data-help="codec">
             <label for="opt-codec">Codec</label>
             <select id="opt-codec">
-              <option value="">H.265 (default)</option>
+              <option value="h265">H.265</option>
               <option value="av1">AV1</option>
             </select>
           </div>
           <div class="field" data-help="encoder">
             <label for="opt-encoder">Encoder</label>
             <select id="opt-encoder">
-              <option value="">GPU / NVENC (default)</option>
+              <option value="nvidia">GPU / NVENC</option>
               <option value="cpu">CPU (no NVIDIA card needed)</option>
             </select>
           </div>
           <div class="field" data-help="container">
             <label for="opt-container">Container</label>
             <select id="opt-container">
-              <option value="">MKV (default)</option>
+              <option value="mkv">MKV</option>
               <option value="mp4">MP4</option>
             </select>
           </div>
           <div class="field" data-help="resolution">
             <label for="opt-resolution">Resolution</label>
             <select id="opt-resolution">
-              <option value="" id="opt-resolution-default">Downscale if needed (default)</option>
+              <option value="downscale" id="opt-resolution-default">Downscale if needed</option>
               <option value="original">Keep original resolution</option>
             </select>
           </div>
           <div class="field" data-help="audio">
             <label for="opt-audio">Audio</label>
             <select id="opt-audio">
-              <option value="">AAC where needed (default)</option>
+              <option value="aac">AAC where needed</option>
               <option value="copy">Copy 1:1 — original audio</option>
             </select>
           </div>
           <div class="field" data-help="bitdepth">
             <label for="opt-bitdepth">Bit depth</label>
             <select id="opt-bitdepth">
-              <option value="">10 bit (default)</option>
+              <option value="10">10 bit</option>
               <option value="8">8 bit (older devices)</option>
             </select>
           </div>
@@ -605,7 +605,7 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
         </div>
         <div class="hint">
           Hold the mouse over a setting to see what it does and what your NVENCForge_Config.ini has it set to.
-          Anything left on “default” is not passed on — your INI applies.
+          Every setting here is the one in your NVENCForge_Config.ini — changing it here changes the file.
           With MP4, files that have several tracks open a chooser — you decide what goes in.
         </div>
       </section>
@@ -874,42 +874,42 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
           <div class="field">
             <label for="wopt-codec">Codec</label>
             <select id="wopt-codec">
-              <option value="">H.265 (default)</option>
+              <option value="h265">H.265</option>
               <option value="av1">AV1</option>
             </select>
           </div>
           <div class="field">
             <label for="wopt-encoder">Encoder</label>
             <select id="wopt-encoder">
-              <option value="">GPU / NVENC (default)</option>
+              <option value="nvidia">GPU / NVENC</option>
               <option value="cpu">CPU (no NVIDIA card needed)</option>
             </select>
           </div>
           <div class="field">
             <label for="wopt-container">Container</label>
             <select id="wopt-container">
-              <option value="">MKV (default)</option>
+              <option value="mkv">MKV</option>
               <option value="mp4">MP4</option>
             </select>
           </div>
           <div class="field">
             <label for="wopt-resolution">Resolution</label>
             <select id="wopt-resolution">
-              <option value="">Downscale if needed (default)</option>
+              <option value="downscale">Downscale if needed</option>
               <option value="original">Keep original resolution</option>
             </select>
           </div>
           <div class="field">
             <label for="wopt-audio">Audio</label>
             <select id="wopt-audio">
-              <option value="">AAC where needed (default)</option>
+              <option value="aac">AAC where needed</option>
               <option value="copy">Copy 1:1 — original audio</option>
             </select>
           </div>
           <div class="field">
             <label for="wopt-bitdepth">Bit depth</label>
             <select id="wopt-bitdepth">
-              <option value="">10 bit (default)</option>
+              <option value="10">10 bit</option>
               <option value="8">8 bit (older devices)</option>
             </select>
           </div>
@@ -1017,7 +1017,7 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
 
         <div class="hint">
           Changes apply to the next run; a run in progress keeps the settings it started with.
-          The version before your last save is kept as NVENCForge_Config.ini.bak.
+          The version before your last save is kept as NVENCForge_Config.ini.bak, and the state this program started with as NVENCForge_Config.ini.bak-&lt;date_time&gt; — that one is never touched again while the window is open.
         </div>
 
         <!-- The savings counter runs from the first ever use and survives every
@@ -1273,6 +1273,7 @@ const state = {
   eventChannel: false,
   converterFound: false,
   cropCapable: false,  // the converter knows -crop (NVENCForge 1.21.0 and up)
+  optionsSeeded: false, // the controls were filled from the INI once already
   forceDownload: false,  // set after a download was held back on purpose
   config: null,          // values read out of NVENCForge_Config.ini, null = not read (yet)
   cqTouched: false,      // true once the CQ box was edited by hand
@@ -2894,6 +2895,18 @@ function bitrateCapKey() {
 function applyConfig(config) {
   state.config = config || null;
   refreshFromConfig();
+  // Once per program start. Later refreshes must not overwrite what someone
+  // has just chosen — and they would not change anything anyway, since every
+  // change is written straight into the file.
+  if (!state.optionsSeeded && config && config.found) {
+    state.optionsSeeded = true;
+    seedOptionsFromConfig("opt");
+    seedOptionsFromConfig("wopt");
+    // A converter older than 1.21.0 knows no black-bar switch. The tick must
+    // not survive the seeding in that case.
+    applyCropCapability();
+    noteShutdownFromConfig();
+  }
 }
 // refreshFromConfig runs again on every codec or resolution change, because
 // both of them change which cap and which CQ apply.
@@ -2903,8 +2916,8 @@ function refreshFromConfig() {
 
   const height = iniNumber("maxResolution");
   $("opt-resolution-default").textContent = height
-    ? "Downscale to max " + height + "p (default)"
-    : "Downscale if needed (default)";
+    ? "Downscale to max " + height + "p"
+    : "Downscale if needed";
 
   // Only until the box is edited by hand: after that the typed number stays,
   // even when the codec changes.
@@ -2912,6 +2925,165 @@ function refreshFromConfig() {
     const fromIni = iniNumber(isAV1() ? "av1TargetCQ" : "targetCQ");
     if (fromIni) $("opt-cq").value = fromIni;
   }
+}
+
+/* ---------- the window mirrors the INI ----------
+   Until 1.5.0 the Convert page showed its own idea of "default" and passed
+   nothing on: with encoder=cpu in the INI it still said "GPU / NVENC", with
+   autoCQ=false it still said "Auto CQ on", and a ticked "cut black bars" was
+   the only setting that ever reached the file. What you saw and what happened
+   were two different things.
+
+   Now there is one truth, and it is the INI:
+     · at start-up every control is set from the file,
+     · every change on the Convert page is written straight back into it,
+     · a profile carries a copy of the whole file and puts it back on load.
+
+   The watched folder is deliberately read-only in this respect. It has its own
+   set of controls for a standing order; if it wrote back as well, the two
+   pages would keep overwriting each other's settings.
+
+   Nothing is written for a key the file does not have. An older
+   NVENCForge_Config.ini simply has fewer of them, and inventing lines in
+   someone else's configuration file is not this window's job. */
+const INI_MIRROR = [
+  {
+    id: "codec", key: "codec",
+    fromConfig: (c) => (c.codecKnown ? c.codec : null),
+    toIni: (el) => el.value
+  },
+  {
+    id: "encoder", key: "encoder",
+    fromConfig: (c) => (c.encoderKnown ? c.encoder : null),
+    toIni: (el) => el.value
+  },
+  {
+    id: "container", key: "container",
+    fromConfig: (c) => (c.containerKnown ? c.container : null),
+    toIni: (el) => el.value
+  },
+  {
+    id: "audio", key: "audioMode",
+    fromConfig: (c) => (c.audioModeKnown ? c.audioMode : null),
+    toIni: (el) => el.value
+  },
+  {
+    id: "bitdepth", key: "bitDepth",
+    fromConfig: (c) => (c.bitDepthKnown ? String(c.bitDepth) : null),
+    toIni: (el) => el.value
+  },
+  {
+    // The INI asks "keep the source resolution?", the window asks "downscale?".
+    // Same question, opposite wording — translated here and nowhere else.
+    id: "resolution", key: "keepResolution",
+    fromConfig: (c) => (c.keepResolutionKnown ? (c.keepResolution ? "original" : "downscale") : null),
+    toIni: (el) => (el.value === "original" ? "true" : "false")
+  },
+  {
+    id: "quality", key: "autoCQ",
+    fromConfig: (c) => (c.autoCQKnown ? (c.autoCQ ? "auto" : "fixed") : null),
+    toIni: (el) => (el.value === "auto" ? "true" : "false")
+  },
+  {
+    id: "keep", key: "keepSource", check: true,
+    fromConfig: (c) => (c.keepSourceKnown ? c.keepSource : null),
+    toIni: (el) => String(el.checked)
+  },
+  {
+    id: "crop", key: "autoCrop", check: true,
+    fromConfig: (c) => (c.autoCropKnown ? c.autoCrop : null),
+    toIni: (el) => String(el.checked)
+  },
+  {
+    // Only on the Convert page: the watched folder never shuts anything down.
+    id: "shutdown", key: "autoShutdown", check: true, convertOnly: true,
+    fromConfig: (c) => (c.autoShutdownKnown ? c.autoShutdown : null),
+    toIni: (el) => String(el.checked)
+  }
+];
+
+// seedOptionsFromConfig writes the file into the controls. Values the file does
+// not mention are left alone — the built-in default then stands, as before.
+function seedOptionsFromConfig(prefix) {
+  const config = state.config;
+  if (!config || !config.found) return;
+  INI_MIRROR.forEach((entry) => {
+    if (entry.convertOnly && prefix !== "opt") return;
+    const el = $(prefix + "-" + entry.id);
+    if (!el) return;
+    const value = entry.fromConfig(config);
+    if (value === null || value === undefined) return;
+    if (entry.check) el.checked = !!value; else el.value = value;
+  });
+  afterOptionsChanged(prefix);
+}
+
+// noteShutdownFromConfig says out loud where a ticked shutdown box came from.
+// A machine that switches itself off must never be a surprise, and this one
+// was ticked by a line in a file rather than by a click.
+function noteShutdownFromConfig() {
+  const config = state.config;
+  if (!config || !config.found || !config.autoShutdownKnown || !config.autoShutdown) return;
+  note("“Shut down the PC when finished” is ticked because autoShutdown=true stands in your NVENCForge_Config.ini. Untick it here to switch it off — that changes the file too.", "convert");
+}
+
+// saveOneSetting writes a single value into the INI and reads the file back, so
+// what the window shows next is what the file really holds — not what we think
+// we just wrote.
+async function saveOneSetting(key, value) {
+  try {
+    await api().SaveSettings({ [key]: String(value) });
+    refreshConfig();
+  } catch (err) {
+    // Loud on purpose: a setting that silently failed to save would come back
+    // at the next start and quietly convert differently than expected.
+    showError("Could not save " + key + " to NVENCForge_Config.ini: " + err);
+  }
+}
+
+// rememberOption is the handler behind every mirrored control.
+function rememberOption(prefix, entry) {
+  if (prefix !== "opt") return;
+  const config = state.config;
+  if (!config || !config.found) return;
+  if (entry.fromConfig(config) === null) return;
+  const el = $(prefix + "-" + entry.id);
+  if (!el) return;
+  saveOneSetting(entry.key, entry.toIni(el));
+}
+
+// The CQ box and the bitrate box need their own handlers: which key they belong
+// to depends on the codec and the resolution mode (see bitrateCapKey).
+function rememberCQ() {
+  const value = parseInt($("opt-cq").value, 10);
+  if (!value) return;
+  saveOneSetting(isAV1() ? "av1TargetCQ" : "targetCQ", value);
+}
+function rememberBitrate() {
+  const raw = ($("opt-bitrate").value || "").trim();
+  // Empty means "whatever the INI says" — that is not a value to write back.
+  if (raw === "") return;
+  const value = parseInt(raw, 10);
+  if (!value) return;
+  saveOneSetting(bitrateCapKey(), value);
+}
+
+// ensureSettingsFile makes sure the full list of settings is at hand. It is
+// loaded when the settings page is opened; a profile may be saved before that
+// ever happens.
+async function ensureSettingsFile() {
+  if (state.settingsFile && state.settingsFile.found) return;
+  await loadSettings();
+}
+
+// settingsSnapshot is the copy of the INI that goes into a profile: key and
+// value of every line, exactly as the file has them.
+function settingsSnapshot() {
+  const file = state.settingsFile;
+  if (!file || !file.found || !file.settings) return null;
+  const out = {};
+  file.settings.forEach((entry) => { out[entry.key] = entry.value; });
+  return Object.keys(out).length ? out : null;
 }
 function refreshConfig() {
   try {
@@ -3805,6 +3977,7 @@ function profileFromOptions(name) {
     maxBitrate: parseInt($("opt-bitrate").value, 10) || 0,
     keepSource: $("opt-keep").checked,
     crop: $("opt-crop").checked,
+    settings: settingsSnapshot(),
     parallel: parallelSetting()
   };
 }
@@ -3814,12 +3987,12 @@ function profileFromOptions(name) {
 // their fields the same way, which is what lets one profile serve both.
 function applyProfile(prefix, profile) {
   if (!profile) return;
-  $(prefix + "-codec").value = profile.codec || "";
-  $(prefix + "-encoder").value = profile.encoder || "";
-  $(prefix + "-container").value = profile.container || "";
-  $(prefix + "-resolution").value = profile.resolution || "";
-  $(prefix + "-audio").value = profile.audio || "";
-  $(prefix + "-bitdepth").value = profile.bitDepth || "";
+  $(prefix + "-codec").value = profile.codec || "h265";
+  $(prefix + "-encoder").value = profile.encoder || "nvidia";
+  $(prefix + "-container").value = profile.container || "mkv";
+  $(prefix + "-resolution").value = profile.resolution || "downscale";
+  $(prefix + "-audio").value = profile.audio || "aac";
+  $(prefix + "-bitdepth").value = profile.bitDepth || "10";
   $(prefix + "-quality").value = profile.quality || "auto";
   // A CQ of 0 means the profile was saved with the automatic search on. The
   // box keeps its own value then — overwriting it with a zero would put an
@@ -3894,6 +4067,26 @@ async function loadProfiles() {
   renderProfiles();
 }
 
+// applyProfileSettings puts the INI copy a profile carries back into the file.
+//
+// This is what makes a profile a profile: most settings — the quality target,
+// the tolerances, the encoder knobs, sharpening — have no command-line switch
+// at all and work ONLY through the file. Without this step, switching profiles
+// would change the six boxes on screen and leave everything else as it was.
+//
+// Older profiles have no copy; then the file stays untouched.
+async function applyProfileSettings(profile) {
+  if (!profile || !profile.settings) return;
+  try {
+    const result = await api().ApplyProfile(profile.name);
+    if (result && result.note) profileNote(result.note);
+    // Read back: the window must show the file, not what we meant to write.
+    refreshConfig();
+    state.optionsSeeded = false;
+  } catch (err) {
+    profileNote("Settings not applied: " + err);
+  }
+}
 // chooseProfile loads what was picked into the page it was picked on.
 function chooseProfile(prefix) {
   const name = $(prefix + "-profile").value;
@@ -3902,7 +4095,10 @@ function chooseProfile(prefix) {
   applyProfile(prefix, profileNamed(name));
   // Ready to save over it: the name is put in the box, so "Save" after a small
   // change updates the profile instead of quietly making a second one.
-  if (prefix === "opt") $("opt-profile-name").value = name;
+  if (prefix === "opt") {
+    $("opt-profile-name").value = name;
+    applyProfileSettings(profileNamed(name));
+  }
   profileNote("Loaded: " + name);
   renderProfiles();
 }
@@ -3911,6 +4107,9 @@ async function saveProfile() {
   // The typed name wins; without one, the profile on show is updated.
   const name = ($("opt-profile-name").value || $("opt-profile").value || "").trim();
   if (!name) { profileNote("Type a name for these options first."); return; }
+  // The INI copy goes into the profile, so it has to be at hand — the settings
+  // page may never have been opened in this session.
+  await ensureSettingsFile();
   try {
     state.profiles = (await api().SaveProfile(profileFromOptions(name))) || [];
     $("opt-profile").value = name;
@@ -4297,6 +4496,15 @@ function wire() {
   // the displayed values follow them immediately.
   $("opt-resolution").onchange = refreshFromConfig;
   $("opt-cq").oninput = () => { state.cqTouched = true; };
+
+  // Every mirrored control writes its change into the INI. "change" and not
+  // "input": a half-typed number is not a setting yet.
+  INI_MIRROR.forEach((entry) => {
+    const el = $("opt-" + entry.id);
+    if (el) el.addEventListener("change", () => rememberOption("opt", entry));
+  });
+  $("opt-cq").addEventListener("change", rememberCQ);
+  $("opt-bitrate").addEventListener("change", rememberBitrate);
 
   // One listener for the whole window instead of one per field: the settings
   // page will add dozens more, and they will work without being registered.

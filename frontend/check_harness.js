@@ -91,7 +91,7 @@ function loadGui() {
   // Everything the window would hand to the Go side is recorded instead. That
   // is how a check can see WHICH answer a button really sends — the one thing
   // that decides whether the user gets the tracks they picked.
-  const calls = { answers: [], answerSlots: [], runs: [], joinSorts: [], stops: [], srtSaves: [], themes: [], clipboard: [], savingsResets: [], frame: [], profileSaves: [], profileDeletes: [], opened: [], shutdownWishes: [], shutdownCancels: [], updateChecks: [], updateInstalls: [] };
+  const calls = { answers: [], answerSlots: [], runs: [], joinSorts: [], stops: [], srtSaves: [], themes: [], clipboard: [], savingsResets: [], frame: [], profileSaves: [], profileDeletes: [], opened: [], shutdownWishes: [], shutdownCancels: [], updateChecks: [], updateInstalls: [], settingSaves: [], profileApplies: [] };
   // Was die Go-Seite zum Selbst-Update antworten soll; je Prüfung gesetzt. Ein
   // Error steht für "der Aufruf scheitert" — der Fall, in dem das Fenster
   // seinen Knopf sonst für immer gesperrt ließe.
@@ -103,6 +103,12 @@ function loadGui() {
   // Die Profilablage. Sie führt wirklich Buch, statt nur zu bestätigen:
   // Eine Prüfung muss sehen, was NACH dem Speichern im Auswahlfeld steht.
   let profileList = [];
+  // Was die Go-Seite über die INI antworten soll; je Prüfung gesetzt.
+  // Getrennt gehalten: GetConfigView ist die kurze Sicht für die
+  // Konvertieren-Seite, GetSettingsFile die vollständige Liste der
+  // Einstellungsseite. Ein Profil nimmt die zweite mit.
+  let configReply = { found: false, note: "not set" };
+  let settingsFileReply = { found: false, path: "", note: "not set", settings: [] };
   const sortProfiles = (list) =>
     list.slice().sort((a, b) => a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1);
 
@@ -146,6 +152,23 @@ function loadGui() {
           // the NEXT start — a wrong value here is invisible until then.
           GetTheme() { return Promise.resolve("dark"); },
           GetProfiles() { return Promise.resolve(sortProfiles(profileList)); },
+          // Die INI. Was das Fenster hineinschreibt, wird mitgeschrieben:
+          // Seit die Konvertieren-Seite jede Änderung zurückschreibt, ist
+          // GENAU DAS die Frage — landet der richtige Schlüssel mit dem
+          // richtigen Wert in der Datei, und wird nichts geschrieben, was die
+          // Datei gar nicht kennt?
+          GetConfigView() { return Promise.resolve(configReply); },
+          GetSettingsFile() { return Promise.resolve(settingsFileReply); },
+          SaveSettings(values) {
+            calls.settingSaves.push(values);
+            return Promise.resolve({ written: Object.keys(values).length, backupPath: "X:\\tools\\NVENCForge_Config.ini.bak" });
+          },
+          // Ein Profil setzt die ganze Datei. Der NAME reicht der Go-Seite —
+          // sie hat den Abzug selbst gespeichert.
+          ApplyProfile(name) {
+            calls.profileApplies.push(name);
+            return Promise.resolve({ written: 30, note: "" });
+          },
           SaveProfile(profile) {
             calls.profileSaves.push(profile);
             profileList = profileList.filter((kept) => kept.name !== profile.name).concat([profile]);
@@ -226,7 +249,9 @@ function loadGui() {
     " AREA_NAMES, AREA_SLOTS, finishArea, clearLanes, renderList, showFinalSummary, el," +
     " showSavings, resetSavings, applySettingsFilter, settingMatches, sectionId, onRunState," +
     " setShutdownWish, onShutdownState, cancelShutdown, showShutdownAlert," +
-    " checkUpdate, installUpdate };"
+    " checkUpdate, installUpdate," +
+    " INI_MIRROR, seedOptionsFromConfig, rememberOption, rememberCQ, rememberBitrate, saveOneSetting," +
+    " settingsSnapshot, ensureSettingsFile, applyProfileSettings, noteShutdownFromConfig, refreshConfig };"
   )(windowStub, documentStub);
 
   return {
@@ -241,6 +266,10 @@ function loadGui() {
     setJoinReply: (files) => { joinReply = files; },
     // setSRTReply legt fest, was die Go-Seite auf GetSRTCleaner antworten soll.
     setSRTReply: (view) => { srtReply = view; },
+    // setConfigReply legt fest, was GetConfigView melden soll.
+    setConfigReply: (view) => { configReply = view; },
+    // setSettingsFileReply legt die vollständige Einstellungsliste fest.
+    setSettingsFileReply: (file) => { settingsFileReply = file; },
     // setSavingsReply legt fest, was die Go-Seite als Sparbuch meldet.
     setSavingsReply: (report) => { savingsReply = report; },
     // setProfiles legt fest, was die Go-Seite als gespeicherte Sätze meldet.

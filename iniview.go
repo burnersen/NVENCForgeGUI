@@ -59,6 +59,47 @@ type ConfigView struct {
 	// wandert: "folder" (Unterordner "originals") oder "recyclebin". Die
 	// Oberfläche darf das nicht raten — beide Einstellungen sind üblich.
 	RetireMode string `json:"retireMode"`
+	// ------------------------------------------------------------------
+	// Die Grundentscheidungen. Seit NVENCForge 1.23.0 stehen sie in der INI,
+	// vorher gab es sie nur als Schalter der Befehlszeile.
+	//
+	// Jeder Wert hat ein "Known" daneben. Das trennt "steht so in der Datei"
+	// von "steht gar nicht drin" — bei einer älteren INI fehlt der Schlüssel,
+	// und dann darf das Fenster nichts behaupten und erst recht keinen
+	// Gegenschalter schicken.
+	// ------------------------------------------------------------------
+	Codec      string `json:"codec"`
+	CodecKnown bool   `json:"codecKnown"`
+
+	Container      string `json:"container"`
+	ContainerKnown bool   `json:"containerKnown"`
+
+	AudioMode      string `json:"audioMode"`
+	AudioModeKnown bool   `json:"audioModeKnown"`
+
+	BitDepth      int  `json:"bitDepth"`
+	BitDepthKnown bool `json:"bitDepthKnown"`
+
+	KeepResolution      bool `json:"keepResolution"`
+	KeepResolutionKnown bool `json:"keepResolutionKnown"`
+
+	KeepSource      bool `json:"keepSource"`
+	KeepSourceKnown bool `json:"keepSourceKnown"`
+
+	// Encoder ist "nvidia" oder "cpu" und gibt es schon lange. Angezeigt wurde
+	// er nie — das Fenster behauptete immer "GPU / NVENC (default)", auch wenn
+	// in Wahrheit auf dem Prozessor gerechnet wurde.
+	Encoder      string `json:"encoder"`
+	EncoderKnown bool   `json:"encoderKnown"`
+
+	AutoCrop      bool `json:"autoCrop"`
+	AutoCropKnown bool `json:"autoCropKnown"`
+
+	// AutoShutdown wird angezeigt, damit niemand von einem abschaltenden
+	// Rechner überrascht wird: Steht es in der Datei, muss das Kästchen im
+	// Fenster es zeigen und das Protokoll sagen, woher es kommt.
+	AutoShutdown      bool `json:"autoShutdown"`
+	AutoShutdownKnown bool `json:"autoShutdownKnown"`
 }
 
 // locateConfig sucht die INI dort, wo auch die Programmdatei liegt.
@@ -106,6 +147,16 @@ func readConfigView() ConfigView {
 	view.AutoCQTargetVMAF = intEntry(entries, "autoCQTargetVMAF")
 	view.AutoCQ, view.AutoCQKnown = boolEntry(entries, "autoCQ")
 	view.RetireMode = strings.ToLower(strings.TrimSpace(entries["retireMode"]))
+	view.Codec, view.CodecKnown = wordEntry(entries, "codec")
+	view.Container, view.ContainerKnown = wordEntry(entries, "container")
+	view.AudioMode, view.AudioModeKnown = wordEntry(entries, "audioMode")
+	view.Encoder, view.EncoderKnown = wordEntry(entries, "encoder")
+	view.BitDepth = intEntry(entries, "bitDepth")
+	view.BitDepthKnown = view.BitDepth != 0
+	view.KeepResolution, view.KeepResolutionKnown = boolEntry(entries, "keepResolution")
+	view.KeepSource, view.KeepSourceKnown = boolEntry(entries, "keepSource")
+	view.AutoCrop, view.AutoCropKnown = boolEntry(entries, "autoCrop")
+	view.AutoShutdown, view.AutoShutdownKnown = boolEntry(entries, "autoShutdown")
 	return view
 }
 
@@ -131,4 +182,23 @@ func boolEntry(entries map[string]string, key string) (value bool, known bool) {
 		return false, false
 	}
 	return parsed, true
+}
+
+// wordEntry liefert einen Wert in Kleinbuchstaben und dazu, ob der Schlüssel
+// überhaupt in der Datei steht.
+//
+// Die Unterscheidung ist wichtiger, als sie aussieht: Ein fehlender Schlüssel
+// heißt "diese NVENCForge-Fassung kennt die Einstellung noch nicht". Das
+// Fenster darf dann weder einen Wert anzeigen noch einen Gegenschalter
+// schicken — eine ältere exe würde ihn als unbekannte Option anmeckern.
+func wordEntry(entries map[string]string, key string) (value string, known bool) {
+	raw, present := entries[key]
+	if !present {
+		return "", false
+	}
+	trimmed := strings.ToLower(strings.TrimSpace(raw))
+	if trimmed == "" {
+		return "", false
+	}
+	return trimmed, true
 }

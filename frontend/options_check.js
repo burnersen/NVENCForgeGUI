@@ -41,7 +41,7 @@ function choose(codec, resolution) {
 console.log("\n=== without a readable INI the window states nothing ===");
 gui.applyConfig({ found: false, note: "not there yet" });
 check("bitrate placeholder       ", element("opt-bitrate").placeholder, "as configured");
-check("resolution label          ", element("opt-resolution-default").textContent, "Downscale if needed (default)");
+check("resolution label          ", element("opt-resolution-default").textContent, "Downscale if needed");
 contains("bitrate bubble says so    ", gui.HELP.bitrate().now, "could not be read");
 contains("quality bubble says so    ", gui.HELP.quality().now, "could not be read");
 
@@ -63,9 +63,9 @@ contains("bubble names the live cap ", gui.HELP.bitrate().now, "13000 kbit/s");
 
 console.log("\n=== the resolution entry names the configured height ===");
 choose("", "");
-check("label from the INI        ", element("opt-resolution-default").textContent, "Downscale to max 1080p (default)");
+check("label from the INI        ", element("opt-resolution-default").textContent, "Downscale to max 1080p");
 gui.applyConfig(Object.assign({}, sampleConfig, { maxResolution: 2160 }));
-check("label follows the INI     ", element("opt-resolution-default").textContent, "Downscale to max 2160p (default)");
+check("label follows the INI     ", element("opt-resolution-default").textContent, "Downscale to max 2160p");
 gui.applyConfig(sampleConfig);
 
 console.log("\n=== the fixed CQ starts at the value the INI uses ===");

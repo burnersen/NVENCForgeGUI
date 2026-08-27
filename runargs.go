@@ -22,7 +22,8 @@ const (
 	codecAV1  = "av1"
 	codecH265 = "h265"
 
-	encoderCPU = "cpu"
+	encoderCPU    = "cpu"
+	encoderNvidia = "nvidia"
 
 	containerMP4 = "mp4"
 
@@ -32,9 +33,18 @@ const (
 
 	bitDepth8 = "8"
 
-	qualityAuto  = "auto"
-	qualityOff   = "off"
-	qualityFixed = "fixed"
+	// Die Gegenstücke. Sie sind NICHT dasselbe wie der leere Wert: Der bedeutet
+	// "das Fenster sagt nichts dazu, die INI gilt". Seit NVENCForge 1.23.0
+	// stehen diese Entscheidungen in der INI, also muss das Fenster sie in
+	// BEIDE Richtungen durchsetzen können — eine Oberfläche kann Argumente nur
+	// mitgeben, nie wegnehmen.
+	containerMKV        = "mkv"
+	resolutionDownscale = "downscale"
+	audioAAC            = "aac"
+	bitDepth10          = "10"
+	qualityAuto         = "auto"
+	qualityOff          = "off"
+	qualityFixed        = "fixed"
 
 	// Auto-Crop: "on" schneidet schwarze Balken weg, "check" schaut nur nach
 	// und legt ein Kontrollbild neben die Quelle, ohne etwas zu konvertieren.
@@ -132,6 +142,13 @@ type RunRequest struct {
 	// Argumenten), nur diesmal von der Konfigurationsdatei ausgelöst. Setzt
 	// app.go, sobald die Programmdatei "-noshutdown" kennt.
 	SuppressConverterShutdown bool `json:"-"`
+
+	// CounterFlags ist keine Wahl aus dem Fenster, sondern die Auskunft, ob die
+	// vorhandene Programmdatei die Gegenschalter aus NVENCForge 1.23.0 kennt
+	// (-mkv, -aac, -10bit, -nokeep, -downscale). Eine ältere exe würde jeden
+	// davon als unbekannte Option anmeckern. Gesetzt in app.go, wo der Status
+	// der Programmdatei bekannt ist.
+	CounterFlags bool `json:"-"`
 }
 
 // buildJobs macht aus einer Anfrage die einzelnen Aufträge für den Verteiler.
@@ -218,22 +235,37 @@ func buildConverterArgs(request RunRequest, eventChannel bool) ([]string, error)
 	case codecAV1:
 		args = append(args, "-av1")
 	case codecH265:
-		args = append(args, "-h265")
+		// Nur mit den Gegenschaltern: Eine exe vor NVENCForge 1.22.0 kennt
+		// "-h265" nicht und würde es als unbekannte Option anmeckern. Und ohne
+		// codec=av1 in der INI (1.23.0) gibt es ohnehin nichts zu überstimmen.
+		if request.CounterFlags {
+			args = append(args, "-h265")
+		}
 	}
 	if request.Encoder == encoderCPU {
 		args = append(args, "-cpu")
+	} else if request.Encoder == encoderNvidia && request.CounterFlags {
+		args = append(args, "-gpu")
 	}
 	if request.Container == containerMP4 {
 		args = append(args, "-mp4")
+	} else if request.Container == containerMKV && request.CounterFlags {
+		args = append(args, "-mkv")
 	}
 	if request.Resolution == resolutionOriginal {
 		args = append(args, "-original")
+	} else if request.Resolution == resolutionDownscale && request.CounterFlags {
+		args = append(args, "-downscale")
 	}
 	if request.Audio == audioCopy {
 		args = append(args, "-copyaudio")
+	} else if request.Audio == audioAAC && request.CounterFlags {
+		args = append(args, "-aac")
 	}
 	if request.BitDepth == bitDepth8 {
 		args = append(args, "-8bit")
+	} else if request.BitDepth == bitDepth10 && request.CounterFlags {
+		args = append(args, "-10bit")
 	}
 	// Der Prüflauf schließt das Schneiden aus: "-cropcheck" legt nur das
 	// Kontrollbild an. Beide Schalter zusammen zu schicken wäre widersprüchlich.
@@ -271,6 +303,8 @@ func buildConverterArgs(request RunRequest, eventChannel bool) ([]string, error)
 	}
 	if request.KeepSource {
 		args = append(args, "-keep")
+	} else if request.CounterFlags {
+		args = append(args, "-nokeep")
 	}
 
 	// Hier fehlt mit Absicht "-shutdown". Der Schalter fährt den Rechner

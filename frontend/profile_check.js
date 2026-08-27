@@ -55,7 +55,7 @@ let appendedBefore = element("opt-profile").appended;
   element("opt-profile").value = "Serien";
   gui.chooseProfile("opt");
   check("codec                     ", value("opt-codec"), "av1");
-  check("encoder                   ", value("opt-encoder"), "");
+  check("encoder falls back        ", value("opt-encoder"), "nvidia");
   check("container                 ", value("opt-container"), "mp4");
   check("resolution                ", value("opt-resolution"), "original");
   check("audio                     ", value("opt-audio"), "copy");
@@ -73,7 +73,7 @@ let appendedBefore = element("opt-profile").appended;
   console.log("\n=== the watched folder loads the same set ===");
   element("wopt-profile").value = "Filme";
   gui.chooseProfile("wopt");
-  check("its own codec             ", value("wopt-codec"), "");
+  check("its own codec falls back  ", value("wopt-codec"), "h265");
   check("its own encoder           ", value("wopt-encoder"), "cpu");
   check("its own CQ box is hidden  ", element("wfield-cq").hidden, true);
   // The two pages are separate on purpose: the watched folder must not pull

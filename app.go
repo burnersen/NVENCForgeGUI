@@ -279,6 +279,41 @@ func (a *App) DeleteProfile(name string) ([]Profile, error) {
 	return a.profiles.Delete(name)
 }
 
+// ApplyProfile schreibt die Einstellungen eines Profils in die
+// NVENCForge_Config.ini.
+//
+// Warum überhaupt in die Datei geschrieben wird: Die meisten Einstellungen
+// haben gar keinen Schalter für die Befehlszeile — Qualitätsziel, Toleranzen,
+// Encoder-Regler, Schärfe. Sie wirken NUR über die INI. Ein Profil, das sie
+// nicht setzt, wechselt die Hälfte der Werte nicht mit, obwohl es so aussieht.
+//
+// Gesperrt, solange gearbeitet wird: Jeder Konverter liest die Datei, wenn er
+// startet. Mitten im Stapel umgeschrieben, liefen die restlichen Dateien mit
+// anderen Werten als die ersten — und niemand könnte es später an den
+// Ergebnissen ablesen.
+func (a *App) ApplyProfile(name string) (SaveResult, error) {
+	if a.dispatcher.Busy() {
+		return SaveResult{}, errors.New("settings cannot be switched while a conversion is running — stop it first")
+	}
+	for _, profile := range a.profiles.List() {
+		if profile.Name != name {
+			continue
+		}
+		result, err := writeKnownSettings(profile.Settings)
+		if err != nil {
+			return SaveResult{}, err
+		}
+		if result.Written > 0 {
+			a.note(fmt.Sprintf("Profile %q applied: %d setting(s) written to NVENCForge_Config.ini.", name, result.Written))
+		}
+		if result.Note != "" {
+			a.note(result.Note)
+		}
+		return result, nil
+	}
+	return SaveResult{}, fmt.Errorf("app.go: ApplyProfile: no profile named %q", name)
+}
+
 // emit schickt eine Meldung an die Oberfläche. Vor dem Start des Fensters gibt
 // es noch keinen Empfänger; dann verfällt die Meldung still, statt abzustürzen.
 func (a *App) emit(name string, data ...any) {
@@ -642,11 +677,19 @@ func (a *App) StartRun(request RunRequest) error {
 	// Programmdatei die Gegenschalter, wird daraus ein ausdrückliches Nein —
 	// sonst gewönne die Konfigurationsdatei gegen das, was im Fenster steht.
 	//
-	// Für den Codec gibt es das Gegenstück bewusst NICHT: die Datei hat gar
-	// keinen Schlüssel, der AV1 einschaltet (encoder kennt nur "nvidia" und
-	// "cpu"), also kann sie die Auswahl im Fenster auch nicht überstimmen.
+	// Für den Codec galt das lange NICHT: Die Datei hatte gar keinen Schlüssel,
+	// der AV1 einschaltet. Seit NVENCForge 1.23.0 gibt es codec=av1, deshalb
+	// schickt das Fenster jetzt auch dort ausdrücklich "-h265", wenn H.265
+	// ausgewählt ist.
 	if status.GuardFlags {
 		request.SuppressConverterShutdown = true
+	}
+	// Seit NVENCForge 1.23.0 stehen auch Codec, Container, Bittiefe, Ton,
+	// Auflösung und der Umgang mit dem Original in der INI. Kennt die exe die
+	// zugehörigen Gegenschalter, darf das Fenster sie mitschicken und setzt
+	// damit durch, was zu sehen ist.
+	if status.BaseSettings {
+		request.CounterFlags = true
 	}
 	if request.Crop == "" && status.AutoCrop {
 		request.Crop = cropOff
