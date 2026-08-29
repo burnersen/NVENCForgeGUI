@@ -26,9 +26,13 @@ func kindOf(files []JoinFile, name string) string {
 // Oberfläche eine Gruppe an, die der Konverter anders sieht — und der Lauf
 // bräche mit "Unknown file types" ab, obwohl das Fenster grünes Licht gab.
 func TestJoinSortsByExtension(t *testing.T) {
+	// Die zweite Bild-Datei heißt bewusst anders: Zwei Videos mit demselben
+	// Namensstamm wären ein Auftrag mit zwei Grundlagen, und dafür gibt es eine
+	// eigene Regel (siehe TestJoinPicksTheSilentVideoAsBase). Hier geht es
+	// allein um die Einordnung nach der Endung.
 	files := classifyJoinFiles([]string{
 		`C:\v\film.NoSound.mkv`,
-		`C:\v\film.mp4`,
+		`C:\v\anderer.mp4`,
 		`C:\v\film.ger.m4a`,
 		`C:\v\film.eng.ac3`,
 		`C:\v\film.thd`,
@@ -39,7 +43,7 @@ func TestJoinSortsByExtension(t *testing.T) {
 
 	expected := map[string]string{
 		"film.NoSound.mkv": joinKindVideo,
-		"film.mp4":         joinKindVideo,
+		"anderer.mp4":      joinKindVideo,
 		"film.ger.m4a":     joinKindAudio,
 		"film.eng.ac3":     joinKindAudio,
 		"film.thd":         joinKindAudio,
@@ -211,4 +215,138 @@ func TestJoinMarksMissingFiles(t *testing.T) {
 	if files[0].Kind != joinKindAudio {
 		t.Errorf("die Einordnung hängt nur an der Endung, bekommen %q", files[0].Kind)
 	}
+}
+
+// groupOf sucht die Auftrags-Zugehörigkeit einer Datei in der fertigen Ablage.
+func groupOf(files []JoinFile, name string) string {
+	for _, file := range files {
+		if strings.EqualFold(file.Name, name) {
+			return file.Group
+		}
+	}
+	return "not in the list"
+}
+
+// TestJoinGroupsFilesByStem: Der Kern des Stapel-Betriebs. Das Zerlegen hängt
+// an den Namen nur die Sprache an, also müssen die Teile mehrerer Filme allein
+// am Namen wieder auseinandersortiert werden. Ginge das schief, bekäme ein Film
+// den Ton eines anderen.
+func TestJoinGroupsFilesByStem(t *testing.T) {
+	files := classifyJoinFiles([]string{
+		`C:\v\Der.Film.NoSound.mkv`,
+		`C:\v\Der.Film.ger.eac3`,
+		`C:\v\Der.Film.ger.forced.srt`,
+		`C:\v\Zweiter.Film.NoSound.mkv`,
+		`C:\v\Zweiter.Film.eng.ac3`,
+	})
+
+	expected := map[string]string{
+		"Der.Film.NoSound.mkv":     "Der.Film",
+		"Der.Film.ger.eac3":        "Der.Film",
+		"Der.Film.ger.forced.srt":  "Der.Film",
+		"Zweiter.Film.NoSound.mkv": "Zweiter.Film",
+		"Zweiter.Film.eng.ac3":     "Zweiter.Film",
+	}
+	for name, want := range expected {
+		if got := groupOf(files, name); got != want {
+			t.Errorf("%s: erwarteter Auftrag %q, bekommen %q", name, want, got)
+		}
+	}
+	for _, file := range files {
+		if !file.Ready {
+			t.Errorf("%s: der Auftrag ist vollständig und müsste laufen können", file.Name)
+		}
+	}
+}
+
+// TestJoinLongestStemWins: "Film" und "Film.2" liegen nebeneinander. Die Teile
+// von "Film.2" müssen dorthin und nicht zum kürzeren Namen, der ebenfalls
+// passen würde.
+func TestJoinLongestStemWins(t *testing.T) {
+	files := classifyJoinFiles([]string{
+		`C:\v\Film.NoSound.mkv`,
+		`C:\v\Film.ger.eac3`,
+		`C:\v\Film.2.NoSound.mkv`,
+		`C:\v\Film.2.ger.eac3`,
+	})
+
+	if got := groupOf(files, "Film.2.ger.eac3"); got != "Film.2" {
+		t.Errorf(`Film.2.ger.eac3 gehört zu "Film.2", bekommen %q`, got)
+	}
+	if got := groupOf(files, "Film.ger.eac3"); got != "Film" {
+		t.Errorf(`Film.ger.eac3 gehört zu "Film", bekommen %q`, got)
+	}
+}
+
+// TestJoinStemNeedsTheDot: Ohne den trennenden Punkt zöge der Stamm "Film"
+// auch alles an sich, was nur zufällig so anfängt.
+func TestJoinStemNeedsTheDot(t *testing.T) {
+	files := classifyJoinFiles([]string{
+		`C:\v\Film.NoSound.mkv`,
+		`C:\v\Film.ger.eac3`,
+		`C:\v\Filmmusik.ger.mp3`,
+	})
+
+	if got := groupOf(files, "Filmmusik.ger.mp3"); got != "" {
+		t.Errorf("Filmmusik.ger.mp3 gehört zu keinem Auftrag, bekommen %q", got)
+	}
+	if got := groupOf(files, "Film.ger.eac3"); got != "Film" {
+		t.Errorf(`Film.ger.eac3 gehört zu "Film", bekommen %q`, got)
+	}
+}
+
+// TestJoinPicksTheSilentVideoAsBase: Liegen das Original und das stumme Bild
+// aus dem Zerlegen nebeneinander, kann nur eines die Grundlage sein. Es muss
+// das stumme sein — genau darauf soll der Ton zurück.
+func TestJoinPicksTheSilentVideoAsBase(t *testing.T) {
+	for _, order := range [][]string{
+		{`C:\v\film.mp4`, `C:\v\film.NoSound.mkv`, `C:\v\film.ger.m4a`},
+		{`C:\v\film.NoSound.mkv`, `C:\v\film.mp4`, `C:\v\film.ger.m4a`},
+	} {
+		files := classifyJoinFiles(order)
+		if got := kindOf(files, "film.NoSound.mkv"); got != joinKindVideo {
+			t.Errorf("%v: das stumme Bild muss die Grundlage sein, bekommen %q", order, got)
+		}
+		if got := kindOf(files, "film.mp4"); got != joinKindUnusable {
+			t.Errorf("%v: das zweite Video kann nicht auch Grundlage sein, bekommen %q", order, got)
+		}
+	}
+}
+
+// TestJoinSeparatesFolders: Zwei gleichnamige Folgen in getrennten Ordnern sind
+// zwei Filme. Eine Tonspur von nebenan wäre geraten, nicht erkannt.
+func TestJoinSeparatesFolders(t *testing.T) {
+	files := classifyJoinFiles([]string{
+		`C:\staffel1\folge.NoSound.mkv`,
+		`C:\staffel2\folge.ger.eac3`,
+	})
+	for _, file := range files {
+		if file.Ready {
+			t.Errorf("%s: über Ordnergrenzen hinweg darf nichts zusammengefügt werden", file.Name)
+		}
+	}
+}
+
+// TestJoinMarksLeftovers: Was zu keiner Bild-Grundlage passt, bleibt sichtbar
+// und sagt auch, warum es nicht mitgeht.
+func TestJoinMarksLeftovers(t *testing.T) {
+	files := classifyJoinFiles([]string{
+		`C:\v\film.NoSound.mkv`,
+		`C:\v\film.ger.m4a`,
+		`C:\v\waise.ger.srt`,
+	})
+
+	for _, file := range files {
+		if !strings.EqualFold(file.Name, "waise.ger.srt") {
+			continue
+		}
+		if file.Ready {
+			t.Error("eine Datei ohne Video darf nicht als lauffähig gelten")
+		}
+		if file.Note == "" {
+			t.Error("eine übrig gebliebene Datei muss sagen, warum sie nicht mitgeht")
+		}
+		return
+	}
+	t.Error("waise.ger.srt fehlt in der Ablage")
 }

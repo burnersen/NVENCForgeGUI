@@ -47,10 +47,11 @@ func TestJobsPerFileWhenConverting(t *testing.T) {
 	}
 }
 
-// TestToolModesStayOneJob: Zerlegen, DaVinci und Zusammenfügen bleiben EIN
-// Auftrag. Sie fragen nach Spuren — zwei Dialoge gleichzeitig für zwei Dateien
-// wären eine Zumutung, und eine falsch zugeordnete Antwort zöge die falschen
-// Spuren heraus. Zusammenfügen ist ohnehin von Natur aus ein einziger Auftrag.
+// TestToolModesStayOneJob: Zerlegen und der DaVinci-Weg bleiben EIN Auftrag.
+// Sie fragen nach Spuren — zwei Dialoge gleichzeitig für zwei Dateien wären
+// eine Zumutung, und eine falsch zugeordnete Antwort zöge die falschen Spuren
+// heraus. Innerhalb seines einen Laufs fragt der Konverter ohnehin Datei für
+// Datei nach.
 func TestToolModesStayOneJob(t *testing.T) {
 	for _, mode := range []string{"split", "davinci"} {
 		jobs, err := buildJobs(RunRequest{
@@ -64,16 +65,84 @@ func TestToolModesStayOneJob(t *testing.T) {
 			t.Fatalf("%s: erwartet 1 Auftrag, bekommen %d", mode, len(jobs))
 		}
 	}
+}
 
+// TestJoinBecomesOneJobPerVideo: Zusammenfügen ist der Gegenweg zum Zerlegen,
+// und zerlegt wird stapelweise. Aus einer Ablage mit drei Filmen müssen deshalb
+// drei Aufträge werden — einer je Bild-Grundlage, jeder mit genau seinen
+// eigenen Beigaben. Liefe hier alles in einem Auftrag zusammen, bekäme der
+// erste Film den Ton der beiden anderen mit.
+func TestJoinBecomesOneJobPerVideo(t *testing.T) {
 	jobs, err := buildJobs(RunRequest{
-		Mode:  "join",
-		Files: []string{`C:\v\film.mkv`, `C:\v\film.ger.m4a`},
+		Mode: "join",
+		Files: []string{
+			`C:\v\film-a.NoSound.mkv`, `C:\v\film-a.ger.m4a`, `C:\v\film-a.ger.srt`,
+			`C:\v\film-b.NoSound.mkv`, `C:\v\film-b.eng.ac3`,
+			`C:\v\film-c.NoSound.mkv`, `C:\v\film-c.ger.eac3`,
+		},
+	}, true)
+	if err != nil {
+		t.Fatalf("join: buildJobs: %v", err)
+	}
+	if len(jobs) != 3 {
+		t.Fatalf("join: erwartet 3 Aufträge, bekommen %d", len(jobs))
+	}
+
+	// Jeder Auftrag trägt seinen eigenen Film — und nichts vom Nachbarn.
+	for _, expected := range []struct{ label, foreign string }{
+		{"film-a.NoSound.mkv", "film-b"},
+		{"film-b.NoSound.mkv", "film-c"},
+		{"film-c.NoSound.mkv", "film-a"},
+	} {
+		found := false
+		for _, one := range jobs {
+			if one.label != expected.label {
+				continue
+			}
+			found = true
+			for _, argument := range one.args {
+				if strings.Contains(argument, expected.foreign) {
+					t.Errorf("%s: fremde Datei im Auftrag: %s", expected.label, argument)
+				}
+			}
+		}
+		if !found {
+			t.Errorf("kein Auftrag mit der Beschriftung %q", expected.label)
+		}
+	}
+}
+
+// TestJoinSkipsIncompleteGroups: Ein Video ohne Beigabe ist nichts zum
+// Zusammenfügen. Es darf den Stapel aber auch nicht aufhalten — sonst hielte
+// eine einzige übrig gebliebene Datei alle anderen Filme auf.
+func TestJoinSkipsIncompleteGroups(t *testing.T) {
+	jobs, err := buildJobs(RunRequest{
+		Mode: "join",
+		Files: []string{
+			`C:\v\film-a.NoSound.mkv`, `C:\v\film-a.ger.m4a`,
+			`C:\v\film-b.NoSound.mkv`, // ohne Ton und ohne Untertitel
+			`C:\v\waise.ger.srt`,      // ohne Video
+		},
 	}, true)
 	if err != nil {
 		t.Fatalf("join: buildJobs: %v", err)
 	}
 	if len(jobs) != 1 {
 		t.Fatalf("join: erwartet 1 Auftrag, bekommen %d", len(jobs))
+	}
+	for _, argument := range jobs[0].args {
+		if strings.Contains(argument, "film-b") || strings.Contains(argument, "waise") {
+			t.Errorf("unvollständiger Teil im Auftrag: %s", argument)
+		}
+	}
+
+	// Bleibt gar nichts Vollständiges übrig, ist das ein Fehler und kein
+	// stiller Leerlauf: Der Nutzer hat auf Start gedrückt.
+	if _, err := buildJobs(RunRequest{
+		Mode:  "join",
+		Files: []string{`C:\v\film-b.NoSound.mkv`},
+	}, true); err == nil {
+		t.Error("ein Video ohne Beigabe wurde angenommen")
 	}
 }
 

@@ -24,15 +24,24 @@ const joinPage = html.slice(
   html.indexOf('<div id="page-settings"')
 );
 
-// file builds one entry the way Go delivers it.
+// file builds one entry the way Go delivers it — including the two answers Go
+// works out about grouping: which job the file belongs to (group) and whether
+// that job is complete (ready). Both come from joinfiles.go, so the checks here
+// hand them in rather than working them out a second time.
 const file = (name, kind, extra) => Object.assign(
-  { path: "C:\\v\\" + name, name, folder: "C:\\v", kind, note: "", sizeMB: 1, missing: false },
+  {
+    path: "C:\\v\\" + name, name, folder: "C:\\v", kind, note: "",
+    group: "film", ready: true, sizeMB: 1, missing: false
+  },
   extra || {}
 );
 
 const baseVideo = file("film.NoSound.mkv", "video");
 const german = file("film.ger.m4a", "audio");
 const subtitle = file("film.ger.srt", "subtitle");
+// A group of its own: a second film in the same folder.
+const otherVideo = file("zweiter.NoSound.mkv", "video", { group: "zweiter" });
+const otherAudio = file("zweiter.eng.ac3", "audio", { group: "zweiter" });
 
 // Joining is an area of its own: its own list, its own progress area, its own
 // log, and its own slot at the converter (6) so it can run beside a batch.
@@ -65,9 +74,10 @@ checker.check("a result line", joinPage.includes('id="join-result"'), true);
 checker.check("its own progress", joinPage.includes('id="join-lanes"'), true);
 checker.check("its own log", joinPage.includes('id="join-logbox"'), true);
 checker.check("its own start button", joinPage.includes('id="btn-join-start"'), true);
-// A queue of video files must NOT be here: one join run builds exactly one
-// file, and a queue would promise a batch this mode cannot do.
-checker.check("no queue of video files", joinPage.includes('id="join-queue"'), false);
+// The shared queue element must NOT be here: this page keeps a list of its
+// own, because it takes audio and subtitle files as well and groups them into
+// jobs by name.
+checker.check("no shared queue element", joinPage.includes('id="join-queue"'), false);
 // No overall bar either — with one file there is nothing for it to add up, and
 // an empty bar next to a working one reads like something is stuck.
 checker.check("and no overall bar", joinPage.includes('id="join-bar"'), false);
@@ -76,7 +86,7 @@ console.log("\nThe page decides what its own start button runs");
 gui.showPage("join");
 gui.applyJoinMode();
 checker.check("mode follows the page", join.mode, "join");
-checker.check("and the button says so", element("btn-join-start").textContent, "Join into one MKV");
+checker.check("and the button says so", element("btn-join-start").textContent, "Join the queue");
 checker.check("the request carries it", gui.collectRequest(join).mode, "join");
 checker.check("and it names its own area", gui.collectRequest(join).area, "join");
 gui.showPage("convert");
@@ -100,9 +110,9 @@ gui.state.converterFound = true;
 join.running = false;
 setList([]);
 checker.check("nothing dropped yet", element("btn-join-start").disabled, true);
-setList([baseVideo]);
+setList([file("film.NoSound.mkv", "video", { ready: false, note: "no audio or subtitle for this video yet" })]);
 checker.check("video alone is not enough", element("btn-join-start").disabled, true);
-setList([german]);
+setList([file("film.ger.m4a", "audio", { group: "", ready: false, note: "no video of this name in the list" })]);
 checker.check("audio without a video is not enough", element("btn-join-start").disabled, true);
 setList([baseVideo, german]);
 checker.check("video + audio starts", element("btn-join-start").disabled, false);
@@ -116,59 +126,75 @@ checker.check("a missing video locks it", element("btn-join-start").disabled, tr
 setList([baseVideo, Object.assign({}, german, { missing: true })]);
 checker.check("a missing audio file locks it", element("btn-join-start").disabled, true);
 
-console.log("\nThe groups are named the way the user reads them");
-// "Picture" was the first wording and the user asked for "Video" — the list
-// heading and the row label are the only two places that say it out loud.
+/* ---------- the queue: one job per film ----------
+   This is what makes the area worth queueing at all. Splitting is done in
+   batches, so putting back together has to be too: drop the results of ten
+   films in, get ten jobs. If they all ran together instead, the first film
+   would be built with the sound of the other nine. */
+
+console.log("\nSeveral films become several jobs");
+setList([baseVideo, german, subtitle, otherVideo, otherAudio]);
+const jobs = gui.joinJobs();
+checker.check("two jobs", jobs.length, 2);
+checker.check("the first is the first film", jobs[0].name, "film");
+checker.check("the second is the other one", jobs[1].name, "zweiter");
+checker.check("and every file goes along", gui.joinRunFiles().length, 5);
+checker.contains("the count is on show", element("join-info").textContent, "2 jobs");
+
+console.log("\nThe list is grouped by job, not by file type");
+// With ten films, a list sorted by type would show ten videos, then thirty
+// sound tracks — and which belongs to which would have to be read off names.
 created.length = 0;
-setList([baseVideo, german, subtitle]);
+setList([baseVideo, german, subtitle, otherVideo, otherAudio]);
 const headings = created.filter((el) => el.className === "group-head").map((el) => el.textContent);
-checker.check("the video group", headings[0], "Video (1)");
-checker.check("the audio group", headings[1], "Audio (1)");
-checker.check("the subtitle group", headings[2], "Subtitles (1)");
-const baseLabel = created.filter((el) => el.className === "state base").map((el) => el.textContent);
-checker.check("the chosen row says video", baseLabel[0], "video");
+checker.check("one heading per job", headings.length, 2);
+checker.contains("it names the film", headings[0], "film");
+checker.contains("and says what it is made of", headings[0], "1 audio track + 1 subtitle");
 
-console.log("\nOnly files the converter can use are handed over");
-const orphan = file("film.ger.sub", "unusable", { note: "a .sub only works together with its .idx file" });
-const companion = file("film.eng.sub", "companion", { note: "goes along with the .idx of the same name" });
-setList([baseVideo, german, subtitle, orphan, companion]);
+console.log("\nA group that cannot run says why and lets the others go");
+// The decision was: leave it standing, greyed out — one leftover file must not
+// hold up a whole batch.
+created.length = 0;
+const lonely = file("allein.NoSound.mkv", "video", { group: "allein", ready: false });
+const orphanSub = file("waise.ger.srt", "subtitle", { group: "", ready: false, note: "no video of this name in the list" });
+setList([baseVideo, german, lonely, orphanSub]);
+checker.check("only the complete one runs", gui.joinJobs().length, 1);
+checker.check("and the start is free", element("btn-join-start").disabled, false);
+const withLeftovers = created.filter((el) => el.className === "group-head").map((el) => el.textContent);
+checker.contains("the lonely video says why", withLeftovers.join(" | "), "nothing to add to it yet");
+checker.contains("and the orphan is named as left over", withLeftovers.join(" | "), "Left over");
+// Neither of them may reach the converter.
+const sent = gui.collectRequest(join).files;
+checker.check("the lonely video stays behind", sent.includes(lonely.path), false);
+checker.check("the orphan stays behind", sent.includes(orphanSub.path), false);
+
+console.log("\nA missing file stops its own job — and only that one");
+setList([baseVideo, Object.assign({}, german, { missing: true }), otherVideo, otherAudio]);
+checker.check("the other film still runs", gui.joinJobs().length, 1);
+checker.check("and it is the untouched one", gui.joinJobs()[0].name, "zweiter");
+checker.check("nothing of the broken job is sent", gui.joinRunFiles().includes(baseVideo.path), false);
+
+console.log("\nWhat the converter cannot use never leaves the window");
+const orphanVobSub = file("film.ger.sub", "unusable", { group: "", ready: false, note: "a .sub only works together with its .idx file" });
+setList([baseVideo, german, subtitle, orphanVobSub]);
 const request = gui.collectRequest(join);
-checker.check("video first", request.files[0], baseVideo.path);
-checker.check("then audio", request.files[1], german.path);
-checker.check("then subtitles", request.files[2], subtitle.path);
-checker.check("nothing else goes along", request.files.length, 3);
-// Passing either one would make the converter refuse the whole run ("Unknown
-// file types") — the .sub is read by ffmpeg next to its .idx, not as argument.
-checker.check("the orphaned .sub stays behind", request.files.includes(orphan.path), false);
-checker.check("the companion .sub stays behind", request.files.includes(companion.path), false);
-// …but an unusable file must not block a run that is otherwise fine.
-checker.check("and it does not block the start", element("btn-join-start").disabled, false);
-
-console.log("\nWith several videos the user picks the base");
-const second = file("other.mkv", "video");
-setList([baseVideo, second, german]);
-checker.check("the first one stands in", gui.joinBase().path, baseVideo.path);
-gui.state.joinBasePath = second.path;
-gui.afterJoinChange();
-checker.check("the chosen one wins", gui.joinBase().path, second.path);
-checker.check("and it is what gets sent", gui.collectRequest(join).files[0], second.path);
-checker.check("the other video does not come along", gui.collectRequest(join).files.includes(baseVideo.path), false);
-// A video that was removed must not stay chosen invisibly.
-setList([baseVideo, german]);
-checker.check("a vanished choice falls back", gui.joinBase().path, baseVideo.path);
+// Passing it along would make the converter refuse the whole run ("Unknown
+// file types") — a .sub without its .idx is nothing he can read.
+checker.check("the orphaned .sub stays behind", request.files.includes(orphanVobSub.path), false);
+checker.check("but the job itself runs", request.files.length, 3);
+// …and an unusable file must not block a run that is otherwise fine.
+checker.check("it does not block the start", element("btn-join-start").disabled, false);
 
 console.log("\nThe result line says what will happen, without inventing a name");
 setList([]);
-checker.contains("nothing there yet", element("join-result").textContent, "Add one video file");
-setList([baseVideo]);
+checker.contains("nothing there yet", element("join-result").textContent, "sort themselves into jobs");
+setList([file("film.NoSound.mkv", "video", { ready: false })]);
 checker.contains("video alone", element("join-result").textContent, "at least one audio or subtitle");
-setList([baseVideo, german, subtitle]);
+setList([baseVideo, german, subtitle, otherVideo, otherAudio]);
 const resultLine = element("join-result").textContent;
-checker.contains("names the base file", resultLine, "film.NoSound.mkv");
+checker.contains("counts the jobs", resultLine, "2 jobs");
 checker.contains("says what comes out", resultLine, ".joined.mkv");
-checker.contains("counts the audio", resultLine, "1 audio track");
-checker.contains("counts the subtitles", resultLine, "1 subtitle");
-// The converter builds the name himself and tidies it (measured: "Big Buck
+// The converter builds the names himself and tidies them (measured: "Big Buck
 // Bunny.NoSound.mkv" comes back as "Big.Buck.Bunny.joined.mkv"). A name spelled
 // out here would be a promise the window cannot keep.
 checker.check("no invented file name", resultLine.includes("film.joined.mkv"), false);
@@ -221,7 +247,7 @@ gui.addJoinPaths([german.path]).then(() => {
   element("join-mode").value = "join";
   gui.applyJoinMode();
   checker.check("1:1 is the mode", join.mode, "join");
-  checker.check("and the button says so", element("btn-join-start").textContent, "Join into one MKV");
+  checker.check("and the button says so", element("btn-join-start").textContent, "Join the queue");
   checker.contains("the hint mentions copying", element("join-mode-hint").textContent, "copied exactly as it is");
 
   element("join-mode").value = "joindavinci";

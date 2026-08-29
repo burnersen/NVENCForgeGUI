@@ -157,14 +157,22 @@ type RunRequest struct {
 // mehrere gleichzeitig laufen, ohne dass zwei Konverter sich um dieselbe Datei
 // streiten — die Begründung samt Messung steht im Kopf von dispatcher.go.
 //
-// Die WERKZEUG-Modi bleiben ein einziger Auftrag mit allen Dateien:
-//   - Zusammenfügen ist von Natur aus ein Auftrag (ein Video plus Beigaben).
-//   - Zerlegen und DaVinci kopieren nur, statt zu rechnen; dort bremst die
-//     Festplatte, nicht die Grafikkarte — parallel gewönne man nichts.
-//   - Beide fragen nach Spuren. Zwei Dialoge gleichzeitig für zwei Dateien
-//     wären eine Zumutung, und eine falsch zugeordnete Antwort zöge die
-//     falschen Spuren heraus.
+// ZUSAMMENFÜGEN bekommt einen Auftrag je Bild-Grundlage. Der Konverter baut
+// pro Lauf genau eine Datei, ein Stapel zerlegter Filme sind aber viele — und
+// die Zuordnung steht im Namen (joinfiles.go). Sie laufen nacheinander: Der
+// Bereich hat genau einen Platz, mehr wäre auch nichts wert, weil hier die
+// Festplatte bremst und nicht die Grafikkarte.
+//
+// ZERLEGEN und der DaVinci-Weg bleiben ein einziger Auftrag mit allen Dateien:
+//   - Sie kopieren nur, statt zu rechnen; parallel gewönne man nichts.
+//   - Sie fragen nach Spuren. Zwei Dialoge gleichzeitig für zwei Dateien wären
+//     eine Zumutung, und eine falsch zugeordnete Antwort zöge die falschen
+//     Spuren heraus. Der Konverter fragt innerhalb seines einen Laufs ohnehin
+//     Datei für Datei nach.
 func buildJobs(request RunRequest, eventChannel bool) ([]job, error) {
+	if needsJoinOrder(request.Mode) {
+		return buildJoinJobs(request, eventChannel)
+	}
 	if request.Mode != "" {
 		args, err := buildConverterArgs(request, eventChannel)
 		if err != nil {
@@ -188,6 +196,47 @@ func buildJobs(request RunRequest, eventChannel bool) ([]job, error) {
 		jobs = append(jobs, job{label: filepath.Base(file), args: args})
 	}
 	return jobs, nil
+}
+
+// buildJoinJobs macht aus einer Join-Ablage einen Auftrag je Bild-Grundlage.
+//
+// Die Aufteilung selbst steht in joinfiles.go — dort, wo auch entschieden wird,
+// welche Datei was ist. Hier wird nur noch für jede Gruppe dieselbe Befehlszeile
+// gebaut wie früher für die eine.
+//
+// Beschriftet wird der Auftrag mit seiner Bild-Grundlage: In der Anzeige steht
+// dann der Filmname und nicht fünfmal "join".
+func buildJoinJobs(request RunRequest, eventChannel bool) ([]job, error) {
+	groups, err := joinGroupPaths(request.Files)
+	if err != nil {
+		return nil, err
+	}
+
+	jobs := make([]job, 0, len(groups))
+	for _, group := range groups {
+		single := request
+		single.Files = group
+		args, err := buildConverterArgs(single, eventChannel)
+		if err != nil {
+			return nil, err
+		}
+		// Die Bild-Grundlage steht nach joinArgOrder vorn — buildConverterArgs
+		// hat sie gerade dorthin sortiert, hier ist die Gruppe noch ungeordnet.
+		jobs = append(jobs, job{label: filepath.Base(joinLabelOf(group)), args: args})
+	}
+	return jobs, nil
+}
+
+// joinLabelOf nennt die Bild-Grundlage einer Gruppe. Findet sich keine (was
+// joinGroupPaths ausschließt), steht die erste Datei da — eine leere
+// Beschriftung wäre in der Warteschlange schlimmer als eine ungenaue.
+func joinLabelOf(group []string) string {
+	for _, file := range classifyJoinFiles(group) {
+		if file.Kind == joinKindVideo {
+			return file.Path
+		}
+	}
+	return group[0]
 }
 
 // buildConverterArgs setzt die Befehlszeile zusammen.

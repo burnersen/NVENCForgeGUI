@@ -239,7 +239,9 @@ function loadGui() {
     " settingModel, looksInvalid, settingHelp, editSetting, revertSetting, restoreDefaults," +
     " changedValues, defaultFor, noteGPUAdvice, renderSettings, showPage, log, note," +
     " onQuestion, sendAnswer, askSelection, isExtraOption, isToolRun, collectRequest, resetProgress," +
-    " updateButtons, afterJoinChange, addJoinPaths, joinBase, joinOfKind," +
+    " readTrackLabel, trackFacts, buildTrackRule, applyTrackRule, describeTrackRule, setAllTicks," +
+    " justTheName, joinJobs," +
+    " updateButtons, afterJoinChange, addJoinPaths, joinOfKind," +
     " joinReady, joinRunFiles, applyCropCapability, showConverter, onWatchFiles, maybeStartWatchRun, showWatch, clearWatchArea, runWentThroughCleanly, clearFinishedList, stopWatching, stopWatchRun, collectWatchRequest, onQueueState, renderWatchSummary, isWatchSlot, WATCH_SLOT, limitParallelChoice, watchNote," +
     " startBatch, clearProgress, updateOverall, batchProgress, updateFrame, stopSlot, stop, start, renderLanes, copyAreaLog," +
     " loadSRTCleaner, renderSRTCleaner, addSRTPhrase, saveSRTPhrases, srtSignature," +

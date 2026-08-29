@@ -416,6 +416,13 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
 .ask-option:hover { border-color: var(--line); background: var(--hover-2); }
 .ask-option.extra { color: var(--muted); }
 .ask-buttons { margin-top: 14px; }
+/* The two ticking helpers sit above the list, not among the answer buttons:
+   they only move the ticks around, while every button below sends the answer
+   off. Keeping them apart is what makes the difference visible at a glance. */
+.ask-helpers { margin-bottom: 8px; }
+.ask-helpers .btn { padding: 4px 10px; font-size: 12px; }
+.ask-rule { margin-top: 10px; color: var(--muted); font-size: 12px; }
+.ask-rule.active { color: var(--text); }
 
 /* ---------- the shutdown warning ----------
    Same box as the track chooser, so it is recognisably part of this window -
@@ -745,13 +752,13 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
     </div>
 
     <!-- Join has a list of its own instead of the shared queue: it takes audio
-         and subtitle files as well, and one run builds exactly one file. -->
+         and subtitle files as well, and it groups them into one job per film. -->
     <div id="page-join" hidden>
       <section class="panel" id="panel-join">
         <h2>Files to join</h2>
         <div class="dropzone" id="join-dropzone">
-          <b>Drop the video file plus its audio and subtitle files here</b>
-          They are sorted by extension. Dropping a folder adds the files inside it.
+          <b>Drop whole batches here — video files plus their audio and subtitles</b>
+          They sort themselves into one job per film, by name. Dropping a folder adds the files inside it.
         </div>
         <div class="filelist" id="join-list"></div>
         <div class="row" style="margin-top:10px">
@@ -766,8 +773,9 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
       <section class="panel">
         <h2>What this does</h2>
         <p class="lead">
-          Builds one new MKV out of separate parts: a video file plus the
-          audio and subtitle files you drop next to it.
+          Builds a new MKV out of separate parts: a video file plus the audio
+          and subtitle files that belong to it. Several films at once are fine
+          — each video becomes its own job, and they run one after the other.
         </p>
         <div class="row" style="margin-bottom:10px">
           <label for="join-mode">Result</label>
@@ -782,7 +790,9 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
           <li>The audio files you add <b>replace</b> the sound of the video file. Add subtitles only, and the video keeps its own sound.</li>
           <li>Subtitles already inside the video file are never carried over — add them as files.</li>
           <li>Your files stay where they are; the result is always a new file next to the video file.</li>
-          <li>One job per run: exactly one video file, plus at least one audio or subtitle file.</li>
+          <li>What belongs together is decided by the name: everything that starts with the video's own name — the language endings Split writes are exactly that.</li>
+          <li>A job needs one video plus at least one audio or subtitle file. Groups that are short of that stay in the list and are simply left out.</li>
+          <li>Files in different folders are never mixed, even when they have the same name.</li>
           <li>A <b>.sub</b> only works together with its <b>.idx</b> of the same name — drop both.</li>
           <li>The converter names the result itself: it tidies the base name (spaces become dots) and picks another name if that one is taken.</li>
         </ul></details>
@@ -1162,18 +1172,27 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
 <!-- The track chooser. It only appears while the converter is really waiting
      for an answer, and every button here sends one - there is deliberately no
      way to close it without answering, because that would leave the run
-     standing still. -->
+     standing still.
+
+     Nothing is ticked to begin with: this dialog exists because you want a
+     part of the tracks, not all of them, and a full list of ticks has to be
+     cleared away before the real choice can even start. -->
 <div id="ask" hidden>
   <div class="ask-box">
     <h3 id="ask-title">Which tracks do you want? <span class="ask-slot" id="ask-slot"></span></h3>
     <div class="ask-file" id="ask-file"></div>
+    <div class="row ask-helpers">
+      <button class="btn" id="btn-ask-select-all">Select all</button>
+      <button class="btn" id="btn-ask-select-none">Select none</button>
+      <span class="hint" style="margin:0" id="ask-count"></span>
+    </div>
     <div id="ask-options"></div>
     <div class="row ask-buttons">
       <button class="btn primary" id="btn-ask-ok">Use selection</button>
-      <button class="btn" id="btn-ask-all">Keep all tracks</button>
-      <button class="btn" id="btn-ask-always">Keep all, stop asking this run</button>
+      <button class="btn" id="btn-ask-rule">Use for all files</button>
     </div>
     <div class="hint" id="ask-hint"></div>
+    <div class="ask-rule" id="ask-rule"></div>
   </div>
 </div>
 
@@ -1236,9 +1255,10 @@ function newArea(name) {
     // a list of its own shape (state.joinFiles), the watched folder has none —
     // it is handed its files by the folder itself.
     hasQueue: name === "convert" || name === "split",
-    // An overall bar only means something where several files are worked
-    // through. Joining builds exactly one file, and a standing order has no
-    // end to count towards.
+    // An overall bar only means something where the files are counted out one
+    // by one. Joining works from groups, not from a queue of files, and a
+    // standing order has no end to count towards — both say in words how many
+    // jobs are still waiting instead (see drawLanes).
     hasBar: name === "convert" || name === "split",
     mode: name === "convert" || name === "watch" ? "" : name, // what the start button runs
     queue: [],          // { path, name, folder, sizeMB, missing, status, savedPct, note }
@@ -1258,7 +1278,10 @@ function newArea(name) {
     pending: 0,         // jobs still waiting for a free slot
     runMode: "convert", // what the running converter says it is doing
     runAnnounced: false,// the "run started" line is written once per batch
-    answerAll: false,   // "stop asking" was clicked here: every question gets "all tracks"
+    // "Use for all files" was clicked here: which languages this area keeps,
+    // per track type ({ audio: [], sub: [], stereo: [] }). null = every file is
+    // asked about. It lives for one run only — see resetProgress.
+    trackRule: null,
     finished: false,    // a run is over — lanes cleared, result line left standing
     lastLogSlot: 0,     // which converter wrote the last line in this log
     totalMB: 0
@@ -1290,8 +1313,9 @@ const state = {
   // armed = the wish stands, counting = Windows is already counting down.
   shutdown: { armed: false, counting: false, seconds: 60 },
   watchPending: [],   // paths the watcher found that have not run yet
-  joinFiles: [],      // the join area's own list, sorted by Go (joinfiles.go)
-  joinBasePath: "",   // path of the video file the join is built on
+  // The join area's own list, sorted AND grouped by Go (joinfiles.go): every
+  // entry already knows which job it belongs to.
+  joinFiles: [],
   page: "convert",
   settingsFile: null,    // the whole INI as parsed by the app
   theme: "dark",         // day or night, as last chosen; see applyTheme
@@ -1535,52 +1559,70 @@ function renderList(area) {
 
 /* ---------- join list ----------
    The join area keeps a list of its own. The queue on the other pages takes
-   video files only, while joining needs audio and subtitle files as well — and
-   one run builds exactly one file, so a queue would promise a batch that this
-   mode cannot do.
+   video files only, while joining needs audio and subtitle files as well.
 
-   Which file is video, audio or subtitle is decided in Go (joinfiles.go), by
-   the same rules the converter itself uses. Doing it here in the window would
-   mean a second set of extension lists that quietly drifts apart from his. */
-const JOIN_GROUPS = [
-  { kind: "video", title: "Video" },
-  { kind: "audio", title: "Audio" },
-  { kind: "subtitle", title: "Subtitles" },
-  { kind: "companion", title: "Comes along" },
-  { kind: "unusable", title: "Not used" }
-];
+   It is a real queue now: the pieces sort themselves into one job per film, so
+   a whole batch that was taken apart can be put back together in one go. Which
+   file belongs to which film is decided in Go (joinfiles.go) — from the names,
+   by the same rules the converter uses when he writes them. Doing it here in
+   the window would mean a second set of rules that quietly drifts apart. */
+const JOIN_KIND_TITLES = {
+  video: "video",
+  audio: "audio",
+  subtitle: "subtitles",
+  companion: "comes along",
+  unusable: "not used"
+};
 
 function joinOfKind(kind) { return state.joinFiles.filter((file) => file.kind === kind); }
 
-// joinBase is the video the result is built on. With several of them in the
-// list the user picks one; until then the first one stands in, so the result
-// line is never empty when it could say something.
-function joinBase() {
-  const videos = joinOfKind("video");
-  if (!videos.length) return null;
-  return videos.find((file) => file.path === state.joinBasePath) || videos[0];
+// joinGroupKey is folder plus stem, exactly as Go builds it: two episodes of
+// the same name in two folders are two films, not one.
+function joinGroupKey(file) {
+  return (file.folder || "").toLowerCase() + "|" + (file.group || "").toLowerCase();
 }
 
-// joinRunFiles is what actually goes to the converter: the chosen video plus
-// every audio and subtitle file. Files the converter cannot use stay behind —
-// passing one along would make him refuse the whole run.
+// joinGroups turns the flat list into the jobs it stands for, in the order the
+// list is already sorted in. The leftovers — everything Go could not place —
+// come last as one group with no name.
+function joinGroups() {
+  const groups = [];
+  const byKey = {};
+  state.joinFiles.forEach((file) => {
+    const key = file.group ? joinGroupKey(file) : "";
+    if (!byKey[key]) {
+      byKey[key] = { key: key, name: file.group || "", files: [] };
+      groups.push(byKey[key]);
+    }
+    byKey[key].files.push(file);
+  });
+  return groups;
+}
+
+// joinGroupRuns says whether one group really becomes a job. Go has already
+// said whether it is complete (ready); what it deliberately did not look at is
+// whether the files are still on the disk, because that answer changes by the
+// minute. A file that has gone missing stops its own job — and only that one.
+function joinGroupRuns(group) {
+  return group.name !== ""
+    && group.files.every((file) => !file.missing)
+    && group.files.some((file) => file.ready);
+}
+
+// joinJobs are the groups that will run.
+function joinJobs() { return joinGroups().filter(joinGroupRuns); }
+
+// joinRunFiles is what actually goes to the converter: every file of every
+// job that runs. The leftovers stay behind — Go would drop them anyway, and
+// this way the window and the Go side send off exactly the same set.
 function joinRunFiles() {
-  const base = joinBase();
-  if (!base) return [];
-  return [base.path].concat(joinOfKind("audio").map((f) => f.path),
-                            joinOfKind("subtitle").map((f) => f.path));
+  const files = [];
+  joinJobs().forEach((group) => group.files.forEach((file) => files.push(file.path)));
+  return files;
 }
 
-// joinReady says whether a run can start. A missing file is a stopper on
-// purpose: the converter would look for it, give up and leave the window
-// waiting for a summary that never comes.
-function joinReady() {
-  const base = joinBase();
-  if (!base || base.missing) return false;
-  const extras = joinOfKind("audio").concat(joinOfKind("subtitle"));
-  if (!extras.length) return false;
-  return !extras.some((file) => file.missing);
-}
+// joinReady says whether a run can start: at least one complete job.
+function joinReady() { return joinJobs().length > 0; }
 
 async function setJoinPaths(paths) {
   try {
@@ -1600,17 +1642,15 @@ async function addJoinPaths(paths) {
   await setJoinPaths(known.concat(paths));
 }
 
-function joinRow(file, base) {
+function joinRow(file, runs) {
   const row = document.createElement("div");
-  const isBase = base && file.path === base.path;
-  row.className = "item"
-    + (file.kind === "video" ? " pickable" : "")
-    + (isBase ? " base" : "")
-    + (file.kind === "unusable" ? " dud" : "");
+  const isBase = file.kind === "video";
+  const out = !runs || file.kind === "unusable" || !file.group;
+  row.className = "item" + (isBase && !out ? " base" : "") + (out ? " dud" : "");
 
   const mark = document.createElement("div");
   mark.className = "idx";
-  mark.textContent = file.kind === "video" ? (isBase ? "●" : "○") : "";
+  mark.textContent = isBase ? "●" : "";
 
   const name = document.createElement("div");
   name.className = "name";
@@ -1626,8 +1666,8 @@ function joinRow(file, base) {
   size.textContent = fmtMB(file.sizeMB);
 
   const status = document.createElement("div");
-  status.className = "state " + joinStateClass(file, isBase);
-  status.textContent = joinStateText(file, isBase);
+  status.className = "state " + (out ? "dud" : (isBase ? "base" : ""));
+  status.textContent = joinStateText(file, runs);
 
   const remove = document.createElement("button");
   remove.className = "x";
@@ -1639,76 +1679,87 @@ function joinRow(file, base) {
     setJoinPaths(state.joinFiles.filter((other) => other.path !== file.path).map((other) => other.path));
   };
 
-  if (file.kind === "video" && !areaOf("join").running) {
-    row.onclick = () => { state.joinBasePath = file.path; afterJoinChange(); };
-  }
-
   row.append(mark, name, size, status, remove);
   return row;
 }
-function joinStateClass(file, isBase) {
-  if (file.kind === "unusable") return "dud";
-  if (file.kind === "companion") return "dud";
-  return isBase ? "base" : "";
-}
-function joinStateText(file, isBase) {
+
+function joinStateText(file, runs) {
   if (file.kind === "unusable") return "not used";
   if (file.kind === "companion") return "with its .idx";
-  if (file.kind !== "video") return "";
-  return isBase ? "video" : "use this instead";
+  if (file.missing) return "gone";
+  if (!runs) return "waiting";
+  return JOIN_KIND_TITLES[file.kind] || "";
+}
+
+// joinGroupHead is the line above each job. It says what the job is made of,
+// so nobody has to read the file names to see that a film is missing its sound.
+function joinGroupHead(group) {
+  if (!group.name) return "Left over — no video of this name in the list";
+
+  const counted = { audio: 0, subtitle: 0 };
+  group.files.forEach((file) => {
+    if (counted[file.kind] !== undefined) counted[file.kind]++;
+  });
+  const parts = [];
+  if (counted.audio) parts.push(counted.audio + (counted.audio === 1 ? " audio track" : " audio tracks"));
+  if (counted.subtitle) parts.push(counted.subtitle + (counted.subtitle === 1 ? " subtitle" : " subtitles"));
+
+  if (!joinGroupRuns(group)) {
+    const gone = group.files.some((file) => file.missing);
+    return group.name + " — " + (gone ? "a file of this job is gone" : "nothing to add to it yet");
+  }
+  return group.name + " — video + " + parts.join(" + ");
 }
 
 function renderJoin() {
   const box = $("join-list");
   box.innerHTML = "";
-  const base = joinBase();
-  JOIN_GROUPS.forEach((group) => {
-    const files = joinOfKind(group.kind);
-    if (!files.length) return;
+  joinGroups().forEach((group) => {
+    const runs = joinGroupRuns(group);
     const head = document.createElement("div");
     head.className = "group-head";
-    head.textContent = group.title + " (" + files.length + ")";
+    head.textContent = joinGroupHead(group);
     box.appendChild(head);
-    files.forEach((file) => box.appendChild(joinRow(file, base)));
+    group.files.forEach((file) => box.appendChild(joinRow(file, runs)));
   });
 }
 
 // renderJoinResult says what the run will produce. It deliberately does NOT
-// spell out the file name: the converter builds it from the base name with his
-// own tidying rules (measured 2026-08-18: "Big Buck Bunny.NoSound.mkv" comes
-// back as "Big.Buck.Bunny.joined.mkv"), and a name guessed here would sooner or
-// later be a promise the converter does not keep.
+// spell out the file names: the converter builds them from the base name with
+// his own tidying rules (measured 2026-08-18: "Big Buck Bunny.NoSound.mkv"
+// comes back as "Big.Buck.Bunny.joined.mkv"), and a name guessed here would
+// sooner or later be a promise the converter does not keep.
 function renderJoinResult() {
   const box = $("join-result");
-  const base = joinBase();
-  const audio = joinOfKind("audio").length;
-  const subtitles = joinOfKind("subtitle").length;
+  const jobs = joinJobs();
+  const groups = joinGroups();
 
-  if (!base) {
+  if (!state.joinFiles.length) {
     box.className = "waiting";
-    box.textContent = "Add one video file — that is what the result is built on.";
+    box.textContent = "Drop the parts of one or more films here — they sort themselves into jobs.";
     return;
   }
-  if (!audio && !subtitles) {
+  if (!jobs.length) {
     box.className = "waiting";
-    box.textContent = "Add at least one audio or subtitle file to go with " + base.name + ".";
+    box.textContent = groups.some((group) => group.name)
+      ? "Every video still needs at least one audio or subtitle file next to it."
+      : "No video file yet — that is what each result is built on.";
     return;
   }
+
   box.className = "";
-  const parts = ["video"];
-  if (audio) parts.push(audio + (audio === 1 ? " audio track" : " audio tracks"));
-  if (subtitles) parts.push(subtitles + (subtitles === 1 ? " subtitle" : " subtitles"));
-  const several = joinOfKind("video").length > 1
-    ? "  ·  " + base.name + " is the video — click another one to switch."
-    : "";
-  box.textContent = "→ a new \".joined.mkv\" next to " + base.name
-    + "  ·  " + parts.join(" + ") + several;
+  const left = groups.length - jobs.length;
+  box.textContent = "→ " + jobs.length + (jobs.length === 1 ? " job" : " jobs")
+    + ", one new \".joined.mkv\" each, next to its video"
+    + (left ? "  ·  " + left + (left === 1 ? " group" : " groups") + " left out" : "");
 }
 
 function afterJoinChange() {
   const total = state.joinFiles.reduce((sum, file) => sum + (file.sizeMB || 0), 0);
+  const jobs = joinJobs().length;
   $("join-info").textContent = state.joinFiles.length
     ? state.joinFiles.length + " file(s), " + fmtMB(total)
+      + (jobs ? "  ·  " + jobs + (jobs === 1 ? " job" : " jobs") : "")
     : "";
   renderJoin();
   renderJoinResult();
@@ -2005,6 +2056,10 @@ function startBatch(area, files) {
 
 function resetProgress(area) {
   area.slots = {};
+  // The track rule belongs to ONE batch. Cleared here rather than only when a
+  // run ends cleanly, so a stopped or failed run cannot leave an invisible
+  // answer standing that quietly picks the tracks of the next one.
+  area.trackRule = null;
   // A new batch is not a stopped one. Left standing, the flag from an earlier
   // abort would keep the next summary from filling the bar.
   area.stopping = false;
@@ -2050,6 +2105,17 @@ function drawLanes(area) {
     return;
   }
   slots.forEach((number) => box.appendChild(renderLane(area.slots[number])));
+
+  // Areas without an overall bar say in words how much is still to come. The
+  // join area is the reason: it turns one list into several runs, and with ten
+  // films on the list only one of them is ever on screen — without this line
+  // there is nothing to tell a long queue from the very last job.
+  if (!area.hasBar && area.pending > 0) {
+    const waiting = document.createElement("div");
+    waiting.className = "lane-idle";
+    waiting.textContent = area.pending + (area.pending === 1 ? " more job waiting." : " more jobs waiting.");
+    box.appendChild(waiting);
+  }
 }
 
 function renderLane(lane) {
@@ -2534,15 +2600,141 @@ async function resetSavings() {
 // they are only written when asked for.
 function isExtraOption(label) { return String(label || "").trim().startsWith("↳"); }
 
+// justTheName cuts the folder off a path. Only for reading — every path that
+// goes anywhere is passed on whole.
+function justTheName(path) {
+  const parts = String(path || "").split(/[\\/]/);
+  return parts[parts.length - 1] || String(path || "");
+}
+
+/* ---------- the rule: "use this for all the other files too" ----------
+   The converter asks about every file of a split batch, one after the other.
+   Answering the same thing twenty times is exactly the kind of work a queue is
+   supposed to take away — so one click can hand the same answer to the rest of
+   the run.
+
+   What is remembered are LANGUAGES per track type, never track numbers: the
+   numbering starts again in every file, and the German track that was number 1
+   here may well be number 3 in the next one. */
+
+// readTrackLabel takes the type and the language out of one line of the
+// converter's list. He prints them as a fixed table — "Audio  ger  EAC3 6ch",
+// "Sub    ger  SUBRIP [forced]" — so the first two words are all it needs.
+// If he ever changes that table, the rule silently stops matching, which is why
+// an unknown first word gives an empty type instead of a guess.
+function readTrackLabel(label) {
+  if (isExtraOption(label)) return { kind: "stereo", lang: "" };
+  const words = String(label || "").trim().split(/\s+/);
+  const head = (words[0] || "").toLowerCase();
+  const kind = head === "audio" ? "audio" : (head === "sub" ? "sub" : "");
+  return { kind: kind, lang: kind ? (words[1] || "").toLowerCase() : "" };
+}
+
+// trackFacts walks one question's list once and says what every entry is and
+// which language it counts as. A stereo mix has no language of its own — it
+// belongs to the audio track printed right above it and takes its language
+// from there. Keeping that rule in one place stops the three readers below
+// from drifting apart.
+function trackFacts(options) {
+  let audioLang = "";
+  return (options || []).map((option) => {
+    const info = readTrackLabel(option.label);
+    if (info.kind === "audio") audioLang = info.lang;
+    return {
+      n: option.n,
+      kind: info.kind,
+      lang: info.kind === "stereo" ? audioLang : info.lang
+    };
+  });
+}
+
+// buildTrackRule turns what is ticked right now into the rule for the rest of
+// the run: exactly the languages that were picked, kept apart by type. German
+// sound with an English subtitle stays German sound with an English subtitle.
+function buildTrackRule(options) {
+  const ticked = {};
+  document.querySelectorAll("#ask-options input:checked")
+    .forEach((tick) => { ticked[tick.dataset.n] = true; });
+
+  const rule = { audio: [], sub: [], stereo: [] };
+  trackFacts(options).forEach((fact) => {
+    if (!fact.kind || !ticked[String(fact.n)]) return;
+    if (rule[fact.kind].indexOf(fact.lang) < 0) rule[fact.kind].push(fact.lang);
+  });
+  return rule;
+}
+
+// applyTrackRule works a remembered rule out on the next file's track list.
+//
+// complete is false as soon as a type of track IS in the file but nothing of
+// the wanted language is among it — that is the case worth stopping for, since
+// only the user can say what to take instead. A file that simply has no
+// subtitles at all is not such a case: there is nothing to decide there.
+//
+// A missing stereo mix never stops the run either: it is not in the list when
+// the track has two channels already, and that is an answer, not a question.
+//
+// numbers.length is checked as well, because an empty line means "all tracks"
+// to the converter. A rule that matches nothing must never turn into that.
+function applyTrackRule(rule, options) {
+  const numbers = [];
+  const inFile = { audio: false, sub: false, stereo: false };
+  const matched = { audio: false, sub: false, stereo: false };
+
+  trackFacts(options).forEach((fact) => {
+    if (!fact.kind) return;
+    inFile[fact.kind] = true;
+    if (rule[fact.kind].indexOf(fact.lang) < 0) return;
+    numbers.push(fact.n);
+    matched[fact.kind] = true;
+  });
+
+  const missing = ["audio", "sub"].filter(
+    (kind) => rule[kind].length > 0 && inFile[kind] && !matched[kind]);
+
+  return {
+    answer: numbers.join(","),
+    numbers: numbers,
+    missing: missing,
+    complete: numbers.length > 0 && missing.length === 0
+  };
+}
+
+// describeTrackRule puts the rule into one readable line, for the log and for
+// the dialog: "audio ger  ·  subtitles ger, eng".
+function describeTrackRule(rule) {
+  const parts = [];
+  if (rule.audio.length) parts.push("audio " + rule.audio.join(", "));
+  if (rule.stereo.length) parts.push("stereo mix " + rule.stereo.join(", "));
+  if (rule.sub.length) parts.push("subtitles " + rule.sub.join(", "));
+  return parts.length ? parts.join("  ·  ") : "nothing";
+}
+
+// TRACK_TYPE_NAMES is what the missing types are called in a sentence.
+const TRACK_TYPE_NAMES = { audio: "audio track", sub: "subtitle" };
+
 // onQuestion queues the question up. Two converters can ask at the same time,
 // and both are standing still until they get their line — so the second one is
 // kept and shown as soon as the first is answered, instead of overwriting it.
 function onQuestion(event) {
-  // "stop asking" was clicked earlier in this area: answer straight away, so
-  // nothing stands still and no dialog flashes up. It counts for that area
-  // only — a batch you waved through says nothing about the files another
-  // area is taking apart at the same time.
-  if (areaOfSlot(event.slot).answerAll) { sendAnswer("", event.slot); return; }
+  const area = areaOfSlot(event.slot);
+  // A rule was set in this area: answer straight away, so nothing stands still
+  // and no dialog flashes up. It counts for that area only — a batch you waved
+  // through says nothing about the files another area is taking apart at the
+  // same time.
+  if (area.trackRule) {
+    const result = applyTrackRule(area.trackRule, event.options);
+    if (result.complete) {
+      note("Rule used on " + justTheName(event.file) + ": tracks " + result.answer + ".", area.name);
+      sendAnswer(result.answer, event.slot);
+      return;
+    }
+    // The rule does not fit this one. Asking is the point: only the user can
+    // look at the film and say what to take instead. What the rule DID find
+    // stays ticked, so the missing piece is all that is left to decide.
+    event.preset = result.numbers;
+    event.ruleMissing = result.missing;
+  }
   state.questions.push(event);
   if (state.questions.length === 1) showQuestion(event);
 }
@@ -2558,6 +2750,7 @@ function showQuestion(event) {
     ? area.name + ", converter " + (event.slot || 1)
     : "";
 
+  const preset = event.preset || [];
   const box = $("ask-options");
   box.innerHTML = "";
   options.forEach((option) => {
@@ -2566,9 +2759,10 @@ function showQuestion(event) {
     const tick = document.createElement("input");
     tick.type = "checkbox";
     tick.dataset.n = option.n;
-    // Pre-ticked exactly like the converter's own default: every real track,
-    // but no stereo mix.
-    tick.checked = !isExtraOption(option.label);
+    // Nothing is ticked unless the rule already found it. This dialog is here
+    // because you want SOME of the tracks — starting with everything ticked
+    // means clearing the list before the real choice can begin.
+    tick.checked = preset.indexOf(option.n) >= 0;
     tick.onchange = updateAskButtons;
     const text = document.createElement("span");
     text.textContent = option.label;
@@ -2577,11 +2771,28 @@ function showQuestion(event) {
     box.appendChild(row);
   });
 
-  $("ask-hint").textContent = options.some((option) => isExtraOption(option.label))
-    ? "A stereo mix is written only when you tick it — “Keep all tracks” leaves it out."
-    : "“Keep all tracks” takes every track listed above.";
+  $("ask-hint").textContent = askHintFor(event, options);
+  $("ask-rule").textContent = area.trackRule
+    ? "Rule for this run: " + describeTrackRule(area.trackRule)
+    : "";
+  $("ask-rule").className = "ask-rule" + (area.trackRule ? " active" : "");
   $("ask").hidden = false;
   updateAskButtons();
+}
+
+// askHintFor writes the line under the buttons. A file the rule could not
+// answer says so first — otherwise the dialog would look as if it had simply
+// forgotten the rule.
+function askHintFor(event, options) {
+  const missing = event.ruleMissing || [];
+  if (missing.length) {
+    const named = missing.map((kind) => "no " + TRACK_TYPE_NAMES[kind] + " of the language you picked");
+    return named.join(", ") + " in this file — pick what you want here.";
+  }
+  if (options.some((option) => isExtraOption(option.label))) {
+    return "The indented line is an extra stereo mix — it is only written when you tick it.";
+  }
+  return "“Use for all files” keeps this choice by language and answers the rest of the queue by itself.";
 }
 
 // askSelection builds the answer line: the numbers of the ticked entries,
@@ -2592,11 +2803,25 @@ function askSelection() {
     .join(",");
 }
 
+// setAllTicks is the two helpers above the list. They only move the ticks —
+// nothing is sent until one of the two buttons below is pressed.
+function setAllTicks(on) {
+  document.querySelectorAll("#ask-options input").forEach((tick) => { tick.checked = on; });
+  updateAskButtons();
+}
+
 function updateAskButtons() {
   // Nothing ticked means "no valid selection" to the converter, and it would
   // keep everything. A button that quietly does the opposite of what it says
-  // is worse than one that is greyed out.
-  $("btn-ask-ok").disabled = askSelection() === "";
+  // is worse than one that is greyed out — so both answers are locked until
+  // something is picked.
+  const nothing = askSelection() === "";
+  $("btn-ask-ok").disabled = nothing;
+  $("btn-ask-rule").disabled = nothing;
+
+  const all = document.querySelectorAll("#ask-options input").length;
+  const picked = document.querySelectorAll("#ask-options input:checked").length;
+  $("ask-count").textContent = picked + " of " + all + " ticked";
 }
 
 // sendAnswer sends the line to the converter that asked. slot is only passed in
@@ -2614,8 +2839,18 @@ async function sendAnswer(text, slot) {
     showError(String(err), area.name);
     note("Could not send the answer: " + err, area.name);
   }
-  // Somebody else may still be waiting.
-  if (state.questions.length) showQuestion(state.questions[0]);
+  // Somebody else may still be waiting. A rule may have been set in the
+  // meantime — the question that was already in line has to go through the
+  // same check, or the one click that was supposed to end the asking would
+  // still leave a dialog standing.
+  const next = state.questions[0];
+  if (!next) return;
+  if (areaOfSlot(next.slot).trackRule) {
+    state.questions.shift();
+    onQuestion(next);
+    return;
+  }
+  showQuestion(next);
 }
 
 // closeQuestions takes ONE area's open dialogs away WITHOUT answering. Only
@@ -2745,7 +2980,7 @@ function finishArea(area) {
   // A dialog of THIS area may still be standing there — the run it belonged to
   // is over, so there is nobody left to answer.
   closeQuestions(area);
-  area.answerAll = false;
+  area.trackRule = null;
   area.stopClicks = 0;
   note("NVENCForge finished.", area.name);
   showFinalSummary(area);
@@ -2795,7 +3030,6 @@ function runWentThroughCleanly(area) {
 function clearFinishedList(area) {
   if (area.name === "join") {
     state.joinFiles = [];
-    state.joinBasePath = "";
     afterJoinChange();
   } else {
     area.queue = [];
@@ -3747,7 +3981,7 @@ function noteGPUAdvice(text) {
    workflow was missing from the window entirely. */
 const JOIN_MODES = {
   join: {
-    start: "Join into one MKV",
+    start: "Join the queue",
     hint: "Every stream is copied exactly as it is — nothing is re-encoded, " +
           "so this is the way back from Split."
   },
@@ -4424,7 +4658,7 @@ function wire() {
       if (picked && picked.length) await addJoinPaths(picked.map((file) => file.path));
     } catch (e) { showError(String(e), "join"); }
   };
-  $("btn-join-clear").onclick = () => { state.joinFiles = []; state.joinBasePath = ""; afterJoinChange(); };
+  $("btn-join-clear").onclick = () => { state.joinFiles = []; afterJoinChange(); };
   // The shutdown box reports every click straight away — see setShutdownWish.
   $("opt-shutdown").onchange = setShutdownWish;
   $("btn-shutdown-cancel").onclick = cancelShutdown;
@@ -4458,12 +4692,21 @@ function wire() {
   $("theme-light").onclick = () => chooseTheme("light");
   $("theme-dark").onclick = () => chooseTheme("dark");
 
+  $("btn-ask-select-all").onclick = () => setAllTicks(true);
+  $("btn-ask-select-none").onclick = () => setAllTicks(false);
   $("btn-ask-ok").onclick = () => sendAnswer(askSelection());
-  $("btn-ask-all").onclick = () => sendAnswer("");
-  $("btn-ask-always").onclick = () => {
+  $("btn-ask-rule").onclick = () => {
     const pending = state.questions[0];
-    if (pending) areaOfSlot(pending.slot).answerAll = true;
-    sendAnswer("");
+    // The rule is built BEFORE the answer goes off: sendAnswer takes the
+    // question off the pile and empties the dialog, and the ticks are what the
+    // rule is made of.
+    if (pending) {
+      const area = areaOfSlot(pending.slot);
+      area.trackRule = buildTrackRule(pending.options);
+      note("Rule for the rest of this run: " + describeTrackRule(area.trackRule)
+        + ". Files without a matching track are still asked about.", area.name);
+    }
+    sendAnswer(askSelection());
   };
 
   document.querySelectorAll(".nav-item[data-page]").forEach((button) => {

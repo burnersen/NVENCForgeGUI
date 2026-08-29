@@ -170,7 +170,7 @@ checker.check("it only ever went up", fellBack, false);
 checker.check("(the readings)", seen.join(" → "), seen.join(" → "));
 
 console.log("\nA question goes back to the converter that asked");
-convert.answerAll = false;
+convert.trackRule = null;
 gui.state.questions = [];
 calls.answers.length = 0;
 calls.answerSlots.length = 0;

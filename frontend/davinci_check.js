@@ -45,16 +45,17 @@ const trackQuestion = {
 };
 
 console.log("\nThe chooser opens and names the file");
-split.answerAll = false;
+split.trackRule = null;
 gui.onQuestion(trackQuestion);
 checker.check("dialog is visible", element("ask").hidden, false);
 checker.check("the file is named", element("ask-file").textContent, "C:\\Videos\\Movie.mkv");
-checker.contains("stereo mixes are explained", element("ask-hint").textContent, "only when you tick it");
+checker.contains("stereo mixes are explained", element("ask-hint").textContent, "only written when you tick it");
 
-console.log("\nWhat is pre-ticked matches the converter's own default");
-// This is the quiet one: a stereo mix that arrives pre-ticked would be written
-// on every file without anyone asking for it, and nothing on screen would look
-// wrong. The converter itself never makes one unless it is asked to.
+console.log("\nNothing arrives pre-ticked");
+// The point of this dialog is that you want SOME of the tracks. Arriving with
+// everything ticked means clearing the list before the real choice can even
+// start — and a pre-ticked stereo mix would be written on every file without
+// anyone asking for it, with nothing on screen looking wrong.
 created.length = 0;
 // The question from just above is still open — questions queue up now, because
 // with several converters two of them can ask at once. Clear it first, or this
@@ -63,9 +64,9 @@ gui.state.questions = [];
 gui.onQuestion(trackQuestion);
 const boxes = created.filter((el) => el.type === "checkbox");
 checker.check("one box per option", boxes.length, 3);
-checker.check("audio track is pre-ticked", boxes[0].checked, true);
-checker.check("stereo mix is NOT pre-ticked", boxes[1].checked, false);
-checker.check("subtitle is pre-ticked", boxes[2].checked, true);
+checker.check("audio track is not ticked", boxes[0].checked, false);
+checker.check("stereo mix is not ticked", boxes[1].checked, false);
+checker.check("subtitle is not ticked", boxes[2].checked, false);
 checker.check("boxes carry their number", String(boxes[2].dataset.n), "3");
 
 console.log("\nStereo mixes are told apart from real tracks");
@@ -85,20 +86,31 @@ gui.sendAnswer(gui.askSelection());
 checker.check("“use selection” sends the numbers", calls.answers.join("|"), "2");
 checker.check("and closes the dialog", element("ask").hidden, true);
 
+// An empty line is not a button any more, but it is still what the converter
+// reads as "keep everything" — the answer the window must never send by
+// accident (see applyTrackRule).
 calls.answers.length = 0;
 gui.sendAnswer("");
-checker.check("“keep all” sends an empty line", calls.answers.length, 1);
-checker.check("which means all tracks", calls.answers[0], "");
+checker.check("an empty line is one answer", calls.answers.length, 1);
+checker.check("and means all tracks", calls.answers[0], "");
 
-console.log("\n“Stop asking” answers by itself, without showing anything");
+console.log("\nA stereo mix takes the language of the track above it");
+// It has none of its own — the converter prints it as "Stereo mix of [1]". If
+// that were read as a track without a language, a rule would either lose the
+// mix or hand it out to every file regardless of language.
+const facts = gui.trackFacts(trackQuestion.options);
+checker.check("the mix belongs to the german track", facts[1].kind + " " + facts[1].lang, "stereo ger");
+
+console.log("\nThe rule answers the rest of the run by itself");
 calls.answers.length = 0;
+gui.state.questions = [];
 element("ask").hidden = true;
-split.answerAll = true;
+split.trackRule = { audio: ["ger"], sub: ["eng"], stereo: ["ger"] };
 gui.onQuestion(trackQuestion);
 checker.check("answered straight away", calls.answers.length, 1);
-checker.check("with all tracks", calls.answers[0], "");
+checker.check("with the picked tracks and the mix", calls.answers[0], "1,2,3");
 checker.check("no dialog appeared", element("ask").hidden, true);
-split.answerAll = false;
+split.trackRule = null;
 
 console.log("\nA tool run is told apart from a conversion");
 gui.onConverterEvent({ ev: "run", slot: SPLIT_SLOT, mode: "davinci", version: "1.18.0" });
