@@ -2052,6 +2052,10 @@ async function copyAreaLog(area) {
 // from an earlier one. The overall bar is worked out from exactly this set.
 function startBatch(area, files) {
   area.batch = new Set((files || []).map((path) => path.toLowerCase()));
+  // Standard ist der echte Lauf; wer nur nachsieht, sagt es gleich danach.
+  // Ohne diese Zeile behielte ein Lauf, der nicht über start() kommt (der
+  // überwachte Ordner etwa), die Einstufung des vorigen.
+  area.checkRun = "";
   area.queue.forEach((entry) => {
     if (!area.batch.has(entry.path.toLowerCase())) return;
     entry.finished = false;
@@ -3055,7 +3059,16 @@ function finishArea(area) {
   // again and do everything a second time. It is cleared away — but only when
   // the run really went through, because after a stop or a failure the list is
   // the one place that still says which file it was.
-  if (runWentThroughCleanly(area)) clearFinishedList(area);
+  //
+  // A check run is the exception, and not a small one: nothing was converted,
+  // so there is nothing to do twice — and the list is where the answer IS. The
+  // CQ next to each file would be gone the moment it arrived. It goes away on
+  // the Clear button, or with the next real run.
+  if (area.checkRun) {
+    note("List kept — nothing was converted, and the answer is in it. Clear it when you are done.", area.name);
+  } else if (runWentThroughCleanly(area)) {
+    clearFinishedList(area);
+  }
   // The progress area is emptied: bars of a run that is over say nothing, and
   // a finished lane standing next to an idle window looks like work still to
   // come. What the run DID stays — in the result line and in the log.
@@ -4610,6 +4623,10 @@ async function start(areaName, checkMode) {
   // several converters each one sends its own and would wipe out the others.
   resetProgress(area);
   startBatch(area, request.files);
+  // Gemerkt, damit die Liste nach einem Prüflauf stehen bleibt (siehe
+  // finishArea). Gesetzt NACH startBatch, das den Standard "echter Lauf"
+  // legt — so kann kein künftiger Startweg den Wert eines alten Laufs erben.
+  area.checkRun = checkMode || "";
   area.parallel = request.parallel;
   if (checkMode === "crop") {
     note("Checking for black bars — writing one picture per file next to the source, converting nothing.", area.name);

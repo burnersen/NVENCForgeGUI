@@ -77,7 +77,39 @@ gui.onConverterEvent({
 });
 check("saving and CQ side by side", area.queue[0].note, "done, 62 % smaller · CQ 30");
 
+console.log("\n=== after a check the list STAYS — that is where the answer is ===");
+// Reported from a real run: the queue emptied itself the moment the check
+// finished, leaving the CQ readable only in the log. A check converts nothing,
+// so there is nothing to do twice - the whole reason the list is normally
+// cleared away does not apply.
+gui.startBatch(area, [FILE]);
+gui.start("convert", "cq");
+gui.onConverterEvent({ ev: "file", index: 1, total: 1, name: "Film.mkv", path: FILE, slot: 1 });
+gui.onConverterEvent({ ev: "cq", index: 1, cq: 30, vmaf: 92.2, target: 96.5, note: "plateau", slot: 1 });
+gui.onConverterEvent({
+  ev: "result", index: 1, status: "skipped", name: "Film.mkv",
+  in_mb: 263, out_mb: 263, saved_mb: 0, saved_pct: 0, slot: 1
+});
+gui.finishArea(area);
+check("the file is still there   ", area.queue.length, 1);
+check("and still shows its CQ    ", area.queue[0].note, "CQ 30 · VMAF 92.2");
+
+console.log("\n=== a real run still tidies up after itself ===");
+gui.start("convert");
+gui.onConverterEvent({ ev: "file", index: 1, total: 1, name: "Film.mkv", path: FILE, slot: 1 });
+gui.onConverterEvent({
+  ev: "result", index: 1, status: "success", name: "Film.mkv",
+  in_mb: 263, out_mb: 100, saved_mb: 163, saved_pct: 62, slot: 1
+});
+gui.finishArea(area);
+check("the list is cleared       ", area.queue.length, 0);
+
 console.log("\n=== a new run clears the old number ===");
+area.queue = [{ path: FILE, name: "Film.mkv", sizeMB: 2000 }];
+gui.afterQueueChange(area);
+gui.startBatch(area, [FILE]);
+gui.onConverterEvent({ ev: "file", index: 1, total: 1, name: "Film.mkv", path: FILE, slot: 1 });
+gui.onConverterEvent({ ev: "cq", index: 1, cq: 28, vmaf: 96.6, target: 96.5, note: "verified", slot: 1 });
 gui.startBatch(area, [FILE]);
 check("the CQ is gone            ", area.queue[0].cq, undefined);
 check("and the line reads queued ", area.queue[0].note, "queued");
