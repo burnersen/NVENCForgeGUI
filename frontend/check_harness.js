@@ -35,7 +35,21 @@ function fakeElement(id) {
     // running, and a stand-in that forgets it could not check that.
     attrs: {},
     setAttribute(name, value) { store.attrs[name] = value; },
-    getAttribute(name) { return store.attrs[name]; }
+    getAttribute(name) { return store.attrs[name]; },
+    // Registrierte Ereignisse werden aufbewahrt statt verschluckt. Ein Teil der
+    // Oberfläche hängt nämlich an addEventListener statt an onchange — etwa
+    // alles, was eine Änderung in die INI zurückschreibt. Solange der Ersatz
+    // hier nichts merkte, war genau dieser Teil ungeprüft, und ein Element ohne
+    // jede Verdrahtung sah aus wie eines mit.
+    listeners: [],
+    addEventListener(name, fn) { store.listeners.push({ name, fn }); },
+    // dispatch löst aus, was wirklich registriert wurde — das Gegenstück zum
+    // Klick auf einen onclick-Knopf.
+    dispatch(name, event) {
+      store.listeners
+        .filter((entry) => entry.name === name)
+        .forEach((entry) => entry.fn(event || { target: store }));
+    }
   };
   return new Proxy(store, {
     get: (target, prop) => (prop in target ? target[prop] : () => fakeElement("child")),
@@ -252,7 +266,8 @@ function loadGui() {
     " showSavings, resetSavings, applySettingsFilter, settingMatches, sectionId, onRunState," +
     " setShutdownWish, onShutdownState, cancelShutdown, showShutdownAlert," +
     " checkUpdate, installUpdate," +
-    " INI_MIRROR, seedOptionsFromConfig, rememberOption, rememberCQ, rememberBitrate, saveOneSetting," +
+    " INI_MIRROR, seedOptionsFromConfig, rememberOption, rememberCQ, rememberBitrate, saveOneSetting,"
+    + " noteCodecReach, afterOptionsChanged," +
     " settingsSnapshot, ensureSettingsFile, applyProfileSettings, noteShutdownFromConfig, refreshConfig };"
   )(windowStub, documentStub);
 

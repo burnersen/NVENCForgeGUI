@@ -605,6 +605,9 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
             <span class="hint" id="parallel-note" style="margin:4px 0 0"></span>
           </div>
         </div>
+        <!-- Filled in when codec and container together narrow down which
+             devices can play the result. Empty the rest of the time. -->
+        <div class="hint" id="opt-reach-note" style="margin-top:8px"></div>
         <div class="checks">
           <label class="check" data-help="keep"><input type="checkbox" id="opt-keep" /> Keep the source file where it is</label>
           <label class="check" data-help="crop"><input type="checkbox" id="opt-crop" /> Cut off black bars (letterbox)</label>
@@ -942,6 +945,9 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
             <input type="number" id="wopt-bitrate" value="" min="100" max="200000" placeholder="as configured" />
           </div>
         </div>
+        <!-- Same note as on the Convert page: which devices can play what comes
+             out. Here it matters more, because nobody watches these runs. -->
+        <div class="hint" id="wopt-reach-note" style="margin-top:8px"></div>
         <div class="checks">
           <label class="check"><input type="checkbox" id="wopt-keep" /> Keep the source file where it is</label>
           <label class="check"><input type="checkbox" id="wopt-crop" /> Cut off black bars (letterbox)</label>
@@ -3476,7 +3482,7 @@ const HELP = {
   }),
   container: () => ({
     title: "Container",
-    text: "Only the file ending — the video itself is the same. MKV holds every track and chapter. MP4 is what phones, TVs and browsers expect; the video is re-tagged so Apple devices accept it.",
+    text: "Only the file ending — the video itself is the same. MKV holds every track and chapter. MP4 is what phones, TVs and browsers expect; H.265 is re-tagged “hvc1” so Apple devices accept it. AV1 goes into an MP4 as well, marked “av01” — that one only plays on current devices.",
     now: "Default: MKV"
   }),
   resolution: () => {
@@ -4371,8 +4377,31 @@ function applyProfile(prefix, profile) {
 // afterOptionsChanged does what the fields' own handlers would have done had
 // the values been typed in by hand. Without it a loaded profile could leave a
 // hidden CQ box holding the number the run then uses.
+// noteCodecReach says out loud how far the finished file will travel.
+//
+// AV1 in an MP4 is a perfectly regular file (the track is marked "av01") and
+// NVENCForge writes it since 1.31.0 — but MP4 is the container people pick when
+// something has to play everywhere, and AV1 is exactly what older iPhones, TVs
+// and browsers cannot decode. Those two choices sit in separate drop-downs, so
+// nothing in the window connected them: you saw "AV1" and "MP4" and could not
+// tell that together they mean something different than each on its own.
+//
+// The converter warns as well, but only once the run has started — by then the
+// choice is made. This says it while it can still be changed.
+function noteCodecReach(prefix) {
+  const box = $(prefix + "-reach-note");
+  if (!box) return;
+  const av1 = $(prefix + "-codec").value === "av1";
+  const mp4 = $(prefix + "-container").value === "mp4";
+  box.textContent = av1 && mp4
+    ? "AV1 in an MP4: current phones, TVs and browsers play it — older ones (every iPhone before the 15 Pro) do not. "
+      + "Pick H.265 if the file has to run everywhere."
+    : "";
+}
+
 function afterOptionsChanged(prefix) {
   $(prefix === "opt" ? "field-cq" : "wfield-cq").hidden = $(prefix + "-quality").value !== "fixed";
+  noteCodecReach(prefix);
   if (prefix === "opt") {
     // AV1 goes up to 63, H.265 only to 51. A profile made for AV1 must not
     // leave an impossible number behind on the H.265 side.
@@ -4910,6 +4939,16 @@ function wire() {
   // the displayed values follow them immediately.
   $("opt-resolution").onchange = refreshFromConfig;
   $("opt-cq").oninput = () => { state.cqTouched = true; };
+
+  // Der Reichweiten-Hinweis hängt an beiden Feldern, die ihn auslösen, und auf
+  // beiden Seiten. Über addEventListener statt onchange, weil "opt-codec" schon
+  // einen Handler trägt — der soll bleiben, was er ist.
+  ["opt", "wopt"].forEach((prefix) => {
+    ["codec", "container"].forEach((field) => {
+      const box = $(prefix + "-" + field);
+      if (box) box.addEventListener("change", () => noteCodecReach(prefix));
+    });
+  });
 
   // Every mirrored control writes its change into the INI. "change" and not
   // "input": a half-typed number is not a setting yet.
