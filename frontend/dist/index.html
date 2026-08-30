@@ -4689,7 +4689,17 @@ async function start(areaName, checkMode) {
   area.cqSignature = checkMode === "cq" ? pictureSignature(request) : area.cqSignature;
   area.parallel = request.parallel;
   if (reused) {
-    note(reused + " file(s) keep the CQ from the check — that analysis is not run again.", area.name);
+    // Der Konverter bekommt den Wert als "-cq" und meldet ihn deshalb als
+    // "Manual CQ … — Auto-CQ disabled". Das stimmt für ihn, liest sich aber
+    // falsch: niemand hat etwas von Hand gesetzt, und die Suche ist nicht
+    // abgeschaltet — sie ist schon gelaufen. Er kann die Herkunft der Zahl
+    // nicht kennen, also sagt sie das Fenster, bevor seine Zeile kommt.
+    note(reused + " file(s) keep the CQ from the check — the converter will call that a manual CQ, "
+      + "but it is the measured one; only the second search is skipped.", area.name);
+    area.queue.forEach((entry) => {
+      if (reuse[entry.path] === undefined) return;
+      note("  · " + entry.name + " → CQ " + reuse[entry.path], area.name);
+    });
   }
   if (checkMode === "crop") {
     note("Checking for black bars — writing one picture per file next to the source, converting nothing.", area.name);
