@@ -2050,7 +2050,9 @@ async function copyAreaLog(area) {
 
 // startBatch marks which files this run is about and clears what they carry
 // from an earlier one. The overall bar is worked out from exactly this set.
-function startBatch(area, files) {
+// startBatch stellt die Liste auf einen beginnenden Lauf ein. keepCQ behält die
+// gemessenen Werte, wenn dieser Lauf sie weiterverwendet statt neu zu messen.
+function startBatch(area, files, keepCQ) {
   area.batch = new Set((files || []).map((path) => path.toLowerCase()));
   // Standard ist der echte Lauf; wer nur nachsieht, sagt es gleich danach.
   // Ohne diese Zeile behielte ein Lauf, der nicht über start() kommt (der
@@ -2063,7 +2065,12 @@ function startBatch(area, files) {
     entry.note = "queued";
     // Ein gemessener CQ gehört zu genau EINEM Lauf. Bliebe er stehen, zeigte
     // die Liste beim nächsten Mal einen Wert aus einer anderen Einstellung —
-    // schlimmer als gar keiner, weil er richtig aussieht.
+    // schlimmer als gar keiner, weil er richtig aussieht. Ausnahme: dieser
+    // Lauf übernimmt ihn gerade, dann gilt er weiter.
+    if (keepCQ) {
+      entry.note = cqLabel(entry, false) || "queued";
+      return;
+    }
     delete entry.cq;
     delete entry.cqVMAF;
     delete entry.cqNote;
@@ -2410,6 +2417,48 @@ function onCQ(event) {
   // it explains the minute the analysis just took.
   entry.note = cqLabel(entry, true);
   renderList(area);
+}
+
+// pictureSignature fingerprints everything that changes what the encoder sees.
+//
+// A measured CQ is only valid for the settings it was measured under. Codec,
+// resolution, bit depth, the bitrate ceiling, whether black bars are cut, and
+// whether the graphics card or the processor does the work all change the
+// picture or the scale the number sits on — reusing a CQ across any of them
+// would silently encode at the wrong quality.
+//
+// Audio, container, shutdown and how many run at once are deliberately absent:
+// none of them touches a single pixel.
+function pictureSignature(request) {
+  return [
+    request.codec || "",
+    request.encoder || "",
+    request.resolution || "",
+    request.bitDepth || "",
+    request.crop || "",
+    request.maxBitrate || 0
+  ].join("|");
+}
+
+// measuredCQFor collects the CQs a check run already found, for the files in
+// this run. Returns an empty object when nothing can be reused — the converter
+// then measures as it always did.
+function measuredCQFor(area, request) {
+  // Only a check run leaves values behind, and only if the picture settings
+  // have not moved since. Anything else and the numbers are not comparable.
+  if (!area.cqSignature || area.cqSignature !== pictureSignature(request)) return {};
+  // "auto" heißt ausdrücklich messen, "" heißt "die INI entscheidet" — und da
+  // der Prüflauf überhaupt einen CQ geliefert hat, stand sie auf Auto-CQ.
+  // "fixed" und "off" sind dagegen Entscheidungen des Nutzers, die eine
+  // Messung von vorhin nicht überstimmen darf.
+  if (request.quality !== "auto" && request.quality !== "") return {};
+  const found = {};
+  area.queue.forEach((entry) => {
+    if (entry.cq === undefined) return;
+    if (!request.files.some((path) => path.toLowerCase() === entry.path.toLowerCase())) return;
+    found[entry.path] = entry.cq;
+  });
+  return found;
 }
 
 // cqLabel is the short form for the list.
@@ -4619,15 +4668,29 @@ async function start(areaName, checkMode) {
     // search would never run. The window must not send that combination.
     if (request.crop === "check") request.crop = "";
   }
+  // Was ein Prüflauf schon gemessen hat, muss nicht noch einmal gemessen
+  // werden. Eingesammelt VOR startBatch, das die Werte aus der Anzeige räumt.
+  const reuse = checkMode ? {} : measuredCQFor(area, request);
+  const reused = Object.keys(reuse).length;
+  if (reused) request.measuredCQ = reuse;
   // Cleared once for the whole batch — not on every "run" event, since with
   // several converters each one sends its own and would wipe out the others.
   resetProgress(area);
-  startBatch(area, request.files);
+  // Werden Werte übernommen, bleiben sie auch stehen: der Konverter sucht für
+  // diese Dateien nicht mehr und meldet folglich kein "cq" mehr. Die Spalte
+  // leerzuräumen sähe aus, als wäre die Messung verloren gegangen.
+  startBatch(area, request.files, reused > 0);
   // Gemerkt, damit die Liste nach einem Prüflauf stehen bleibt (siehe
   // finishArea). Gesetzt NACH startBatch, das den Standard "echter Lauf"
   // legt — so kann kein künftiger Startweg den Wert eines alten Laufs erben.
   area.checkRun = checkMode || "";
+  // Der Fingerabdruck der Einstellungen, unter denen gemessen wurde. Ohne ihn
+  // ließe sich später nicht entscheiden, ob die Werte noch gelten.
+  area.cqSignature = checkMode === "cq" ? pictureSignature(request) : area.cqSignature;
   area.parallel = request.parallel;
+  if (reused) {
+    note(reused + " file(s) keep the CQ from the check — that analysis is not run again.", area.name);
+  }
   if (checkMode === "crop") {
     note("Checking for black bars — writing one picture per file next to the source, converting nothing.", area.name);
   }

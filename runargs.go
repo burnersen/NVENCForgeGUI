@@ -14,6 +14,7 @@ package main
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 )
 
 // Erlaubte Werte der Auswahlfelder. Als Konstanten, damit ein Tippfehler beim
@@ -132,6 +133,21 @@ type RunRequest struct {
 	MaxBitrate int      `json:"maxBitrate"` // 0 = Wert aus der INI
 	KeepSource bool     `json:"keepSource"`
 
+	// MeasuredCQ enthält die CQ-Werte, die ein vorangegangener Prüflauf für
+	// einzelne Dateien schon ermittelt hat (Pfad → CQ).
+	//
+	// Warum das etwas bringt: Die Suche kostet je Datei rund eine halbe Minute.
+	// Wer erst prüft und dann konvertiert, bezahlt sie sonst zweimal für
+	// dasselbe Ergebnis. Da das Fenster JE DATEI einen eigenen Konverter
+	// startet, kann jede ihren eigenen Wert bekommen.
+	//
+	// Benutzt wird ein Wert nur, wenn die Qualitätswahl weiterhin auf "auto"
+	// steht — bei einem festen CQ hat der Nutzer selbst entschieden. Ob die
+	// bildrelevanten Einstellungen seit der Messung gleich geblieben sind,
+	// entscheidet das Fenster, bevor es diese Liste überhaupt füllt: ein CQ
+	// aus einer anderen Auflösung oder einem anderen Codec wäre schlicht falsch.
+	MeasuredCQ map[string]int `json:"measuredCQ,omitempty"`
+
 	// Shutdown ist der WUNSCH "PC ausschalten, wenn alles fertig ist" — kein
 	// Schalter für die Befehlszeile. Er geht ausdrücklich NICHT an den
 	// Konverter: Der kennt nur seine eine Datei und würde nach ihr abschalten,
@@ -195,6 +211,15 @@ func buildJobs(request RunRequest, eventChannel bool) ([]job, error) {
 	for _, file := range request.Files {
 		single := request
 		single.Files = []string{file}
+		// Ein schon gemessener CQ macht die Suche für DIESE Datei überflüssig.
+		// Er wird als fester Wert übergeben, was Auto-CQ im Konverter
+		// überstimmt — genau das ist gewollt, denn er IST das Ergebnis von
+		// Auto-CQ, nur eben von vorhin. Kostendeckel und Bremsen stecken
+		// bereits darin, es ist der Wert nach allen Korrekturen.
+		if cq, ok := measuredCQFor(request, file); ok {
+			single.Quality = qualityFixed
+			single.FixedCQ = cq
+		}
 		args, err := buildConverterArgs(single, eventChannel)
 		if err != nil {
 			return nil, err
@@ -202,6 +227,45 @@ func buildJobs(request RunRequest, eventChannel bool) ([]job, error) {
 		jobs = append(jobs, job{label: filepath.Base(file), args: args})
 	}
 	return jobs, nil
+}
+
+// measuredCQFor sucht den für diese Datei bereits gemessenen CQ heraus.
+//
+// Zwei Bedingungen, beide nötig.
+//
+// Erstens die Qualitätswahl: "auto" heißt ausdrücklich messen, der LEERE Wert
+// heißt "die INI entscheidet" — und da ein Prüflauf überhaupt einen CQ
+// geliefert hat, stand sie auf Auto-CQ. Beides ist also in Ordnung. "fixed"
+// und "off" sind dagegen Entscheidungen des Nutzers; eine Messung von vorhin
+// darf sie nicht überstimmen.
+//
+// Zweitens muss der Wert in der Skala liegen — ein kaputter Wert aus der
+// Oberfläche darf nicht ungeprüft zum Konverter durchgereicht werden.
+//
+// Pfade werden ohne Rücksicht auf Groß- und Kleinschreibung verglichen: unter
+// Windows ist "C:\Filme\A.mkv" dieselbe Datei wie "c:\filme\a.mkv".
+func measuredCQFor(request RunRequest, file string) (int, bool) {
+	if request.Quality != qualityAuto && request.Quality != "" {
+		return 0, false
+	}
+	if len(request.MeasuredCQ) == 0 {
+		return 0, false
+	}
+	upperBound := maxCQH265
+	if request.Codec == codecAV1 {
+		upperBound = maxCQAV1
+	}
+	wanted := strings.ToLower(file)
+	for path, cq := range request.MeasuredCQ {
+		if strings.ToLower(path) != wanted {
+			continue
+		}
+		if cq < minCQ || cq > upperBound {
+			return 0, false
+		}
+		return cq, true
+	}
+	return 0, false
 }
 
 // buildJoinJobs macht aus einer Join-Ablage einen Auftrag je Bild-Grundlage.

@@ -11,6 +11,14 @@ import (
 	"testing"
 )
 
+// Windows-Pfade stehen hier als Roh-Zeichenketten in schrägen Anführungszeichen.
+// Das erspart die doppelten Schrägstriche und macht sie lesbar.
+const (
+	testFileA          = `C:\filme\a.mkv`
+	testFileB          = `C:\filme\b.mkv`
+	testFileAOtherCase = `c:\FILME\A.mkv`
+)
+
 // Sichert den Prüflauf der Qualitätssuche ab: das richtige Flag, keine
 // doppelten Schalter, und keine zwei Prüfläufe in einem Durchgang.
 
@@ -57,7 +65,7 @@ func TestQualityModesStayApart(t *testing.T) {
 // Qualitätssuche käme nie dran. Das Fenster muss vorher nein sagen.
 func TestTwoCheckRunsRefused(t *testing.T) {
 	_, err := buildConverterArgs(RunRequest{
-		Files:   []string{"C:\\filme\\a.mkv"},
+		Files:   []string{testFileA},
 		Quality: qualityCheck,
 		Crop:    cropCheck,
 	}, true)
@@ -78,11 +86,11 @@ func TestSingleCheckRunsAllowed(t *testing.T) {
 		want    string
 	}{
 		{"nur Qualität prüfen",
-			RunRequest{Files: []string{"a.mkv"}, Quality: qualityCheck}, "-cqcheck"},
+			RunRequest{Files: []string{testFileA}, Quality: qualityCheck}, "-cqcheck"},
 		{"nur Balken prüfen",
-			RunRequest{Files: []string{"a.mkv"}, Crop: cropCheck}, "-cropcheck"},
+			RunRequest{Files: []string{testFileA}, Crop: cropCheck}, "-cropcheck"},
 		{"Qualität prüfen, Balken wirklich schneiden",
-			RunRequest{Files: []string{"a.mkv"}, Quality: qualityCheck, Crop: cropOn}, "-cqcheck"},
+			RunRequest{Files: []string{testFileA}, Quality: qualityCheck, Crop: cropOn}, "-cqcheck"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -110,5 +118,122 @@ func TestCQCheckCapabilityMarker(t *testing.T) {
 		if strings.Contains(other, cqCheckFlagMarker) {
 			t.Errorf("%q enthält den Marker %q", other, cqCheckFlagMarker)
 		}
+	}
+}
+
+// ----------------------------------------------------------------------------
+// Die Wiederverwendung: ein schon gemessener CQ soll die zweite Suche sparen —
+// aber nur dort, wo er wirklich gilt.
+// ----------------------------------------------------------------------------
+
+func TestMeasuredCQBecomesFixedCQ(t *testing.T) {
+	jobs, err := buildJobs(RunRequest{
+		Files:      []string{testFileA},
+		Quality:    qualityAuto,
+		MeasuredCQ: map[string]int{testFileA: 28},
+	}, true)
+	if err != nil {
+		t.Fatalf("unerwarteter Fehler: %v", err)
+	}
+	if len(jobs) != 1 {
+		t.Fatalf("ein Auftrag erwartet, bekam %d", len(jobs))
+	}
+	joined := strings.Join(jobs[0].args, " ")
+	if !strings.Contains(joined, "-cq 28") {
+		t.Errorf("der gemessene CQ fehlt: %q", joined)
+	}
+	// Beides zusammen wäre widersprüchlich — "-cq" schlägt die Suche, und die
+	// Suche noch einmal anzuwerfen ist genau das, was gespart werden soll.
+	if strings.Contains(joined, "-autocq") {
+		t.Errorf("die Suche läuft trotzdem noch: %q", joined)
+	}
+}
+
+func TestMeasuredCQOnlyForItsOwnFile(t *testing.T) {
+	jobs, err := buildJobs(RunRequest{
+		Files:      []string{testFileA, testFileB},
+		Quality:    qualityAuto,
+		MeasuredCQ: map[string]int{testFileA: 28},
+	}, true)
+	if err != nil {
+		t.Fatalf("unerwarteter Fehler: %v", err)
+	}
+	if len(jobs) != 2 {
+		t.Fatalf("zwei Aufträge erwartet, bekam %d", len(jobs))
+	}
+	if got := strings.Join(jobs[0].args, " "); !strings.Contains(got, "-cq 28") {
+		t.Errorf("die gemessene Datei bekam ihren Wert nicht: %q", got)
+	}
+	// Die zweite Datei wurde nie gemessen und muss ganz normal gesucht werden.
+	if got := strings.Join(jobs[1].args, " "); !strings.Contains(got, "-autocq") {
+		t.Errorf("die ungemessene Datei sucht nicht: %q", got)
+	}
+}
+
+func TestMeasuredCQRespectsTheUser(t *testing.T) {
+	cases := []struct {
+		name    string
+		quality string
+		wantCQ  bool
+	}{
+		{"auto nimmt den Messwert", qualityAuto, true},
+		{"leer heißt INI, und die stand auf Auto", "", true},
+		{"ein fester CQ ist die Wahl des Nutzers", qualityFixed, false},
+		{"abgeschaltet heißt abgeschaltet", qualityOff, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			request := RunRequest{
+				Files:      []string{testFileA},
+				Quality:    c.quality,
+				FixedCQ:    22,
+				MeasuredCQ: map[string]int{testFileA: 28},
+			}
+			_, ok := measuredCQFor(request, testFileA)
+			if ok != c.wantCQ {
+				t.Errorf("Quality %q: Messwert benutzt = %v, erwartet %v", c.quality, ok, c.wantCQ)
+			}
+		})
+	}
+}
+
+// TestMeasuredCQOutsideTheScaleIsRefused: ein Wert, der die Skala verlässt,
+// darf nicht durchgereicht werden — der Konverter lehnte den Lauf sonst erst
+// ab, nachdem er schon gestartet ist.
+func TestMeasuredCQOutsideTheScaleIsRefused(t *testing.T) {
+	for _, cq := range []int{0, -5, maxCQH265 + 1} {
+		request := RunRequest{
+			Files:      []string{testFileA},
+			Quality:    qualityAuto,
+			MeasuredCQ: map[string]int{testFileA: cq},
+		}
+		if _, ok := measuredCQFor(request, testFileA); ok {
+			t.Errorf("CQ %d liegt außerhalb der H.265-Skala und wurde trotzdem benutzt", cq)
+		}
+	}
+	// Auf der AV1-Skala ist derselbe Wert dagegen gültig.
+	request := RunRequest{
+		Files:      []string{testFileA},
+		Codec:      codecAV1,
+		Quality:    qualityAuto,
+		MeasuredCQ: map[string]int{testFileA: maxCQH265 + 1},
+	}
+	if _, ok := measuredCQFor(request, testFileA); !ok {
+		t.Error("auf der AV1-Skala hätte der Wert gelten müssen")
+	}
+}
+
+func TestMeasuredCQIgnoresPathCase(t *testing.T) {
+	// Windows unterscheidet Groß- und Kleinschreibung nicht; die Oberfläche
+	// bekommt Pfade aus Ablage, Dialog und Ordnerüberwachung und schreibt sie
+	// nicht überall gleich.
+	request := RunRequest{
+		Files:      []string{testFileA},
+		Quality:    qualityAuto,
+		MeasuredCQ: map[string]int{testFileAOtherCase: 28},
+	}
+	cq, ok := measuredCQFor(request, testFileA)
+	if !ok || cq != 28 {
+		t.Errorf("Pfad mit anderer Schreibweise nicht erkannt: cq=%d ok=%v", cq, ok)
 	}
 }

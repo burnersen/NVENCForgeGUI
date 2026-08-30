@@ -122,4 +122,58 @@ gui.showConverter(ableConverter);
 gui.afterQueueChange(area);
 check("and usable again on 1.30  ", element("btn-convert-cqcheck").disabled, false);
 
-finish("cq");
+
+console.log("\n=== a measured CQ is reused instead of measured again ===");
+// The whole point of the check: the search costs about half a minute per file,
+// and paying for it twice for the same answer is waste.
+gui.showConverter(ableConverter);
+area.queue = [{ path: FILE, name: "Film.mkv", sizeMB: 2000 }];
+gui.afterQueueChange(area);
+gui.start("convert", "cq");
+gui.onConverterEvent({ ev: "file", index: 1, total: 1, name: "Film.mkv", path: FILE, slot: 1 });
+gui.onConverterEvent({ ev: "cq", index: 1, cq: 28, vmaf: 96.6, target: 96.5, note: "verified", slot: 1 });
+gui.onConverterEvent({
+  ev: "result", index: 1, status: "skipped", name: "Film.mkv",
+  in_mb: 2000, out_mb: 2000, saved_mb: 0, saved_pct: 0, slot: 1
+});
+gui.finishArea(area);
+
+calls.runs.length = 0;
+gui.start("convert");
+const reuseRun = calls.runs[calls.runs.length - 1];
+check("the CQ travels with the run", reuseRun && reuseRun.measuredCQ && reuseRun.measuredCQ[FILE], 28);
+check("and stays visible in the list", area.queue[0].cq, 28);
+
+console.log("\n=== changed picture settings throw the value away ===");
+// A CQ measured at 1080p says nothing about the same film at original size.
+// Reusing it would encode at the wrong quality without a word.
+area.queue = [{ path: FILE, name: "Film.mkv", sizeMB: 2000 }];
+gui.afterQueueChange(area);
+gui.start("convert", "cq");
+gui.onConverterEvent({ ev: "file", index: 1, total: 1, name: "Film.mkv", path: FILE, slot: 1 });
+gui.onConverterEvent({ ev: "cq", index: 1, cq: 28, vmaf: 96.6, target: 96.5, note: "verified", slot: 1 });
+gui.finishArea(area);
+element("opt-resolution").value = "original";
+calls.runs.length = 0;
+gui.start("convert");
+const changedRun = calls.runs[calls.runs.length - 1];
+check("no CQ is carried over     ", changedRun && changedRun.measuredCQ === undefined, true);
+element("opt-resolution").value = "downscale";
+
+console.log("\n=== a fixed CQ beats the measurement ===");
+// The user typed a number. That decision is theirs, not the search's.
+area.queue = [{ path: FILE, name: "Film.mkv", sizeMB: 2000 }];
+gui.afterQueueChange(area);
+gui.start("convert", "cq");
+gui.onConverterEvent({ ev: "file", index: 1, total: 1, name: "Film.mkv", path: FILE, slot: 1 });
+gui.onConverterEvent({ ev: "cq", index: 1, cq: 28, vmaf: 96.6, target: 96.5, note: "verified", slot: 1 });
+gui.finishArea(area);
+element("opt-quality").value = "fixed";
+element("opt-cq").value = "22";
+calls.runs.length = 0;
+gui.start("convert");
+const fixedRun = calls.runs[calls.runs.length - 1];
+check("the typed value wins      ", fixedRun && fixedRun.measuredCQ === undefined, true);
+element("opt-quality").value = "auto";
+
+finish("cq-reuse");
