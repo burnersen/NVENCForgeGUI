@@ -637,6 +637,9 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
                black bars would be cut - the only way to check a cut, since the
                converted file can no longer show what was removed from it. -->
           <button class="btn" id="btn-convert-cropcheck">Check black bars</button>
+          <!-- Converts nothing either. It runs the quality search and writes
+               the CQ it would use onto each file in the list above. -->
+          <button class="btn" id="btn-convert-cqcheck">Check quality (CQ)</button>
           <button class="btn danger" id="btn-convert-stop" disabled>Stop cleanly</button>
           <span class="hint" style="margin:0" id="convert-stop-hint"></span>
           <div class="spacer"></div>
@@ -1296,6 +1299,7 @@ const state = {
   eventChannel: false,
   converterFound: false,
   cropCapable: false,  // the converter knows -crop (NVENCForge 1.21.0 and up)
+  cqCheckCapable: false, // the converter knows -cqcheck and the "cq" event (1.30.0 and up)
   optionsSeeded: false, // the controls were filled from the INI once already
   forceDownload: false,  // set after a download was held back on purpose
   config: null,          // values read out of NVENCForge_Config.ini, null = not read (yet)
@@ -1901,6 +1905,9 @@ function updateButtons() {
     if (name === "convert") {
       $("btn-convert-cropcheck").disabled =
         area.running || !areaHasWork(area) || !state.converterFound || !state.cropCapable;
+      // Die Qualitätsprüfung braucht dasselbe, nur eine andere Fähigkeit der exe.
+      $("btn-convert-cqcheck").disabled =
+        area.running || !areaHasWork(area) || !state.converterFound || !state.cqCheckCapable;
     }
     el(area, "stop-hint").textContent = area.stopping
       ? "Stopping — click again to quit immediately."
@@ -2050,6 +2057,12 @@ function startBatch(area, files) {
     entry.finished = false;
     entry.status = "";
     entry.note = "queued";
+    // Ein gemessener CQ gehört zu genau EINEM Lauf. Bliebe er stehen, zeigte
+    // die Liste beim nächsten Mal einen Wert aus einer anderen Einstellung —
+    // schlimmer als gar keiner, weil er richtig aussieht.
+    delete entry.cq;
+    delete entry.cqVMAF;
+    delete entry.cqNote;
   });
   renderList(area);
 }
@@ -2374,6 +2387,43 @@ function onStage(event) {
   lane.stage = STAGE_TEXT[event.stage] || event.stage;
   renderLanes();
 }
+
+// onCQ takes the result of the quality search and writes it onto the file it
+// belongs to, so the list itself answers "what did it settle on?" — without
+// anybody having to read the log.
+//
+// The value comes as its own event, not scraped out of the log line. That line
+// was rewritten in converter 1.30.0; a reader of it would have broken silently.
+function onCQ(event) {
+  const area = areaOfSlot(event.slot);
+  const lane = slotState(event.slot || 1);
+  const entry = area.byIndex[laneKey(event.slot, event.index)] || lane.entry;
+  if (!entry) return;
+  entry.cq = event.cq;
+  entry.cqVMAF = event.vmaf;
+  entry.cqNote = event.note || "";
+  // Shown right away: on a check run this IS the result, and on a normal run
+  // it explains the minute the analysis just took.
+  entry.note = cqLabel(entry, true);
+  renderList(area);
+}
+
+// cqLabel is the short form for the list.
+//
+// withScore decides how much of it is worth the space. Where the measurement
+// IS the answer — a check run, or while the search has just finished — the
+// score belongs beside the number, because a CQ on its own says nothing: the
+// same value means different things on different material. Next to a finished
+// encode the saving is the headline and the CQ only explains it, so the score
+// would push the useful part off the line.
+function cqLabel(entry, withScore) {
+  if (entry.cq === undefined) return "";
+  let text = "CQ " + entry.cq;
+  if (withScore && typeof entry.cqVMAF === "number") {
+    text += " · VMAF " + entry.cqVMAF.toFixed(1);
+  }
+  return text;
+}
 function onProgress(event) {
   const area = areaOfSlot(event.slot);
   const lane = slotState(event.slot || 1);
@@ -2395,6 +2445,20 @@ const RESULT_TEXT = {
   failed: () => "failed",
   preview: () => "stopped — preview kept"
 };
+// resultNote setzt die Zeile zusammen, die in der Liste hinter der Datei steht.
+// Wurde die Qualität gemessen, gehört sie dazu: bei einem Prüflauf IST sie das
+// Ergebnis, sonst erklärt sie, womit der Encode gerechnet hat.
+function resultNote(entry, event) {
+  let text = (RESULT_TEXT[event.status] || (() => event.status))(event);
+  if (event.message) text += " (" + event.message + ")";
+  if (entry.cq === undefined) return text;
+  // Übersprungen und trotzdem gemessen heißt: das war der Prüflauf. Dort ist
+  // "skipped" die unwichtigste Auskunft von allen — und die Messung zählt
+  // samt ihrem Wert.
+  if (event.status === "skipped") return cqLabel(entry, true);
+  return text + " · " + cqLabel(entry, false);
+}
+
 function onResult(event) {
   const area = areaOfSlot(event.slot);
   const lane = slotState(event.slot || 1);
@@ -2403,8 +2467,7 @@ function onResult(event) {
   const entry = area.byIndex[laneKey(event.slot, event.index)] || lane.entry;
   if (entry) {
     entry.status = event.status;
-    entry.note = (RESULT_TEXT[event.status] || (() => event.status))(event);
-    if (event.message) entry.note += " (" + event.message + ")";
+    entry.note = resultNote(entry, event);
     // Done is done, whatever the outcome: the overall bar must never fall back
     // because a converter closed and its file dropped out of the sum.
     entry.finished = true;
@@ -2868,6 +2931,7 @@ function onConverterEvent(event) {
     case "run": onRunStart(event); break;
     case "file": onFileStart(event); break;
     case "stage": onStage(event); break;
+    case "cq": onCQ(event); break;
     case "progress": onProgress(event); break;
     case "result": onResult(event); break;
     case "question": onQuestion(event); break;
@@ -3051,6 +3115,7 @@ function showConverter(status) {
   state.converterFound = status.found;
   state.eventChannel = status.eventChannel;
   state.cropCapable = !!status.autoCrop;
+  state.cqCheckCapable = !!status.cqCheck;
   applyCropCapability();
   const dot = $("exe-dot");
   const text = $("exe-text");
@@ -4519,23 +4584,38 @@ function applyCropCapability() {
 // picture of the proposed cut and converts nothing. It goes through here rather
 // than through a path of its own so the queue, the progress lanes and the stop
 // button keep behaving exactly as they do for a normal run.
-async function start(areaName, cropCheckOnly) {
+// start runs an area. checkMode picks one of the two look-only runs:
+// "crop" writes the black-bar pictures, "cq" reports the quality search.
+// Left out, it is a real run. A name rather than a flag, because there are two
+// of them now and "start(name, true, false)" tells nobody which is which.
+async function start(areaName, checkMode) {
   const area = areaOf(areaName);
   showError("", area.name);
   const request = collectRequest(area);
-  if (cropCheckOnly) {
+  if (checkMode === "crop") {
     request.crop = "check";
     // A check must never switch the machine off: nothing was converted, and
     // the whole point is that somebody looks at the pictures afterwards.
     request.shutdown = false;
+  }
+  if (checkMode === "cq") {
+    request.quality = "check";
+    // Same reasoning as above — and here somebody wants to read the numbers.
+    request.shutdown = false;
+    // A black-bar check alongside would win in the converter and the quality
+    // search would never run. The window must not send that combination.
+    if (request.crop === "check") request.crop = "";
   }
   // Cleared once for the whole batch — not on every "run" event, since with
   // several converters each one sends its own and would wipe out the others.
   resetProgress(area);
   startBatch(area, request.files);
   area.parallel = request.parallel;
-  if (cropCheckOnly) {
+  if (checkMode === "crop") {
     note("Checking for black bars — writing one picture per file next to the source, converting nothing.", area.name);
+  }
+  if (checkMode === "cq") {
+    note("Checking quality — the CQ each file would get appears in the list above. Nothing is converted.", area.name);
   }
   try {
     await api().StartRun(request);
@@ -4643,7 +4723,8 @@ function wire() {
     $("btn-" + name + "-stop").onclick = () => stop(name);
     // Only Convert has the black-bar check: it is the page where you pick the
     // files you are unsure about. Split and Join do not re-encode at all.
-    if (name === "convert") $("btn-convert-cropcheck").onclick = () => start(name, true);
+    if (name === "convert") $("btn-convert-cropcheck").onclick = () => start(name, "crop");
+    if (name === "convert") $("btn-convert-cqcheck").onclick = () => start(name, "cq");
     $("btn-" + name + "-log-copy").onclick = () => copyAreaLog(area);
     $("btn-" + name + "-log-clear").onclick = () => {
       el(area, "logbox").innerHTML = "";

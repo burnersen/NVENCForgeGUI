@@ -38,7 +38,7 @@ console.log("\n=== the check button looks, it does not cut ===");
 element("opt-crop").checked = false;
 element("opt-shutdown").checked = true;
 calls.runs.length = 0;
-gui.start("convert", true);
+gui.start("convert", "crop");
 const checkRun = calls.runs[calls.runs.length - 1];
 check("the run asks for a check  ", checkRun && checkRun.crop, "check");
 check("and never for a cut       ", checkRun && checkRun.crop === "on", false);

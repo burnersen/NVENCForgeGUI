@@ -46,6 +46,12 @@ const (
 	qualityOff          = "off"
 	qualityFixed        = "fixed"
 
+	// qualityCheck ist der Prüflauf: die Suche läuft, meldet den CQ, den sie
+	// nehmen würde, und konvertiert nichts. Er steht hier bei der Qualität und
+	// nicht als eigener Schalter, weil er dieselbe Frage anders beantwortet —
+	// und weil ein fester CQ daneben keinen Sinn ergäbe.
+	qualityCheck = "check"
+
 	// Auto-Crop: "on" schneidet schwarze Balken weg, "check" schaut nur nach
 	// und legt ein Kontrollbild neben die Quelle, ohne etwas zu konvertieren.
 	cropOn    = "on"
@@ -248,6 +254,14 @@ func buildConverterArgs(request RunRequest, eventChannel bool) ([]string, error)
 	if len(request.Files) == 0 {
 		return nil, fmt.Errorf("runargs.go: buildConverterArgs: the queue is empty")
 	}
+	// Zwei Prüfläufe zusammen ergeben keinen Sinn, und der Konverter würde
+	// stillschweigend den Balken-Prüflauf gewinnen lassen: der steigt früher
+	// aus, die Qualitätssuche käme nie dran. Lieber hier eine klare Meldung als
+	// dort ein Ergebnis, auf das niemand gewartet hat.
+	if request.Quality == qualityCheck && request.Crop == cropCheck {
+		return nil, fmt.Errorf(
+			"runargs.go: buildConverterArgs: check the quality or check the black bars, not both in one run")
+	}
 
 	var args []string
 	if eventChannel {
@@ -384,6 +398,9 @@ func buildQualityArgs(request RunRequest) ([]string, error) {
 		return []string{"-autocq"}, nil
 	case qualityOff:
 		return []string{"-noautocq"}, nil
+	case qualityCheck:
+		// "-cqcheck" schaltet die Suche selbst ein, "-autocq" wäre doppelt.
+		return []string{"-cqcheck"}, nil
 	case qualityFixed:
 		upperBound := maxCQH265
 		if request.Codec == codecAV1 {

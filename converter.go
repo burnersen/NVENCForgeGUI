@@ -60,6 +60,13 @@ const (
 	// kommt in keinem anderen Schalter und in keinem Hilfetext als Teilwort vor.
 	baseSettingsMarker = "-downscale"
 
+	// cqCheckFlagMarker zeigt an, dass die exe den Prüflauf der Qualitätssuche
+	// kennt (ab NVENCForge 1.30.0) und dazu das Ereignis "cq" schickt, aus dem
+	// die Liste ihren Wert nimmt. Beides kam zusammen dazu, also reicht ein
+	// Marker. Geprüft wird am Schalter, nicht am Ereignisnamen: "cq" allein
+	// steckt in zu vielen Wörtern.
+	cqCheckFlagMarker = "-cqcheck"
+
 	downloadTimeout = 10 * time.Minute
 	apiTimeout      = 30 * time.Second
 )
@@ -74,6 +81,7 @@ type ConverterStatus struct {
 	AutoCrop      bool   `json:"autoCrop"`
 	GuardFlags    bool   `json:"guardFlags"`
 	BaseSettings  bool   `json:"baseSettings"`
+	CQCheck       bool   `json:"cqCheck"`
 	ToolsDir      string `json:"toolsDir"`
 	FFmpegPresent bool   `json:"ffmpegPresent"`
 	Note          string `json:"note"`
@@ -175,6 +183,9 @@ func converterStatus() ConverterStatus {
 	}
 	if hasBase, baseErr := fileContainsMarker(path, baseSettingsMarker); baseErr == nil && hasBase {
 		status.BaseSettings = true
+	}
+	if hasCQCheck, cqErr := fileContainsMarker(path, cqCheckFlagMarker); cqErr == nil && hasCQCheck {
+		status.CQCheck = true
 	}
 	return status
 }
