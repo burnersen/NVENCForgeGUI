@@ -21,6 +21,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 )
 
@@ -75,6 +76,7 @@ const (
 // job ist ein Auftrag, der auf einen freien Platz wartet.
 type job struct {
 	label string   // was in der Warteschlange angezeigt wird (Dateiname)
+	key   string   // voller Pfad der Quelldatei; leer bei Werkzeug-Läufen
 	args  []string // die vollständige Befehlszeile für genau diesen Auftrag
 	area  string   // aus welchem Bereich er kommt (areaConvert / areaWatch)
 }
@@ -232,6 +234,49 @@ func clampSlots(limit int) int {
 		return maxConvertSlots
 	}
 	return limit
+}
+
+// DropPending nimmt einen Auftrag aus der Warteschlange, der noch nicht
+// angefangen hat.
+//
+// Das Fenster braucht diesen Weg für das ✕ neben einer Datei: dort steht nur
+// eine Anzeige-Liste, die eigentliche Warteschlange liegt hier. Ohne diesen
+// Aufruf würde eine gestrichene Datei trotzdem konvertiert — das ✕ sähe aus
+// wie ein Abbruch und wäre keiner.
+//
+// Eine bereits laufende Datei ist ausdrücklich nicht gemeint: die wird über
+// StopSlot abgebrochen. Der Rückgabewert sagt, ob wirklich etwas entfernt
+// wurde, damit das Fenster eine Datei nicht aus seiner Liste nimmt, die hier
+// längst läuft.
+//
+// Pfade werden ohne Rücksicht auf Groß- und Kleinschreibung verglichen:
+// Windows sieht "C:\Film.mkv" und "c:\film.mkv" als dieselbe Datei, und das
+// Fenster hält es genauso.
+func (d *Dispatcher) DropPending(area, key string) bool {
+	if key == "" {
+		return false
+	}
+
+	d.mu.Lock()
+	found := -1
+	for index, waiting := range d.pending {
+		if waiting.area == area && strings.EqualFold(waiting.key, key) {
+			found = index
+			break
+		}
+	}
+	if found >= 0 {
+		d.pending = append(d.pending[:found], d.pending[found+1:]...)
+	}
+	d.mu.Unlock()
+
+	if found < 0 {
+		return false
+	}
+	// Die Platzanzeige zählt Wartende mit — ohne diese Meldung stünde dort
+	// weiter eine Datei, die es nicht mehr gibt.
+	d.announceQueue()
+	return true
 }
 
 // knownArea weist einen vertippten Bereich ab, statt ihn still als

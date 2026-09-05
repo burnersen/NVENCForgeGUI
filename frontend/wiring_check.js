@@ -75,7 +75,7 @@ console.log("\nEvery area owns the elements its own code reaches for");
 for (const [area, has] of Object.entries(AREAS)) {
   // The display each area needs whatever it does: its own log and its own
   // progress area, with a running total under it.
-  const roles = ["logbox", "autoscroll", "log-copied", "error", "summary", "lanes"];
+  const roles = ["logbox", "log-copied", "error", "summary", "lanes"];
   const buttons = ["log-copy", "log-clear"];
   if (has.runs) {
     roles.push("stop-hint");

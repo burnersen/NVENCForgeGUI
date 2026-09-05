@@ -94,7 +94,7 @@ gui.finishArea(area);
 check("the file is still there   ", area.queue.length, 1);
 check("and still shows its CQ    ", area.queue[0].note, "CQ 30 · VMAF 92.2");
 
-console.log("\n=== a real run still tidies up after itself ===");
+console.log("\n=== a real run keeps its list too, result and all ===");
 gui.start("convert");
 gui.onConverterEvent({ ev: "file", index: 1, total: 1, name: "Film.mkv", path: FILE, slot: 1 });
 gui.onConverterEvent({
@@ -102,7 +102,8 @@ gui.onConverterEvent({
   in_mb: 263, out_mb: 100, saved_mb: 163, saved_pct: 62, slot: 1
 });
 gui.finishArea(area);
-check("the list is cleared       ", area.queue.length, 0);
+check("the list stays           ", area.queue.length, 1);
+check("and carries the new size  ", area.queue[0].outMB, 100);
 
 console.log("\n=== a new run clears the old number ===");
 area.queue = [{ path: FILE, name: "Film.mkv", sizeMB: 2000 }];

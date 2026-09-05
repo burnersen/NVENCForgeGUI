@@ -86,10 +86,11 @@ console.log("\n=== every tick box is connected or read ===");
 // wird. Ungelesen UND ohne Handler ist es hingegen reine Zierde.
 const script = html.slice(html.lastIndexOf("<script>"));
 const boxes = controlsOfKind("input").filter((c) => /type="checkbox"/.test(c.attrs));
-// Gesucht wird auch nach dem KURZNAMEN ohne Bereich: Die vier Protokoll-Kästchen
-// heißen "convert-autoscroll" bis "watch-autoscroll" und werden über
-// el(area, "autoscroll") angesprochen — eine Suche nach dem vollen Namen fände
-// sie nie und würde vier heile Kästchen als tot melden.
+// Gesucht wird auch nach dem KURZNAMEN ohne Bereich: Ein Kästchen, das über
+// el(area, "…") angesprochen wird, steht im Skript nie unter seinem vollen
+// Namen — eine Suche nur nach der ganzen id würde es als tot melden. Das traf
+// früher die vier "Follow"-Kästchen; die gibt es seit dem Mitrollen mit
+// Ruhepause nicht mehr, die Regel bleibt als Vorsorge.
 const shortName = (id) => id.replace(/^(convert|split|join|watch)-/, "");
 const idleBoxes = boxes.filter((b) => !hasHandler(b.id)
   && !script.includes('"' + b.id + '"')

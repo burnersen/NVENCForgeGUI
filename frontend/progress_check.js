@@ -137,9 +137,13 @@ gui.areaOf("split").stopping = false;
 check("split stayed in its area  ", Object.keys(gui.areaOf("split").slots).join(","), "5");
 check("join stayed in its area   ", Object.keys(gui.areaOf("join").slots).join(","), "6");
 
-console.log("\n=== a finished run clears its own list ===");
-// A list left standing after a finished run is an invitation to press Start
-// again and convert the lot a second time.
+console.log("\n=== a finished run KEEPS the list on the convert page ===");
+// Sie ist danach das Einzige, was Datei für Datei sagt, was dabei
+// herausgekommen ist — Ausgangsgröße, Endgröße, gewählter CQ. Weggeräumt
+// wird sie erst durch neue Dateien oder den Leeren-Knopf.
+//
+// Zerlegen und Zusammenfügen räumen weiter auf: dort wäre ein zweiter Start
+// eine Datei ein zweites Mal zerlegt — geprüft wird das gleich darunter.
 const idleAreas = () => ({
   convert: { active: 0, pending: 0, limit: 2 },
   split: { active: 0, pending: 0, limit: 1 },
@@ -164,7 +168,7 @@ const allDone = [
   { path: "C:\\a.mkv", name: "a.mkv", sizeMB: 10, status: "success", note: "done", finished: true },
   { path: "C:\\b.mkv", name: "b.mkv", sizeMB: 10, status: "success", note: "done", finished: true }
 ];
-check("a clean run empties the list ", afterRun(allDone.map((e) => Object.assign({}, e))), 0);
+check("a clean run keeps the list  ", afterRun(allDone.map((e) => Object.assign({}, e))), 2);
 // The result itself has to survive - otherwise nobody can see what happened.
 contains("the summary stays           ", element("convert-summary").textContent, "converted");
 

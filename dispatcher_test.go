@@ -604,3 +604,54 @@ func TestEveryAreaHasItsOwnSlot(t *testing.T) {
 		}
 	}
 }
+
+// TestDropPendingTakesOneFileOutOfTheQueue: Das ✕ neben einer Datei muss sie
+// WIRKLICH aus der Warteschlange nehmen. Im Fenster steht nur eine Anzeige;
+// verschwände dort bloß die Zeile, würde die Datei trotzdem umgewandelt — ein
+// Abbruch, der keiner ist.
+//
+// Die Warteschlange wird hier von Hand gefüllt statt über Submit: Submit
+// startet sofort, und ob die dritte Datei im Moment des Streichens noch wartet
+// oder schon läuft, wäre ein Rennen gegen die Uhr statt einer Prüfung.
+func TestDropPendingTakesOneFileOutOfTheQueue(t *testing.T) {
+	dispatcher := NewDispatcher(func(string, ...any) {})
+	// filepath.Join baut echte Windows-Pfade, ohne dass hier ein einziger
+	// Trenner von Hand geschrieben werden muss.
+	fileA := filepath.Join("X:", "filme", "a.mkv")
+	fileB := filepath.Join("X:", "filme", "b.mkv")
+	watched := filepath.Join("Y:", "eingang", "a.mkv")
+	dispatcher.pending = []job{
+		{label: "a.mkv", key: fileA, area: areaConvert},
+		{label: "b.mkv", key: fileB, area: areaConvert},
+		{label: "a.mkv", key: watched, area: areaWatch},
+	}
+
+	if dispatcher.DropPending(areaConvert, "") {
+		t.Error("ein leerer Schlüssel darf nichts streichen")
+	}
+	if dispatcher.DropPending(areaConvert, filepath.Join("X:", "filme", "gibtesnicht.mkv")) {
+		t.Error("eine unbekannte Datei wurde als gestrichen gemeldet")
+	}
+	// Windows sieht Groß- und Kleinschreibung nicht, das Fenster auch nicht:
+	// eine Datei, die der Nutzer sieht, muss sich streichen lassen — egal, wie
+	// der Pfad geschrieben ist.
+	if !dispatcher.DropPending(areaConvert, strings.ToUpper(fileB)) {
+		t.Error("die wartende Datei wurde nicht gestrichen")
+	}
+	if pending := dispatcher.QueueStatus().Areas[areaConvert].Pending; pending != 1 {
+		t.Errorf("nach dem Streichen warten %d Aufträge im Umwandeln, erwartet 1", pending)
+	}
+	// Der beobachtete Ordner hat eine Datei GLEICHEN NAMENS. Sie darf nicht
+	// mitgestrichen werden: die Bereiche führen getrennte Warteschlangen.
+	if pending := dispatcher.QueueStatus().Areas[areaWatch].Pending; pending != 1 {
+		t.Errorf("der beobachtete Ordner verlor seinen Auftrag (%d statt 1)", pending)
+	}
+	if dispatcher.DropPending(areaConvert, watched) {
+		t.Error("ein Auftrag aus einem anderen Bereich wurde gestrichen")
+	}
+	// Zweimal streichen ist kein Fehler, aber auch kein zweiter Erfolg: Das
+	// Fenster darf daran erkennen, dass es zu spät war.
+	if dispatcher.DropPending(areaConvert, fileB) {
+		t.Error("dieselbe Datei ließ sich zweimal streichen")
+	}
+}

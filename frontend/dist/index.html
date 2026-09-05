@@ -209,6 +209,7 @@ details > .notes { margin-top: 6px; }
 .item .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .item .sub { color: var(--muted); font-size: 11.5px; }
 .item .size { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12.5px; }
+.item .size-after { color: var(--ok); font-weight: 600; }
 .item .state { font-size: 12px; font-weight: 600; }
 .state.success { color: var(--ok); } .state.skipped { color: var(--muted); }
 .state.processed { color: var(--muted); }
@@ -656,7 +657,6 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
         <div class="row" style="margin-top:8px">
           <button class="btn" id="btn-convert-log-copy">Copy log</button>
           <button class="btn" id="btn-convert-log-clear">Clear log</button>
-          <label class="check"><input type="checkbox" id="convert-autoscroll" checked /> Follow</label>
           <span class="hint" id="convert-log-copied" style="margin:0"></span>
         </div>
       </section>
@@ -751,7 +751,6 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
         <div class="row" style="margin-top:8px">
           <button class="btn" id="btn-split-log-copy">Copy log</button>
           <button class="btn" id="btn-split-log-clear">Clear log</button>
-          <label class="check"><input type="checkbox" id="split-autoscroll" checked /> Follow</label>
           <span class="hint" id="split-log-copied" style="margin:0"></span>
         </div>
       </section>
@@ -829,7 +828,6 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
         <div class="row" style="margin-top:8px">
           <button class="btn" id="btn-join-log-copy">Copy log</button>
           <button class="btn" id="btn-join-log-clear">Clear log</button>
-          <label class="check"><input type="checkbox" id="join-autoscroll" checked /> Follow</label>
           <span class="hint" id="join-log-copied" style="margin:0"></span>
         </div>
       </section>
@@ -981,7 +979,6 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
         <div class="row" style="margin-top:8px">
           <button class="btn" id="btn-watch-log-copy">Copy log</button>
           <button class="btn" id="btn-watch-log-clear" title="Clears the log, the running total and the folder path">Clear</button>
-          <label class="check"><input type="checkbox" id="watch-autoscroll" checked /> Follow</label>
           <span class="hint" id="watch-log-copied" style="margin:0"></span>
         </div>
       </section>
@@ -1476,7 +1473,10 @@ function log(line) {
   }
   box.appendChild(row);
   while (box.childElementCount > MAX_LOG_LINES) box.removeChild(box.firstChild);
-  if (el(area, "autoscroll").checked) box.scrollTop = box.scrollHeight;
+  // Der Kasten wird hier beobachtet und nicht beim Aufbau der Seite: das
+  // Protokoll ist das erste, was ihn überhaupt füllt.
+  watchScrolling(box);
+  followLog(box);
 }
 
 // note is what the window itself has to say, never the converter. Without an
@@ -1489,12 +1489,102 @@ function note(text, areaName) {
 // page happens to be on show at the time.
 function watchNote(text) { note(text, "watch"); }
 
+/* ---------- Mitrollen ----------
+   Jede Liste und jedes Protokoll folgt von selbst dem, was gerade passiert —
+   hört aber sofort auf, sobald jemand selbst darin rollt, und nimmt den Faden
+   erst nach einer Ruhepause wieder auf.
+
+   Warum kein Kästchen mehr: Das alte "Follow" musste vor dem Nachsehen aus-
+   und danach wieder eingeschaltet werden. Wer das vergaß, wurde beim Lesen
+   ständig ans Ende gerissen — oder sah nie wieder, wo der Konverter steht.
+   Die Pause erledigt beides ohne Bedienung.
+
+   Gemessen wird an ECHTEN Eingaben (Rad, Rollbalken, Tasten, Finger), nicht
+   am "scroll"-Ereignis: das löst das Mitrollen selbst aus und würde sich
+   damit selbst anhalten. */
+const FOLLOW_PAUSE_MS = 20000;
+const scrollTouched = new WeakMap(); // Rollkasten -> wann zuletzt selbst bewegt
+
+// watchScrolling hängt sich einmalig an einen Rollkasten. Mehrfaches Aufrufen
+// ist ausdrücklich erlaubt: die Listen werden bei jedem Ereignis neu gebaut,
+// der Kasten selbst bleibt aber derselbe.
+function watchScrolling(box) {
+  if (!box || scrollTouched.has(box)) return;
+  scrollTouched.set(box, 0);
+  const touched = () => scrollTouched.set(box, Date.now());
+  box.addEventListener("wheel", touched, { passive: true });
+  box.addEventListener("touchstart", touched, { passive: true });
+  box.addEventListener("pointerdown", touched);
+  box.addEventListener("keydown", touched);
+}
+
+// followsNow: darf dieser Kasten gerade von selbst rollen?
+function followsNow(box) {
+  if (!box) return false;
+  return Date.now() - (scrollTouched.get(box) || 0) >= FOLLOW_PAUSE_MS;
+}
+
+// followLog hält das Protokoll am unteren Ende.
+function followLog(box) {
+  if (followsNow(box)) box.scrollTop = box.scrollHeight;
+}
+
+// followQueueBox holt die laufende Zeile ins Sichtfeld — und zwar in die
+// Mitte, damit auch die nächsten Dateien schon zu sehen sind. Steht sie
+// ohnehin im Bild, bleibt alles, wo es ist: ein Sprung ohne Anlass wäre
+// unruhiger als gar keiner.
+function followQueueBox(box) {
+  if (!box || !followsNow(box)) return;
+  // Laufen mehrere Konverter, gibt es mehrere aktive Zeilen. querySelector
+  // nimmt die erste im Dokument, also die oberste — von dort aus sind die
+  // übrigen mit im Bild.
+  const row = box.querySelector(".item.active");
+  if (!row) return;
+  // Gemessen wird über die tatsächliche Lage im Bild, NICHT über offsetTop.
+  // offsetTop zählt ab dem nächsten positionierten Vorfahren — und der ist
+  // hier nicht der Listenkasten, weil .filelist keine position hat. Die
+  // Liste sprang deshalb zwar, aber weit an der laufenden Datei vorbei
+  // (vom Nutzer am 05.09.2026 gemeldet). Diese Rechnung hängt an gar keiner
+  // CSS-Eigenschaft und bleibt auch dann richtig, wenn jemand das Aussehen
+  // der Liste ändert.
+  const boxBox = box.getBoundingClientRect();
+  const rowBox = row.getBoundingClientRect();
+  const top = rowBox.top - boxBox.top + box.scrollTop;
+  const height = rowBox.height || row.offsetHeight || 0;
+  if (top >= box.scrollTop && top + height <= box.scrollTop + box.clientHeight) return;
+  box.scrollTop = Math.max(0, top - (box.clientHeight - height) / 2);
+}
+
+// listBoxOf liefert den Rollkasten mit den Dateien — die Warteschlange, wo es
+// eine gibt, sonst die Liste der Join-Seite. Der beobachtete Ordner hat keine.
+function listBoxOf(area) {
+  if (area.hasQueue) return el(area, "queue");
+  if (area.name === "join") return $("join-list");
+  return null;
+}
+
+// followEverything ist der ruhige Takt im Hintergrund. Ohne ihn hinge der
+// Rücksprung daran, dass zufällig gerade ein Ereignis eintrifft: Wer eine
+// Minute lang in Ruhe die Ersparnisse durchsieht, bekäme sonst nie wieder den
+// Anschluss an die laufende Datei.
+function followEverything() {
+  AREA_NAMES.forEach((name) => {
+    const area = areaOf(name);
+    followQueueBox(listBoxOf(area));
+    followLog(el(area, "logbox"));
+  });
+}
+
 /* ---------- queue rendering ----------
    Converting and taking apart each have a list of their own. That the same
    file has to be dropped into both to do both is meant: one area converting
    while the other takes files apart is the whole point of the separation. */
 function renderQueue(area) {
   const box = el(area, "queue");
+  // Die Rollstellung überlebt den Neuaufbau. Ohne das fiele die Liste bei
+  // jedem Ereignis an den Anfang zurück, und wer nachsehen will, welche Datei
+  // wie viel gespart hat, würde beim Lesen ständig weggerissen.
+  const keptScroll = box.scrollTop;
   box.innerHTML = "";
   area.queue.forEach((entry, index) => {
     const row = document.createElement("div");
@@ -1516,6 +1606,15 @@ function renderQueue(area) {
     const size = document.createElement("div");
     size.className = "size";
     size.textContent = fmtMB(entry.sizeMB);
+    // Vorher und Nachher in einer Spalte, sobald das Ergebnis da ist. Genau
+    // dafür bleibt die Liste nach dem Lauf stehen: beim Durchrollen steht
+    // untereinander, welche Datei sich gelohnt hat.
+    if (entry.outMB > 0) {
+      const after = document.createElement("span");
+      after.className = "size-after";
+      after.textContent = " → " + fmtMB(entry.outMB);
+      size.appendChild(after);
+    }
 
     const status = document.createElement("div");
     status.className = "state " + (entry.status || "");
@@ -1524,13 +1623,65 @@ function renderQueue(area) {
     const remove = document.createElement("button");
     remove.className = "x";
     remove.textContent = "✕";
-    remove.title = "Remove from queue";
-    remove.disabled = area.running;
-    remove.onclick = () => { area.queue.splice(index, 1); afterQueueChange(area); };
+    // Die Datei, die gerade umgewandelt wird, ist nicht wegzuklicken: sie ist
+    // längst beim Konverter. Dafür gibt es den Stopp-Knopf.
+    const busyNow = entry.status === "running";
+    remove.disabled = busyNow;
+    remove.title = busyNow
+      ? "Being converted right now — use Stop for this one"
+      : "Remove from queue";
+    remove.onclick = () => removeFromQueue(area, entry);
 
     row.append(idx, name, size, status, remove);
     box.appendChild(row);
   });
+  watchScrolling(box);
+  box.scrollTop = keptScroll;
+  followQueueBox(box);
+}
+
+// removeFromQueue nimmt eine Datei aus der Liste — und zwar wirklich.
+//
+// Während eines Laufs ist die Liste im Fenster nur eine Anzeige: die
+// Warteschlange, die abgearbeitet wird, liegt im Go-Teil (dispatcher.go). Eine
+// Zeile hier zu löschen würde die Datei trotzdem umwandeln — das ✕ sähe aus
+// wie ein Abbruch und wäre keiner. Deshalb wird sie dort zuerst abgemeldet,
+// und die Zeile verschwindet nur, wenn das gelungen ist.
+async function removeFromQueue(area, entry) {
+  // Die laufende Datei bleibt, wo sie ist. Das ✕ ist für sie zwar gesperrt,
+  // aber die Sperre sitzt in der Anzeige — hier steht sie noch einmal, damit
+  // kein späterer Aufrufer die Datei still aus der Liste nimmt, während der
+  // Konverter an ihr arbeitet.
+  if (entry.status === "running") {
+    note(entry.name + " is being converted right now — use Stop for that one.", area.name);
+    return;
+  }
+  const waitingInRun = area.running
+    && area.batch
+    && area.batch.has(entry.path.toLowerCase())
+    && !entry.finished
+    && entry.status !== "running";
+  if (waitingInRun) {
+    let dropped = false;
+    try {
+      dropped = await api().DropPendingFile(area.name, entry.path);
+    } catch (err) {
+      showError(String(err), area.name);
+      return;
+    }
+    if (!dropped) {
+      // Zwischen Klick und Antwort kann ein Platz frei geworden sein. Dann
+      // läuft die Datei schon, und die Zeile bleibt stehen, statt eine
+      // Streichung vorzutäuschen, die nichts bewirkt hat.
+      note(entry.name + ": too late to take out — it has already started. Use Stop for it.", area.name);
+      return;
+    }
+    note(entry.name + " taken out of the running batch.", area.name);
+  }
+  const at = area.queue.indexOf(entry);
+  if (at < 0) return;
+  area.queue.splice(at, 1);
+  afterQueueChange(area);
 }
 function afterQueueChange(area) {
   area.totalMB = area.queue.reduce((sum, e) => sum + (e.sizeMB || 0), 0);
@@ -1542,6 +1693,15 @@ function afterQueueChange(area) {
 }
 function addItems(items, area) {
   if (!items || !items.length) return;
+  // Neue Dateien fangen einen neuen Stapel an: was der vorige Lauf hinterlassen
+  // hat, macht ihnen Platz. Sonst stünde die alte Bilanz zwischen den frischen
+  // Dateien, und der Start liefe über Quellen, die längst im originals-Ordner
+  // liegen.
+  //
+  // Nur wenn gerade nichts läuft: Wer während eines Stapels nachlegt, will
+  // nachlegen — und nicht die Warteschlange leeren, die gerade abgearbeitet
+  // wird.
+  if (!area.running) dropFinishedEntries(area);
   const known = new Set(area.queue.map((e) => e.path.toLowerCase()));
   let added = 0;
   for (const item of items) {
@@ -1552,6 +1712,21 @@ function addItems(items, area) {
   }
   if (added > 0) note(added + " file(s) added to the list.", area.name);
   afterQueueChange(area);
+}
+
+// dropFinishedEntries räumt die Zeilen eines abgeschlossenen Laufs weg und
+// lässt stehen, was noch nie an der Reihe war — nachgelegte Dateien, die nie
+// gestartet wurden, gehen dabei also nicht verloren.
+function dropFinishedEntries(area) {
+  const before = area.queue.length;
+  area.queue = area.queue.filter((entry) => !entry.finished);
+  if (area.queue.length === before) return;
+  // Die Zuordnung "Platz und Dateinummer -> Zeile" gehört zu genau einem Lauf.
+  // Bliebe sie stehen, schriebe das erste Ereignis des nächsten Laufs seinen
+  // Fortschritt in eine Zeile von vorgestern.
+  area.byIndex = {};
+  area.batch = null;
+  note("Earlier results cleared to make room — what they did stays in the log.", area.name);
 }
 function findEntry(path, area) {
   if (!path) return null;
@@ -1723,6 +1898,9 @@ function joinGroupHead(group) {
 
 function renderJoin() {
   const box = $("join-list");
+  // Wie bei der Warteschlange: die Rollstellung überlebt den Neuaufbau,
+  // sonst springt die Liste bei jedem Ereignis an den Anfang zurück.
+  const keptScroll = box.scrollTop;
   box.innerHTML = "";
   joinGroups().forEach((group) => {
     const runs = joinGroupRuns(group);
@@ -1732,6 +1910,9 @@ function renderJoin() {
     box.appendChild(head);
     group.files.forEach((file) => box.appendChild(joinRow(file, runs)));
   });
+  watchScrolling(box);
+  box.scrollTop = keptScroll;
+  followQueueBox(box);
 }
 
 // renderJoinResult says what the run will produce. It deliberately does NOT
@@ -2527,6 +2708,12 @@ function onResult(event) {
   if (entry) {
     entry.status = event.status;
     entry.note = resultNote(entry, event);
+    // Die Endgröße gehört in die Zeile, nicht nur ins Protokoll: nach dem
+    // Lauf bleibt die Liste stehen, und dort ist "was ist daraus geworden"
+    // die eigentliche Frage. Nur bei einem echten Ergebnis — ein
+    // Fehlschlag hat keine Ausgabedatei, und eine 0 sähe aus wie ein
+    // Erfolg von sagenhafter Größe.
+    if (event.out_mb > 0) entry.outMB = event.out_mb;
     // Done is done, whatever the outcome: the overall bar must never fall back
     // because a converter closed and its file dropped out of the sum.
     entry.finished = true;
@@ -3110,17 +3297,24 @@ function finishArea(area) {
   // The INI is written by NVENCForge itself, so on a fresh installation it
   // only exists from the first run onwards — read it again now.
   refreshConfig();
-  // A list left standing after a finished run is an invitation to press Start
-  // again and do everything a second time. It is cleared away — but only when
-  // the run really went through, because after a stop or a failure the list is
-  // the one place that still says which file it was.
+  // Die Liste des Umwandelns bleibt jetzt IMMER stehen. Sie ist nach dem Lauf
+  // das Einzige, was Datei für Datei sagt, was dabei herausgekommen ist —
+  // Ausgangsgröße, Endgröße, gewählter CQ. Weggeräumt wird sie erst, wenn neue
+  // Dateien hineinkommen (siehe addItems) oder auf den Leeren-Knopf.
   //
-  // A check run is the exception, and not a small one: nothing was converted,
-  // so there is nothing to do twice — and the list is where the answer IS. The
-  // CQ next to each file would be gone the moment it arrived. It goes away on
-  // the Clear button, or with the next real run.
+  // Zerlegen und Zusammenfügen räumen weiter auf, und das mit Absicht: dort
+  // wäre ein zweiter Start kein zweites Umwandeln, sondern eine Datei ein
+  // zweites Mal zerlegt — und die Liste stehen zu lassen wäre die Einladung
+  // dazu. Beim Umwandeln fängt eine Liste, die stehen bleibt, keinen Schaden:
+  // die Quelldateien liegen danach im originals-Ordner, und die neuen Dateien
+  // räumen sie ohnehin weg.
+  //
+  // Nach einem Abbruch oder Fehlschlag bleibt sie überall stehen: dann ist sie
+  // die einzige Stelle, die noch sagt, um welche Datei es ging.
   if (area.checkRun) {
     note("List kept — nothing was converted, and the answer is in it. Clear it when you are done.", area.name);
+  } else if (area.name === "convert") {
+    note("List kept — scroll through it to see what each file saved. New files you drop in take its place, or use Clear.", area.name);
   } else if (runWentThroughCleanly(area)) {
     clearFinishedList(area);
   }
@@ -5050,6 +5244,12 @@ async function boot() {
 
   wire();
   showPage("convert");
+  // Der ruhige Takt fürs Mitrollen. Er läuft, solange das Fenster offen ist,
+  // und tut in aller Regel nichts: Nur wenn ein Kasten seit zwanzig Sekunden
+  // unberührt ist UND die laufende Zeile aus dem Bild gerutscht ist, rollt er
+  // nach. Ohne ihn hinge der Rücksprung daran, dass zufällig gerade ein
+  // Ereignis eintrifft.
+  setInterval(followEverything, 2000);
   afterQueueChange(areaOf("convert"));
   afterQueueChange(areaOf("split"));
   afterJoinChange();

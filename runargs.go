@@ -224,7 +224,7 @@ func buildJobs(request RunRequest, eventChannel bool) ([]job, error) {
 		if err != nil {
 			return nil, err
 		}
-		jobs = append(jobs, job{label: filepath.Base(file), args: args})
+		jobs = append(jobs, job{label: filepath.Base(file), key: file, args: args})
 	}
 	return jobs, nil
 }

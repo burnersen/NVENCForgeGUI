@@ -20,6 +20,31 @@ function fakeElement(id) {
     id, textContent: "", innerHTML: "", value: "", checked: false, hidden: false,
     className: "", disabled: false, max: 0, placeholder: "", style: {}, dataset: {},
     children: [], scrollTop: 0, scrollHeight: 0,
+    // Rollmaße: ein Kasten im Fake hat keine Größe, also stehen sie hier als
+    // echte Zahlen. Ohne sie rechnete das Mitrollen mit Stand-ins und käme auf
+    // NaN — die Prüfung sähe grün aus und hätte nichts geprüft.
+    offsetTop: 0, offsetHeight: 0, clientHeight: 0,
+    // rectTop ist die Lage im Bild, die eine Prüfung stellen kann.
+    // getBoundingClientRect gibt sie zurück, statt einen Stand-in zu
+    // liefern: mit einer Funktion darin würde jede Rechnung zu NaN, und die
+    // Prüfung sähe grün aus, ohne etwas geprüft zu haben.
+    rectTop: 0,
+    getBoundingClientRect() {
+      const top = store.rectTop || 0;
+      const height = store.offsetHeight || 0;
+      return { top, height, bottom: top + height, left: 0, right: 0, width: 0 };
+    },
+    // querySelector sucht wirklich, statt einen Stand-in zurückzugeben: ob das
+    // Mitrollen die LAUFENDE Zeile findet, ist genau die Frage. Gesucht wird
+    // nach Klassen (".item.active"), mehr braucht das Fenster hier nicht.
+    querySelector(selector) {
+      const wanted = String(selector).split(".").filter(Boolean);
+      const hit = store.children.find((child) => {
+        const classes = String((child && child.className) || "").split(" ");
+        return wanted.every((cls) => classes.includes(cls));
+      });
+      return hit || null;
+    },
     classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
     // Taking lines back is counted: that is how a check can see whether a
     // redraw really deleted something — the log's own way of overwriting
@@ -53,7 +78,17 @@ function fakeElement(id) {
   };
   return new Proxy(store, {
     get: (target, prop) => (prop in target ? target[prop] : () => fakeElement("child")),
-    set: (target, prop, value) => { target[prop] = value; return true; }
+    set: (target, prop, value) => {
+      target[prop] = value;
+      // Ein geleerter Kasten verliert im Browser seine Rollstellung und
+      // seine Kinder. Ohne das hier sähe eine Prüfung, die genau das
+      // absichern soll, einen Schaden nie: der Wert bliebe einfach stehen.
+      if (prop === "innerHTML" && value === "") {
+        target.children = [];
+        target.scrollTop = 0;
+      }
+      return true;
+    }
   });
 }
 
@@ -105,7 +140,11 @@ function loadGui() {
   // Everything the window would hand to the Go side is recorded instead. That
   // is how a check can see WHICH answer a button really sends — the one thing
   // that decides whether the user gets the tracks they picked.
-  const calls = { answers: [], answerSlots: [], runs: [], joinSorts: [], stops: [], srtSaves: [], themes: [], clipboard: [], savingsResets: [], frame: [], profileSaves: [], profileDeletes: [], opened: [], shutdownWishes: [], shutdownCancels: [], updateChecks: [], updateInstalls: [], settingSaves: [], profileApplies: [] };
+  const calls = { answers: [], answerSlots: [], runs: [], joinSorts: [], stops: [], srtSaves: [], themes: [], clipboard: [], savingsResets: [], frame: [], profileSaves: [], profileDeletes: [], opened: [], shutdownWishes: [], shutdownCancels: [], updateChecks: [], updateInstalls: [], settingSaves: [], profileApplies: [], drops: [] };
+  // Was die Go-Seite auf DropPendingFile antworten soll. Standard: die Datei
+  // wartete noch und wurde gestrichen. Auf false gestellt heißt: zu spät, sie
+  // läuft schon — der Fall, in dem die Zeile stehen bleiben MUSS.
+  let dropReply = true;
   // Was die Go-Seite zum Selbst-Update antworten soll; je Prüfung gesetzt. Ein
   // Error steht für "der Aufruf scheitert" — der Fall, in dem das Fenster
   // seinen Knopf sonst für immer gesperrt ließe.
@@ -154,6 +193,10 @@ function loadGui() {
           // abbrechen darf den beobachteten Ordner nicht mitreißen.
           StopArea(area) { calls.stops.push(area); return Promise.resolve(); },
           StopSlot(slot) { calls.stops.push(slot); return Promise.resolve(); },
+          DropPendingFile(area, path) {
+            calls.drops.push({ area, path });
+            return Promise.resolve(dropReply);
+          },
           SortJoinFiles(paths) { calls.joinSorts.push(paths); return Promise.resolve(joinReply); },
           PickJoinFiles() { return Promise.resolve(joinReply); },
           StartWatching(folder) { return Promise.resolve({ watching: true, folder }); },
@@ -261,7 +304,8 @@ function loadGui() {
     " loadSRTCleaner, renderSRTCleaner, addSRTPhrase, saveSRTPhrases, srtSignature," +
     " joinMode, applyJoinMode, JOIN_MODES, showAbout, openLink, LINKS, loadProfiles, renderProfiles, chooseProfile, saveProfile, deleteProfile, applyProfile, profileFromOptions, profileNamed, applyTheme, chooseTheme, THEMES," +
     " splitMode, applySplitMode, SPLIT_MODES," +
-    " areaOf, areaOfSlot, areaNameOfSlot, anyRunning, addItems, afterQueueChange," +
+    " areaOf, areaOfSlot, areaNameOfSlot, anyRunning, addItems, afterQueueChange, dropFinishedEntries, removeFromQueue," +
+    " watchScrolling, followsNow, followLog, followQueueBox, followEverything, listBoxOf, FOLLOW_PAUSE_MS," +
     " AREA_NAMES, AREA_SLOTS, finishArea, clearLanes, renderList, showFinalSummary, el," +
     " showSavings, resetSavings, applySettingsFilter, settingMatches, sectionId, onRunState," +
     " setShutdownWish, onShutdownState, cancelShutdown, showShutdownAlert," +
@@ -279,6 +323,8 @@ function loadGui() {
     element: (id) => documentStub.getElementById(id),
     // setQueryAll stellt die Ticks, die askSelection einsammelt.
     setQueryAll: (selector, list) => selectorLists.set(selector, list),
+    // setDropReply legt fest, ob eine Datei noch aus der Warteschlange kam.
+    setDropReply: (ok) => { dropReply = ok; },
     // setJoinReply legt fest, was die Go-Seite auf SortJoinFiles antworten soll.
     setJoinReply: (files) => { joinReply = files; },
     // setSRTReply legt fest, was die Go-Seite auf GetSRTCleaner antworten soll.

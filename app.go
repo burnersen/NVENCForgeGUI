@@ -666,6 +666,19 @@ func (a *App) GetQueueStatus() QueueState {
 	return a.dispatcher.QueueStatus()
 }
 
+// DropPendingFile streicht eine wartende Datei aus dem laufenden Stapel.
+//
+// Das ✕ neben einer Datei entfernt sie im Fenster nur aus einer Anzeige. Die
+// Warteschlange, die wirklich abgearbeitet wird, liegt im Dispatcher — erst
+// dieser Aufruf macht aus dem ✕ eine echte Streichung.
+//
+// Falsch heißt: die Datei war dort nicht (mehr) zu finden, weil sie gerade
+// läuft oder schon fertig ist. Das Fenster lässt sie dann stehen, statt eine
+// Streichung vorzutäuschen, die nichts bewirkt hat.
+func (a *App) DropPendingFile(area, path string) bool {
+	return a.dispatcher.DropPending(areaOf(area), path)
+}
+
 // StartRun reiht die Arbeit ein und startet, was auf die freien Plätze passt.
 func (a *App) StartRun(request RunRequest) error {
 	status := converterStatus()
