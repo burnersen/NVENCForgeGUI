@@ -6,9 +6,11 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -105,5 +107,34 @@ func TestParseGPUQuery(t *testing.T) {
 	empty := parseGPUQuery("\n\n")
 	if empty.Detected || empty.Note == "" {
 		t.Errorf("an empty answer must be reported honestly: %+v", empty)
+	}
+}
+
+// TestPrimeConverterCleansUpAndSurvivesAMissingExe deckt die beiden Zusagen
+// ab, die der Anstoß nach dem Einspielen macht: Er hinterlässt keinen Müll im
+// Temp-Verzeichnis, und ein fehlgeschlagener Start bleibt folgenlos — sonst
+// würde ein gelungenes Update an einer Nebensache scheitern.
+func TestPrimeConverterCleansUpAndSurvivesAMissingExe(t *testing.T) {
+	countPrimeDirs := func() int {
+		entries, err := os.ReadDir(os.TempDir())
+		if err != nil {
+			t.Fatalf("temp directory not readable: %v", err)
+		}
+		found := 0
+		for _, e := range entries {
+			if e.IsDir() && strings.HasPrefix(e.Name(), "NVENCForgeGUI_prime_") {
+				found++
+			}
+		}
+		return found
+	}
+
+	before := countPrimeDirs()
+	// Ein Pfad, unter dem garantiert nichts liegt: Der Start scheitert, und
+	// genau das darf weder einen Absturz auslösen noch einen Ordner liegen
+	// lassen.
+	primeConverter(context.Background(), filepath.Join(t.TempDir(), "does-not-exist.exe"))
+	if after := countPrimeDirs(); after != before {
+		t.Errorf("work directory was left behind: %d prime folders before, %d after", before, after)
 	}
 }

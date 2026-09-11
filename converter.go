@@ -18,8 +18,10 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -468,10 +470,69 @@ func downloadConverter(ctx context.Context, force bool, report func(done, total 
 		_ = err
 	}
 
+	// Die frisch eingespielte Fassung einmal kurz anstoßen, damit sie ihre
+	// Konfigurationsdatei auf den eigenen Stand bringt. Ohne das passiert es
+	// erst bei der nächsten Konvertierung — und bis dahin kennt dieses Fenster
+	// neue Einstellungen nicht, kann sie also weder zeigen noch anbieten.
+	primeConverter(ctx, targetPath)
+
 	result.Replaced = true
 	result.Status = converterStatus()
 	result.Message = "NVENCForge " + release.TagName + " installed."
 	return result, nil
+}
+
+// primeTimeout begrenzt den Anstoß nach dem Einspielen. Gemessen braucht ein
+// Leerlauf des Konverters etwa eine halbe Sekunde; eine halbe Minute ist also
+// weit jenseits von allem Normalen und dient nur dazu, dass ein hängender
+// Prozess nicht ewig im Hintergrund steht.
+const primeTimeout = 30 * time.Second
+
+// primeConverter startet die eben eingespielte exe einmal kurz, damit sie ihre
+// Konfigurationsdatei auf den Stand der neuen Ausgabe bringt.
+//
+// Warum das nötig ist: Der Konverter trägt fehlende Einstellungen beim START
+// nach, nicht beim Einspielen. Ohne diesen Anstoß erschiene ein neuer
+// Schlüssel erst nach der nächsten Konvertierung — dieses Fenster baut seine
+// Einstellungsseite aber aus genau dieser Datei und kann bis dahin nichts
+// davon anbieten. (Die exe sonst NICHT zu starten ist Absicht, siehe
+// versionFileName weiter oben; eine bloße Anzeige rechtfertigt das nicht, eine
+// unvollständige Einstellungsseite schon.)
+//
+// Zwei Vorkehrungen machen den Start harmlos:
+//
+//   - Das Arbeitsverzeichnis ist ein leerer, eigens angelegter Ordner. Ohne
+//     Dateiargumente sucht der Konverter dort nach Videos und findet
+//     zwangsläufig keine — selbst ein versehentlich im tools-Ordner
+//     abgelegtes Video kann so nicht angerührt werden. Seine INI findet er
+//     trotzdem, die sucht er immer neben der eigenen Programmdatei.
+//   - "-json" schaltet den Datenkanal ein. In diesem Modus wartet der
+//     Konverter am Ende NICHT auf einen Tastendruck, sondern beendet sich
+//     selbst. Dass die eingespielte Datei den Modus kennt, steht schon fest:
+//     wouldLoseEventChannel hat vorher danach gesucht.
+//
+// Fehler bleiben bewusst folgenlos. Klappt der Anstoß nicht, gilt wieder das
+// bisherige Verhalten — die Einstellungen kommen dann beim nächsten echten
+// Lauf dazu. Das Update deswegen als gescheitert zu melden, wäre falsch: die
+// Programmdatei liegt richtig.
+func primeConverter(ctx context.Context, exePath string) {
+	workDir, err := os.MkdirTemp("", "NVENCForgeGUI_prime_")
+	if err != nil {
+		return
+	}
+	defer os.RemoveAll(workDir)
+
+	runCtx, cancel := context.WithTimeout(ctx, primeTimeout)
+	defer cancel()
+
+	command := exec.CommandContext(runCtx, exePath, jsonFlagMarker)
+	command.Dir = workDir
+	// Wie bei der GPU-Abfrage: ein kurzer Hilfsaufruf, der kein Abbruchsignal
+	// von hier empfangen muss — hier ist CREATE_NO_WINDOW also erlaubt und
+	// hält das schwarze Fenster zuverlässig fern (anders als beim echten Lauf,
+	// siehe wincon.go).
+	command.SysProcAttr = &syscall.SysProcAttr{CreationFlags: winCreateNoWindow}
+	_ = command.Run()
 }
 
 // wouldLoseEventChannel prüft, ob das Einspielen ein Rückschritt wäre.
