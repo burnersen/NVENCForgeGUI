@@ -4971,6 +4971,11 @@ async function download() {
     if (result.replaced) {
       state.forceDownload = false;
       showConverter(result.status);
+      // Die eingespielte Fassung hat ihre INI beim Anstoßen bereits ergänzt
+      // (primeConverter auf der Go-Seite). Jetzt neu lesen, sonst zeigt die
+      // Einstellungsseite weiter den Stand der alten Version — und neue
+      // Einstellungen wären da, aber unsichtbar und nicht einstellbar.
+      refreshConfig();
     } else {
       state.forceDownload = true;
       button.textContent = "install " + (result.tag || "it") + " anyway";

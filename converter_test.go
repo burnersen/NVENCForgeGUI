@@ -122,7 +122,7 @@ func TestPrimeConverterCleansUpAndSurvivesAMissingExe(t *testing.T) {
 		}
 		found := 0
 		for _, e := range entries {
-			if e.IsDir() && strings.HasPrefix(e.Name(), "NVENCForgeGUI_prime_") {
+			if e.IsDir() && strings.HasPrefix(e.Name(), "NVENCForgeGUI_idle_") {
 				found++
 			}
 		}
@@ -135,6 +135,6 @@ func TestPrimeConverterCleansUpAndSurvivesAMissingExe(t *testing.T) {
 	// lassen.
 	primeConverter(context.Background(), filepath.Join(t.TempDir(), "does-not-exist.exe"))
 	if after := countPrimeDirs(); after != before {
-		t.Errorf("work directory was left behind: %d prime folders before, %d after", before, after)
+		t.Errorf("work directory was left behind: %d idle folders before, %d after", before, after)
 	}
 }

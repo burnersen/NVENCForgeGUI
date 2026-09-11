@@ -5,8 +5,10 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -52,5 +54,40 @@ func TestNeedsSetupSeesAMissingIni(t *testing.T) {
 func TestRunSetupRefusesWithoutConverter(t *testing.T) {
 	if err := runSetup(ConverterStatus{Found: false}, func(string) {}); err == nil {
 		t.Error("ohne NVENCForge.exe muss runSetup einen Fehler melden")
+	}
+}
+
+// TestRunConverterIdleReportsAFailedStartAndCleansUp deckt den Protokoll-Zweig
+// des gemeinsamen Anstoßweges ab: Lässt sich das Programm nicht starten, muss
+// das als Fehler zurückkommen (die Erstausstattung entscheidet daran, ob sie
+// gescheitert ist) und der angelegte Arbeitsordner darf nicht liegenbleiben.
+func TestRunConverterIdleReportsAFailedStartAndCleansUp(t *testing.T) {
+	countIdleDirs := func() int {
+		entries, err := os.ReadDir(os.TempDir())
+		if err != nil {
+			t.Fatalf("temp directory not readable: %v", err)
+		}
+		found := 0
+		for _, e := range entries {
+			if e.IsDir() && strings.HasPrefix(e.Name(), "NVENCForgeGUI_idle_") {
+				found++
+			}
+		}
+		return found
+	}
+
+	before := countIdleDirs()
+	lines := 0
+	err := runConverterIdle(context.Background(),
+		filepath.Join(t.TempDir(), "does-not-exist.exe"),
+		func(string) { lines++ })
+	if err == nil {
+		t.Error("a converter that cannot be started must be reported as an error")
+	}
+	if lines != 0 {
+		t.Errorf("nothing can be logged from a process that never ran, got %d lines", lines)
+	}
+	if after := countIdleDirs(); after != before {
+		t.Errorf("work directory was left behind: %d idle folders before, %d after", before, after)
 	}
 }

@@ -140,7 +140,7 @@ function loadGui() {
   // Everything the window would hand to the Go side is recorded instead. That
   // is how a check can see WHICH answer a button really sends — the one thing
   // that decides whether the user gets the tracks they picked.
-  const calls = { answers: [], answerSlots: [], runs: [], joinSorts: [], stops: [], srtSaves: [], themes: [], clipboard: [], savingsResets: [], frame: [], profileSaves: [], profileDeletes: [], opened: [], shutdownWishes: [], shutdownCancels: [], updateChecks: [], updateInstalls: [], settingSaves: [], profileApplies: [], drops: [] };
+  const calls = { answers: [], answerSlots: [], runs: [], joinSorts: [], stops: [], srtSaves: [], themes: [], clipboard: [], savingsResets: [], frame: [], profileSaves: [], profileDeletes: [], opened: [], shutdownWishes: [], shutdownCancels: [], updateChecks: [], updateInstalls: [], settingSaves: [], profileApplies: [], drops: [], converterDownloads: [], configViews: [] };
   // Was die Go-Seite auf DropPendingFile antworten soll. Standard: die Datei
   // wartete noch und wurde gestrichen. Auf false gestellt heißt: zu spät, sie
   // läuft schon — der Fall, in dem die Zeile stehen bleiben MUSS.
@@ -148,6 +148,17 @@ function loadGui() {
   // Was die Go-Seite zum Selbst-Update antworten soll; je Prüfung gesetzt. Ein
   // Error steht für "der Aufruf scheitert" — der Fall, in dem das Fenster
   // seinen Knopf sonst für immer gesperrt ließe.
+  // Was die Go-Seite auf DownloadConverter antworten soll. Standard: die neue
+  // Fassung wurde eingespielt — der Fall, in dem das Fenster hinterher alles
+  // auffrischen muss.
+  let downloadReply = {
+    replaced: true, tag: "v1.32.1", message: "NVENCForge v1.32.1 installed.",
+    status: {
+      found: true, version: "1.32.1", eventChannel: true, autoCrop: true,
+      cqCheck: true, ffmpegPresent: true, toolsDir: "X:\tools",
+      path: "X:\tools\NVENCForge.exe"
+    }
+  };
   let updateCheckReply = { newer: false, current: "1.1.0", latest: "v1.1.0", note: "This is the newest release (v1.1.0)." };
   let updateInstallReply = { installed: true, restarting: true, version: "v1.2.0", message: "installed." };
   // Was die Go-Seite über das Ausschalten antworten soll. Sie führt den Stand,
@@ -214,7 +225,15 @@ function loadGui() {
           // GENAU DAS die Frage — landet der richtige Schlüssel mit dem
           // richtigen Wert in der Datei, und wird nichts geschrieben, was die
           // Datei gar nicht kennt?
-          GetConfigView() { return Promise.resolve(configReply); },
+          // Mitgezählt, weil das Fenster die INI nach jedem Anlass neu lesen
+          // MUSS, der sie verändert haben kann — sonst zeigt die
+          // Einstellungsseite den Stand von vorhin.
+          DownloadConverter(force) {
+            calls.converterDownloads.push(force);
+            if (downloadReply instanceof Error) return Promise.reject(downloadReply);
+            return Promise.resolve(downloadReply);
+          },
+          GetConfigView() { calls.configViews.push(true); return Promise.resolve(configReply); },
           GetSettingsFile() { return Promise.resolve(settingsFileReply); },
           SaveSettings(values) {
             calls.settingSaves.push(values);
@@ -309,7 +328,7 @@ function loadGui() {
     " AREA_NAMES, AREA_SLOTS, finishArea, clearLanes, renderList, showFinalSummary, el," +
     " showSavings, resetSavings, applySettingsFilter, settingMatches, sectionId, onRunState," +
     " setShutdownWish, onShutdownState, cancelShutdown, showShutdownAlert," +
-    " checkUpdate, installUpdate," +
+    " checkUpdate, installUpdate, download," +
     " INI_MIRROR, seedOptionsFromConfig, rememberOption, rememberCQ, rememberBitrate, saveOneSetting,"
     + " noteCodecReach, afterOptionsChanged," +
     " settingsSnapshot, ensureSettingsFile, applyProfileSettings, noteShutdownFromConfig, refreshConfig };"
@@ -339,6 +358,8 @@ function loadGui() {
     setProfiles: (list) => { profileList = list.slice(); },
     // setUpdateCheckReply legt fest, was CheckForUpdate antworten soll.
     setUpdateCheckReply: (answer) => { updateCheckReply = answer; },
+    // setDownloadReply legt fest, was DownloadConverter antworten soll.
+    setDownloadReply: (answer) => { downloadReply = answer; },
     // setUpdateInstallReply legt fest, was InstallUpdate antworten soll.
     setUpdateInstallReply: (answer) => { updateInstallReply = answer; }
   };
