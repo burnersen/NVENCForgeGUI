@@ -311,7 +311,7 @@ function loadGui() {
 
   const exported = new Function(
     "window", "document",
-    scriptText + "\n;return { wire, onConverterEvent, state, applyConfig, refreshFromConfig, bitrateCapKey, HELP," +
+    scriptText + "\n;return { wire, onConverterEvent, state, applyConfig, refreshFromConfig, HELP," +
     " settingModel, looksInvalid, settingHelp, editSetting, revertSetting, restoreDefaults," +
     " changedValues, defaultFor, noteGPUAdvice, renderSettings, showPage, log, note," +
     " onQuestion, sendAnswer, askSelection, isExtraOption, isToolRun, collectRequest, resetProgress," +
@@ -329,7 +329,7 @@ function loadGui() {
     " showSavings, resetSavings, applySettingsFilter, settingMatches, sectionId, onRunState," +
     " setShutdownWish, onShutdownState, cancelShutdown, showShutdownAlert," +
     " checkUpdate, installUpdate, download," +
-    " INI_MIRROR, seedOptionsFromConfig, rememberOption, rememberCQ, rememberBitrate, saveOneSetting,"
+    " INI_MIRROR, seedOptionsFromConfig, rememberOption, rememberCQ, saveOneSetting,"
     + " noteCodecReach, afterOptionsChanged," +
     " settingsSnapshot, ensureSettingsFile, applyProfileSettings, noteShutdownFromConfig, refreshConfig };"
   )(windowStub, documentStub);

@@ -110,14 +110,10 @@ func TestConfigViewReadsTheRealFile(t *testing.T) {
 	}
 
 	values := map[string]int{
-		"maxResolution":         view.MaxResolution,
-		"maxBitrate1080p":       view.MaxBitrate1080p,
-		"maxBitrateOriginal":    view.MaxBitrateOriginal,
-		"av1MaxBitrate1080p":    view.AV1MaxBitrate1080p,
-		"av1MaxBitrateOriginal": view.AV1MaxBitrateOriginal,
-		"targetCQ":              view.TargetCQ,
-		"av1TargetCQ":           view.AV1TargetCQ,
-		"autoCQTargetVMAF":      view.AutoCQTargetVMAF,
+		"maxResolution":    view.MaxResolution,
+		"targetCQ":         view.TargetCQ,
+		"av1TargetCQ":      view.AV1TargetCQ,
+		"autoCQTargetVMAF": view.AutoCQTargetVMAF,
 	}
 	for key, value := range values {
 		if value <= 0 {
@@ -126,12 +122,6 @@ func TestConfigViewReadsTheRealFile(t *testing.T) {
 	}
 	if !view.AutoCQKnown {
 		t.Errorf("autoCQ was not read from %s", view.Path)
-	}
-	// Die Deckel für Originalauflösung müssen höher liegen als die verkleinerten
-	// — darauf beruht der Hinweis im Fenster.
-	if view.MaxBitrateOriginal <= view.MaxBitrate1080p {
-		t.Errorf("the original-size cap (%d) should be above the downscaled one (%d)",
-			view.MaxBitrateOriginal, view.MaxBitrate1080p)
 	}
 }
 

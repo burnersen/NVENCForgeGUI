@@ -26,8 +26,6 @@ const fullConfig = {
   found: true,
   path: "X:\\tools\\NVENCForge_Config.ini",
   maxResolution: 1080,
-  maxBitrate1080p: 8000, maxBitrateOriginal: 22000,
-  av1MaxBitrate1080p: 6000, av1MaxBitrateOriginal: 13000,
   targetCQ: 26, av1TargetCQ: 32, autoCQTargetVMAF: 97,
   autoCQ: true, autoCQKnown: true,
   retireMode: "folder",
@@ -120,7 +118,6 @@ function resetConvertPage() {
   element("opt-bitdepth").value = "10";
   element("opt-quality").value = "auto";
   element("opt-cq").value = "26";
-  element("opt-bitrate").value = "";
   element("opt-parallel").value = "1";
   element("opt-keep").checked = false;
   element("opt-crop").checked = false;
@@ -170,11 +167,13 @@ async function main() {
   check("fixed quality            ", run.quality, "fixed");
   check("  the CQ itself          ", run.fixedCQ, 30);
 
-  run = await pressStart(() => { element("opt-bitrate").value = "9000"; });
-  check("bitrate cap              ", run.maxBitrate, 9000);
+  // Bitraten-Deckel gibt es seit NVENCForge 2.0.0 nicht mehr — weder als Feld
+  // noch im Auftrag an den Konverter.
+  check("no bitrate field on screen", html.includes('id="opt-bitrate"') || html.includes('id="wopt-bitrate"'), false);
 
   run = await pressStart(() => { element("opt-keep").checked = true; });
   check("keep the original        ", run.keepSource, true);
+  check("  no bitrate cap sent    ", run.maxBitrate, undefined);
 
   run = await pressStart(() => { element("opt-crop").checked = true; });
   check("cut off black bars       ", run.crop, "on");
@@ -223,7 +222,6 @@ async function main() {
   element("wopt-audio").value = "copy";
   element("wopt-quality").value = "fixed";
   element("wopt-cq").value = "40";
-  element("wopt-bitrate").value = "7000";
   element("wopt-keep").checked = true;
   element("wopt-crop").checked = true;
   const watch = gui.collectWatchRequest(["X:\\watched.mkv"]);
@@ -235,7 +233,7 @@ async function main() {
   check("watch audio              ", watch.audio, "copy");
   check("watch quality            ", watch.quality, "fixed");
   check("watch CQ                 ", watch.fixedCQ, 40);
-  check("watch bitrate            ", watch.maxBitrate, 7000);
+  check("watch sends no bitrate cap", watch.maxBitrate, undefined);
   check("watch keep               ", watch.keepSource, true);
   check("watch crop               ", watch.crop, "on");
 

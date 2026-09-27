@@ -5,6 +5,7 @@
 package main
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -46,7 +47,6 @@ func TestEveryOptionReachesTheCommandLine(t *testing.T) {
 		BitDepth:   bitDepth8,
 		Quality:    qualityFixed,
 		FixedCQ:    40,
-		MaxBitrate: 9000,
 		KeepSource: true,
 		Crop:       cropOn,
 		Shutdown:   true,
@@ -58,7 +58,7 @@ func TestEveryOptionReachesTheCommandLine(t *testing.T) {
 	got := joined(args)
 	for _, expected := range []string{
 		"-json", "-av1", "-cpu", "-mp4", "-original", "-copyaudio", "-8bit",
-		"-cq 40", "-9000", "-keep", "-crop", "one.mkv two.mkv",
+		"-cq 40", "-keep", "-crop", "one.mkv two.mkv",
 	} {
 		if !strings.Contains(got, expected) {
 			t.Errorf("missing %q in %q", expected, got)
@@ -152,14 +152,21 @@ func TestFixedCQRangeDependsOnCodec(t *testing.T) {
 	}
 }
 
-func TestBitrateRange(t *testing.T) {
-	if _, err := buildConverterArgs(
-		RunRequest{Files: []string{"a.mkv"}, MaxBitrate: 5}, false); err == nil {
-		t.Error("a bitrate of 5 kbit/s must be refused")
+// TestOldBitrateFieldIsIgnored: bis 1.12.0 schickte das Fenster "maxBitrate"
+// mit, und der Konverter bekam daraus -NNNN. Bitraten-Deckel gibt es seit
+// NVENCForge 2.0.0 nicht mehr — ein Auftrag mit dem alten Feld darf keinen
+// solchen Schalter mehr erzeugen.
+func TestOldBitrateFieldIsIgnored(t *testing.T) {
+	var request RunRequest
+	if err := json.Unmarshal([]byte(`{"files":["a.mkv"],"maxBitrate":9000}`), &request); err != nil {
+		t.Fatalf("an old request must still be readable: %v", err)
 	}
-	if _, err := buildConverterArgs(
-		RunRequest{Files: []string{"a.mkv"}, MaxBitrate: 999999}, false); err == nil {
-		t.Error("a bitrate of 999999 kbit/s must be refused")
+	args, err := buildConverterArgs(request, false)
+	if err != nil {
+		t.Fatalf("buildConverterArgs: %v", err)
+	}
+	if strings.Contains(joined(args), "-9000") {
+		t.Errorf("a bitrate cap reached the command line: %q", joined(args))
 	}
 }
 
@@ -209,7 +216,6 @@ func TestModeRunCarriesNoConversionOptions(t *testing.T) {
 		Container:  containerMP4,
 		Quality:    qualityFixed,
 		FixedCQ:    28,
-		MaxBitrate: 8000,
 		KeepSource: true,
 		Crop:       cropOn,
 	}, false)

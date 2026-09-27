@@ -24,13 +24,13 @@ const settings = [
   { key: "retireMode", value: "folder", default: "folder", allowed: "folder, recyclebin",
     description: "What happens to the original.", group: "common", section: "" },
   { key: "targetCQ", value: "26", default: "26", allowed: "1 to 51",
-    description: "Fixed quality value for H.265.", group: "expert", section: "Quality and bitrate" },
-  { key: "maxBitrate1080p", value: "8000", default: "8000", allowed: "more than 1000",
-    description: "Upper bitrate limit.", group: "expert", section: "Quality and bitrate" },
+    description: "Fixed quality value for H.265.", group: "expert", section: "Quality" },
+  { key: "audioKbpsPerChannel", value: "96", default: "96", allowed: "more than 32",
+    description: "Audio quality per channel.", group: "expert", section: "Quality" },
   { key: "casStrength", value: "0", default: "0.4", allowed: "0.0 to 1.0",
-    description: "Sharpening strength.", group: "expert", section: "Quality and bitrate" },
-  { key: "autoCQTolerance", value: "0.5", default: "0.5", allowed: "0 to 5",
-    description: "How far below the target is acceptable.", group: "expert", section: "Automatic quality" },
+    description: "Sharpening strength.", group: "expert", section: "Quality" },
+  { key: "autoCQPlateauTolerance", value: "1.5", default: "1.5", allowed: "0 to 10",
+    description: "Extra savings allowance for sources already compressed hard.", group: "expert", section: "Automatic quality" },
   { key: "autoCQTargetVMAF", value: "96", default: "96", allowed: "70 to 99",
     description: "Quality the automatic search aims for.", group: "expert", section: "Automatic quality" },
   { key: "bFrames", value: "5", default: "5", allowed: "0 to 5",
@@ -69,13 +69,13 @@ check("  ends with the slowest      ", model("cpuPreset").choices[9], "placebo")
 check("targetCQ is a number         ", model("targetCQ").kind, "number");
 check("  lowest allowed             ", model("targetCQ").min, "1");
 check("  highest allowed            ", model("targetCQ").max, "51");
-check("'more than 1000' starts at   ", model("maxBitrate1080p").min, "1001");
-check("  and has no upper limit     ", model("maxBitrate1080p").max, "");
+check("'more than 32' starts at     ", model("audioKbpsPerChannel").min, "33");
+check("  and has no upper limit     ", model("audioKbpsPerChannel").max, "");
 check("free text stays free text    ", model("extraFilenameChars").kind, "text");
 
 console.log("\n=== whole numbers and decimals are told apart ===");
 check("bFrames counts in ones       ", model("bFrames").step, "1");
-check("autoCQTolerance in tenths    ", model("autoCQTolerance").step, "0.1");
+check("plateau tolerance in tenths  ", model("autoCQPlateauTolerance").step, "0.1");
 check("casStrength in tenths        ", model("casStrength").step, "0.1");
 check("autoCQTargetVMAF in tenths   ", model("autoCQTargetVMAF").step, "0.1");
 
@@ -160,7 +160,7 @@ const rowHidden = (key) => element("row-" + key).hidden;
 
 filter("cq");
 check("a CQ setting stays          ", rowHidden("targetCQ"), false);
-check("and the other one too       ", rowHidden("autoCQTolerance"), false);
+check("and the other one too       ", rowHidden("autoCQPlateauTolerance"), false);
 check("something else goes         ", rowHidden("gpuDecode"), true);
 contains("and it says how many       ", element("settings-filter-note").textContent, "of 13 shown");
 

@@ -44,9 +44,8 @@ const (
 
 	// Grenzen für Zahlen aus der Datei. Sie fangen einen von Hand verdorbenen
 	// Eintrag ab, bevor er als unsinnige Vorgabe im Fenster steht.
-	maxProfileCQ      = 63
-	maxProfileBitrate = 200000
-	maxProfileRuns    = 3
+	maxProfileCQ   = 63
+	maxProfileRuns = 3
 
 	// Grenzen für den INI-Abzug. Sie fangen eine von Hand verdorbene oder
 	// fremde Profildatei ab, bevor deren Inhalt in die Konfiguration wandert.
@@ -69,7 +68,6 @@ type Profile struct {
 	BitDepth   string `json:"bitDepth"`
 	Quality    string `json:"quality"`
 	FixedCQ    int    `json:"fixedCQ"`
-	MaxBitrate int    `json:"maxBitrate"`
 	KeepSource bool   `json:"keepSource"`
 	Parallel   int    `json:"parallel"`
 
@@ -84,7 +82,7 @@ type Profile struct {
 	//
 	// Ohne ihn deckte ein Profil nur die Auswahlfelder der Konvertieren-Seite
 	// ab — die Hälfte dessen, was einen Lauf ausmacht. Qualitätsziel,
-	// Bitraten-Deckel, Encoder-Regler, Schärfe: alles das steht in der INI und
+	// Mindestersparnis, Encoder-Regler, Schärfe: alles das steht in der INI und
 	// blieb beim Wechsel des Profils einfach stehen. Wer "Archiv" und "schnell"
 	// als Profile anlegt, meint aber genau diese Werte mit.
 	//
@@ -159,7 +157,6 @@ func sanitiseProfile(profile Profile) Profile {
 		profile.Name = strings.TrimSpace(profile.Name[:maxProfileNameLength])
 	}
 	profile.FixedCQ = clampInt(profile.FixedCQ, 0, maxProfileCQ)
-	profile.MaxBitrate = clampInt(profile.MaxBitrate, 0, maxProfileBitrate)
 	// 0 heißt hier nicht "null Läufe", sondern "stand nicht in der Datei".
 	if profile.Parallel == 0 {
 		profile.Parallel = 1

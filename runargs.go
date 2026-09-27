@@ -70,14 +70,6 @@ const (
 	maxCQAV1  = 63
 )
 
-// Grenzen für die Bitrate in kbit/s. Unten so tief, dass auch sehr sparsame
-// Vorgaben möglich bleiben; oben weit über allem, was sinnvoll ist — die
-// Zahl soll nur Tippfehler wie 800000 abfangen.
-const (
-	minBitrateKbps = 100
-	maxBitrateKbps = 200000
-)
-
 // Die beiden Wege, aus Einzeldateien wieder eine Datei zu machen. Sie brauchen
 // dieselbe Zusammenstellung, liefern aber Verschiedenes:
 //
@@ -130,7 +122,6 @@ type RunRequest struct {
 	Quality    string   `json:"quality"`    // "", "auto", "off" oder "fixed"
 	Crop       string   `json:"crop"`       // "", "on" oder "check"
 	FixedCQ    int      `json:"fixedCQ"`
-	MaxBitrate int      `json:"maxBitrate"` // 0 = Wert aus der INI
 	KeepSource bool     `json:"keepSource"`
 
 	// MeasuredCQ enthält die CQ-Werte, die ein vorangegangener Prüflauf für
@@ -420,14 +411,8 @@ func buildConverterArgs(request RunRequest, eventChannel bool) ([]string, error)
 	}
 	args = append(args, qualityArgs...)
 
-	if request.MaxBitrate != 0 {
-		if request.MaxBitrate < minBitrateKbps || request.MaxBitrate > maxBitrateKbps {
-			return nil, fmt.Errorf(
-				"runargs.go: buildConverterArgs: max bitrate must be between %d and %d kbit/s, got %d",
-				minBitrateKbps, maxBitrateKbps, request.MaxBitrate)
-		}
-		args = append(args, fmt.Sprintf("-%d", request.MaxBitrate))
-	}
+	// Einen Bitraten-Deckel (-NNNN) gibt es seit NVENCForge 2.0.0 nicht mehr:
+	// die Qualität regelt das VMAF-Ziel, die Größe minSavePercent in der INI.
 	if request.KeepSource {
 		args = append(args, "-keep")
 	} else if request.CounterFlags {

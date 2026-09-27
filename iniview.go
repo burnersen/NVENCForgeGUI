@@ -5,8 +5,8 @@
 // iniview.go — die INI des Konverters lesen, um sie ANZUZEIGEN.
 //
 // Geschrieben wird hier nichts. Das Fenster soll nur sagen können, was gerade
-// gilt: Welcher Bitraten-Deckel greift, auf welche Höhe wird verkleinert, ist
-// die automatische Qualitätssuche an. Ohne diese Werte müsste die Oberfläche
+// gilt: auf welche Höhe wird verkleinert, ist die automatische Qualitätssuche
+// an. Ohne diese Werte müsste die Oberfläche
 // Zahlen behaupten, die vielleicht gar nicht stimmen — und kein Bedienelement
 // darf lügen.
 //
@@ -35,15 +35,9 @@ type ConfigView struct {
 	Path  string `json:"path"`
 	Note  string `json:"note"`
 
+	// Bitraten-Deckel gibt es seit NVENCForge 2.0.0 nicht mehr: die Qualität
+	// regelt das VMAF-Ziel, die Größe minSavePercent.
 	MaxResolution int `json:"maxResolution"`
-
-	// Die vier Bitraten-Deckel. Welcher gilt, entscheidet der Konverter allein
-	// aus Codec und Auflösungs-Modus (main.go, parseArgs): verkleinert oder in
-	// Originalauflösung.
-	MaxBitrate1080p       int `json:"maxBitrate1080p"`
-	MaxBitrateOriginal    int `json:"maxBitrateOriginal"`
-	AV1MaxBitrate1080p    int `json:"av1MaxBitrate1080p"`
-	AV1MaxBitrateOriginal int `json:"av1MaxBitrateOriginal"`
 
 	TargetCQ         int `json:"targetCQ"`
 	AV1TargetCQ      int `json:"av1TargetCQ"`
@@ -138,10 +132,6 @@ func readConfigView() ConfigView {
 	entries := settingsByKey(parseSettings(string(content)))
 	view := ConfigView{Found: true, Path: path}
 	view.MaxResolution = intEntry(entries, "maxResolution")
-	view.MaxBitrate1080p = intEntry(entries, "maxBitrate1080p")
-	view.MaxBitrateOriginal = intEntry(entries, "maxBitrateOriginal")
-	view.AV1MaxBitrate1080p = intEntry(entries, "av1MaxBitrate1080p")
-	view.AV1MaxBitrateOriginal = intEntry(entries, "av1MaxBitrateOriginal")
 	view.TargetCQ = intEntry(entries, "targetCQ")
 	view.AV1TargetCQ = intEntry(entries, "av1TargetCQ")
 	view.AutoCQTargetVMAF = intEntry(entries, "autoCQTargetVMAF")
@@ -162,7 +152,7 @@ func readConfigView() ConfigView {
 
 // intEntry liefert eine Zahl oder 0, wenn der Schlüssel fehlt oder keine ist.
 // 0 heißt für alle hier gelesenen Werte "unbekannt": Weder eine Auflösung noch
-// ein Bitraten-Deckel noch ein CQ darf null sein.
+// ein CQ darf null sein.
 func intEntry(entries map[string]string, key string) int {
 	number, err := strconv.Atoi(entries[key])
 	if err != nil {

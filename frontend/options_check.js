@@ -6,10 +6,10 @@
 //
 // Run it with:  node frontend\options_check.js
 //
-// The window must never show a number of its own: the bitrate cap, the target
-// resolution and the CQ all come out of NVENCForge_Config.ini, and which cap
-// applies depends on codec and resolution. That decision is mirrored from the
-// converter (main.go, parseArgs) and is exactly what can silently drift apart.
+// The window must never show a number of its own: the target resolution and
+// the CQ come out of NVENCForge_Config.ini, and which CQ applies depends on the
+// codec. That decision is mirrored from the converter and is exactly what can
+// silently drift apart. (Bitrate caps are gone since NVENCForge 2.0.0.)
 const { loadGui, createChecker } = require("./check_harness");
 
 const { gui, html, element } = loadGui();
@@ -21,10 +21,6 @@ const sampleConfig = {
   found: true,
   path: "X:\\tools\\NVENCForge_Config.ini",
   maxResolution: 1080,
-  maxBitrate1080p: 8000,
-  maxBitrateOriginal: 22000,
-  av1MaxBitrate1080p: 6000,
-  av1MaxBitrateOriginal: 13000,
   targetCQ: 26,
   av1TargetCQ: 32,
   autoCQTargetVMAF: 96,
@@ -40,26 +36,13 @@ function choose(codec, resolution) {
 
 console.log("\n=== without a readable INI the window states nothing ===");
 gui.applyConfig({ found: false, note: "not there yet" });
-check("bitrate placeholder       ", element("opt-bitrate").placeholder, "as configured");
 check("resolution label          ", element("opt-resolution-default").textContent, "Downscale if needed");
-contains("bitrate bubble says so    ", gui.HELP.bitrate().now, "could not be read");
 contains("quality bubble says so    ", gui.HELP.quality().now, "could not be read");
 
-console.log("\n=== the cap follows codec and resolution ===");
+console.log("\n=== no bitrate cap any more (NVENCForge 2.0.0) ===");
 gui.applyConfig(sampleConfig);
-choose("", "");
-check("H.265, downscaled         ", element("opt-bitrate").placeholder, "8000 (from your INI)");
-check("  cap key                 ", gui.bitrateCapKey(), "maxBitrate1080p");
-choose("", "original");
-check("H.265, original size      ", element("opt-bitrate").placeholder, "22000 (from your INI)");
-check("  cap key                 ", gui.bitrateCapKey(), "maxBitrateOriginal");
-choose("av1", "");
-check("AV1, downscaled           ", element("opt-bitrate").placeholder, "6000 (from your INI)");
-check("  cap key                 ", gui.bitrateCapKey(), "av1MaxBitrate1080p");
-choose("av1", "original");
-check("AV1, original size        ", element("opt-bitrate").placeholder, "13000 (from your INI)");
-check("  cap key                 ", gui.bitrateCapKey(), "av1MaxBitrateOriginal");
-contains("bubble names the live cap ", gui.HELP.bitrate().now, "13000 kbit/s");
+check("no bitrate help bubble    ", gui.HELP.bitrate, undefined);
+check("no cap key mirror         ", html.includes("function bitrateCapKey"), false);
 
 console.log("\n=== the resolution entry names the configured height ===");
 choose("", "");

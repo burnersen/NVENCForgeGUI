@@ -590,10 +590,6 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
             <label for="opt-cq">Fixed CQ</label>
             <input type="number" id="opt-cq" value="26" min="1" max="51" />
           </div>
-          <div class="field" data-help="bitrate">
-            <label for="opt-bitrate">Max bitrate (kbit/s)</label>
-            <input type="number" id="opt-bitrate" value="" min="100" max="200000" placeholder="as configured" />
-          </div>
           <div class="field" data-help="parallel">
             <label for="opt-parallel">At the same time</label>
             <select id="opt-parallel">
@@ -937,10 +933,6 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
           <div class="field" id="wfield-cq" hidden>
             <label for="wopt-cq">Fixed CQ</label>
             <input type="number" id="wopt-cq" value="26" min="1" max="51" />
-          </div>
-          <div class="field">
-            <label for="wopt-bitrate">Max bitrate (kbit/s)</label>
-            <input type="number" id="wopt-bitrate" value="" min="100" max="200000" placeholder="as configured" />
           </div>
         </div>
         <!-- Same note as on the Convert page: which devices can play what comes
@@ -2609,10 +2601,10 @@ function onCQ(event) {
 // pictureSignature fingerprints everything that changes what the encoder sees.
 //
 // A measured CQ is only valid for the settings it was measured under. Codec,
-// resolution, bit depth, the bitrate ceiling, whether black bars are cut, and
-// whether the graphics card or the processor does the work all change the
-// picture or the scale the number sits on — reusing a CQ across any of them
-// would silently encode at the wrong quality.
+// resolution, bit depth, whether black bars are cut, and whether the graphics
+// card or the processor does the work all change the picture or the scale the
+// number sits on — reusing a CQ across any of them would silently encode at
+// the wrong quality.
 //
 // Audio, container, shutdown and how many run at once are deliberately absent:
 // none of them touches a single pixel.
@@ -2622,8 +2614,7 @@ function pictureSignature(request) {
     request.encoder || "",
     request.resolution || "",
     request.bitDepth || "",
-    request.crop || "",
-    request.maxBitrate || 0
+    request.crop || ""
   ].join("|");
 }
 
@@ -3446,13 +3437,6 @@ function iniNumber(key) {
 function isAV1() { return $("opt-codec").value === "av1"; }
 function keepsOriginalSize() { return $("opt-resolution").value === "original"; }
 
-// Which of the four caps applies is decided by the converter from codec and
-// resolution mode alone (main.go, parseArgs). This mirrors that decision, so
-// the number on screen is the number that will be used.
-function bitrateCapKey() {
-  if (isAV1()) return keepsOriginalSize() ? "av1MaxBitrateOriginal" : "av1MaxBitrate1080p";
-  return keepsOriginalSize() ? "maxBitrateOriginal" : "maxBitrate1080p";
-}
 function applyConfig(config) {
   state.config = config || null;
   refreshFromConfig();
@@ -3470,11 +3454,8 @@ function applyConfig(config) {
   }
 }
 // refreshFromConfig runs again on every codec or resolution change, because
-// both of them change which cap and which CQ apply.
+// the codec changes which CQ applies.
 function refreshFromConfig() {
-  const cap = iniNumber(bitrateCapKey());
-  $("opt-bitrate").placeholder = cap ? cap + " (from your INI)" : "as configured";
-
   const height = iniNumber("maxResolution");
   $("opt-resolution-default").textContent = height
     ? "Downscale to max " + height + "p"
@@ -3613,20 +3594,12 @@ function rememberOption(prefix, entry) {
   saveOneSetting(entry.key, entry.toIni(el));
 }
 
-// The CQ box and the bitrate box need their own handlers: which key they belong
-// to depends on the codec and the resolution mode (see bitrateCapKey).
+// The CQ box needs its own handler: which key it belongs to depends on the
+// codec.
 function rememberCQ() {
   const value = parseInt($("opt-cq").value, 10);
   if (!value) return;
   saveOneSetting(isAV1() ? "av1TargetCQ" : "targetCQ", value);
-}
-function rememberBitrate() {
-  const raw = ($("opt-bitrate").value || "").trim();
-  // Empty means "whatever the INI says" — that is not a value to write back.
-  if (raw === "") return;
-  const value = parseInt(raw, 10);
-  if (!value) return;
-  saveOneSetting(bitrateCapKey(), value);
 }
 
 // ensureSettingsFile makes sure the full list of settings is at hand. It is
@@ -3683,7 +3656,7 @@ const HELP = {
     const height = iniNumber("maxResolution");
     return {
       title: "Resolution",
-      text: "Anything larger is scaled down and lightly sharpened. “Keep original” leaves 4K as 4K — and raises the bitrate ceiling automatically, so those files stay considerably bigger.",
+      text: "Anything larger is scaled down and lightly sharpened. “Keep original” leaves 4K as 4K, so those files stay considerably bigger.",
       now: height
         ? "Your INI scales down to max " + height + "p (maxResolution)."
         : "Your INI could not be read yet."
@@ -3721,16 +3694,6 @@ const HELP = {
       text: "Lower number = better picture and bigger file. The scale differs per codec: 1–51 for H.265, 1–63 for AV1. Auto CQ stays switched off as long as a fixed value is set.",
       now: (h265 || av1)
         ? "Your INI: " + (h265 || "?") + " for H.265, " + (av1 || "?") + " for AV1."
-        : "Your INI could not be read yet."
-    };
-  },
-  bitrate: () => {
-    const cap = iniNumber(bitrateCapKey());
-    return {
-      title: "Max bitrate",
-      text: "The ceiling the encoder must not exceed, in kbit/s. Which one applies depends on codec and resolution — keeping the original resolution allows far more. Leave the box empty and your own setting applies.",
-      now: cap
-        ? "Applies to this run: " + cap + " kbit/s (" + bitrateCapKey() + ")."
         : "Your INI could not be read yet."
     };
   },
@@ -4408,7 +4371,6 @@ function collectWatchRequest(files) {
     bitDepth: $("wopt-bitdepth").value,
     quality: $("wopt-quality").value,
     fixedCQ: parseInt($("wopt-cq").value, 10) || 0,
-    maxBitrate: parseInt($("wopt-bitrate").value, 10) || 0,
     keepSource: $("wopt-keep").checked,
     crop: $("wopt-crop").checked ? "on" : "",
     parallel: 1,
@@ -4535,7 +4497,6 @@ function profileFromOptions(name) {
     bitDepth: $("opt-bitdepth").value,
     quality: $("opt-quality").value,
     fixedCQ: parseInt($("opt-cq").value, 10) || 0,
-    maxBitrate: parseInt($("opt-bitrate").value, 10) || 0,
     keepSource: $("opt-keep").checked,
     crop: $("opt-crop").checked,
     settings: settingsSnapshot(),
@@ -4559,7 +4520,6 @@ function applyProfile(prefix, profile) {
   // box keeps its own value then — overwriting it with a zero would put an
   // impossible number in front of the user.
   if (profile.fixedCQ) $(prefix + "-cq").value = profile.fixedCQ;
-  $(prefix + "-bitrate").value = profile.maxBitrate || "";
   $(prefix + "-keep").checked = !!profile.keepSource;
   $(prefix + "-crop").checked = !!profile.crop;
   // How many at a time exists on the Convert page only: the watched folder
@@ -4835,7 +4795,6 @@ function collectRequest(area) {
     bitDepth: $("opt-bitdepth").value,
     quality: $("opt-quality").value,
     fixedCQ: parseInt($("opt-cq").value, 10) || 0,
-    maxBitrate: parseInt($("opt-bitrate").value, 10) || 0,
     keepSource: $("opt-keep").checked,
     crop: $("opt-crop").checked ? "on" : "",
     shutdown: $("opt-shutdown").checked,
@@ -5134,8 +5093,8 @@ function wire() {
     if (parseInt(input.value, 10) > max) input.value = max;
     refreshFromConfig();
   };
-  // Codec and resolution both decide which bitrate cap and which CQ apply, so
-  // the displayed values follow them immediately.
+  // The resolution mode changes the displayed defaults, so they follow it
+  // immediately.
   $("opt-resolution").onchange = refreshFromConfig;
   $("opt-cq").oninput = () => { state.cqTouched = true; };
 
@@ -5156,7 +5115,6 @@ function wire() {
     if (el) el.addEventListener("change", () => rememberOption("opt", entry));
   });
   $("opt-cq").addEventListener("change", rememberCQ);
-  $("opt-bitrate").addEventListener("change", rememberBitrate);
 
   // One listener for the whole window instead of one per field: the settings
   // page will add dozens more, and they will work without being registered.

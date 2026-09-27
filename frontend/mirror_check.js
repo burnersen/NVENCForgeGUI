@@ -16,7 +16,7 @@
 //   3. nothing is written for a key the file does not have.
 const { loadGui, createChecker } = require("./check_harness");
 
-const { gui, element, calls, setSettingsFileReply } = loadGui();
+const { gui, html, element, calls, setSettingsFileReply } = loadGui();
 const { check, finish } = createChecker();
 
 // An INI that has everything, with values that differ from the window's own
@@ -26,10 +26,6 @@ const fullConfig = {
   found: true,
   path: "X:\\tools\\NVENCForge_Config.ini",
   maxResolution: 1080,
-  maxBitrate1080p: 8000,
-  maxBitrateOriginal: 22000,
-  av1MaxBitrate1080p: 6000,
-  av1MaxBitrateOriginal: 13000,
   targetCQ: 26,
   av1TargetCQ: 32,
   autoCQTargetVMAF: 96,
@@ -103,18 +99,10 @@ element("opt-cq").value = "24";
 gui.rememberCQ();
 check("H.265 writes targetCQ     ", JSON.stringify(calls.settingSaves[0]), '{"targetCQ":"24"}');
 
-calls.settingSaves.length = 0;
-element("opt-resolution").value = "original";
-element("opt-bitrate").value = "15000";
-gui.rememberBitrate();
-check("cap follows the mode      ", JSON.stringify(calls.settingSaves[0]), '{"maxBitrateOriginal":"15000"}');
-
-calls.settingSaves.length = 0;
-element("opt-bitrate").value = "";
-gui.rememberBitrate();
-// Empty is not a value: it means "whatever the file says". Writing a zero
-// there would wreck the cap for every later run.
-check("empty writes nothing      ", calls.settingSaves.length, 0);
+// Bitraten-Deckel gibt es seit NVENCForge 2.0.0 nicht mehr: nichts darf noch
+// einen der alten Schlüssel in die INI schreiben.
+check("no bitrate mirror left    ", html.includes("function rememberBitrate"), false);
+check("  and no cap key written  ", /"(av1)?[mM]axBitrate(1080p|Original)"/.test(html), false);
 
 console.log("\n=== an older INI is left alone ===");
 // Same window, but a file from an older NVENCForge: it simply has no such

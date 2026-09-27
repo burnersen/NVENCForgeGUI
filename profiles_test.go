@@ -136,8 +136,10 @@ func TestLoadSurvivesADamagedFile(t *testing.T) {
 	if len(list) != 1 {
 		t.Fatalf("erwartet 1 brauchbares Profil, bekommen %d: %+v", len(list), list)
 	}
+	// "maxBitrate" steht noch in Profilen von vor 2.0.0 — das Feld gibt es
+	// nicht mehr, und ein solches Profil muss trotzdem laden.
 	got := list[0]
-	if got.FixedCQ != maxProfileCQ || got.MaxBitrate != 0 || got.Parallel != maxProfileRuns {
+	if got.FixedCQ != maxProfileCQ || got.Parallel != maxProfileRuns {
 		t.Errorf("Zahlen nicht in die Grenzen geholt: %+v", got)
 	}
 }

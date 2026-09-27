@@ -22,7 +22,9 @@ const value = (id) => element(id).value;
 const lastSave = () => calls.profileSaves[calls.profileSaves.length - 1] || {};
 
 // Two sets, deliberately not in alphabetical order: the list has to come back
-// sorted, or a growing list turns into a lucky dip.
+// sorted, or a growing list turns into a lucky dip. They still carry the
+// "maxBitrate" field of profiles saved before NVENCForge 2.0.0 — such a
+// profile has to load all the same, the field is simply ignored.
 const sets = [
   {
     name: "Serien", codec: "av1", encoder: "", container: "mp4", resolution: "original",
@@ -62,7 +64,6 @@ let appendedBefore = element("opt-profile").appended;
   check("bit depth                 ", value("opt-bitdepth"), "8");
   check("quality                   ", value("opt-quality"), "fixed");
   check("fixed CQ                  ", value("opt-cq"), 34);
-  check("max bitrate               ", value("opt-bitrate"), 6000);
   check("keep the source           ", element("opt-keep").checked, true);
   check("how many at a time        ", value("opt-parallel"), "3");
   // The CQ box only means anything with a fixed quality — a loaded profile has

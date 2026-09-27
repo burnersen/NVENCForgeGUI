@@ -110,7 +110,7 @@ Nothing is installed, nothing is written to the registry. Delete the folder and 
 
 ## 🚦 The window never converts anything itself
 
-It starts the unchanged `NVENCForge.exe` as a separate process, hands it the options on the command line and reads its machine-readable event channel (`-json`). Quality decisions, bitrate caps, the GPU capability probe — all of that stays exactly where it was. If a converter is already sitting in `tools\`, it is used as it is.
+It starts the unchanged `NVENCForge.exe` as a separate process, hands it the options on the command line and reads its machine-readable event channel (`-json`). Quality decisions, the minimum saving, the GPU capability probe — all of that stays exactly where it was. If a converter is already sitting in `tools\`, it is used as it is.
 
 That is the design rule throughout: **no button may lie.** What is not built is greyed out rather than pretending to work, and nothing on screen claims anything the converter did not report.
 
