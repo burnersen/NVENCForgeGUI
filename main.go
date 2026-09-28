@@ -1,6 +1,6 @@
-// NVENCForgeGUI — Required Notice: Copyright (c) 2026 burnersen — NVENCForgeGUI
-// Licensed under the PolyForm Noncommercial License 1.0.0 (non-commercial use only).
-// Full terms: LICENSE.md · https://polyformproject.org/licenses/noncommercial/1.0.0
+// NVENCForgeGUI (https://github.com/burnersen/NVENCForgeGUI)
+// Copyright (C) 2026 burnersen
+// SPDX-License-Identifier: GPL-3.0-only
 
 // NVENCForgeGUI — ein Fenster für NVENCForge.
 //
@@ -25,7 +25,7 @@ var assets embed.FS
 // guiVersion ist die einzige Stelle, an der die Version dieses Fensters
 // steht. Angezeigt wird sie im Fensterkopf (Titelleiste) und in der
 // Kopfzeile der Oberfläche selbst (siehe StartupInfo in app.go).
-const guiVersion = "2.0.0"
+const guiVersion = "2.0.1"
 
 // singleInstanceID hält die Startsperre. Der Name muss auf dem Rechner
 // einmalig sein und darf sich nie ändern — sonst erkennt eine neue Ausgabe die

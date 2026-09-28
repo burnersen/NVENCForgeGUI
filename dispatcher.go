@@ -1,6 +1,6 @@
-// NVENCForgeGUI — Required Notice: Copyright (c) 2026 burnersen — NVENCForgeGUI
-// Licensed under the PolyForm Noncommercial License 1.0.0 (non-commercial use only).
-// Full terms: LICENSE.md · https://polyformproject.org/licenses/noncommercial/1.0.0
+// NVENCForgeGUI (https://github.com/burnersen/NVENCForgeGUI)
+// Copyright (C) 2026 burnersen
+// SPDX-License-Identifier: GPL-3.0-only
 
 // dispatcher.go — mehrere Konverter-Läufe gleichzeitig, geordnet.
 //
@@ -15,8 +15,7 @@
 // "originals", während die andere die Datei gerade prüft, meldet diese
 // "No such file or directory" — die Datei ist in Wahrheit fertig, die Bilanz
 // zeigt trotzdem einen Fehler. Gemessen: gleiche Geschwindigkeit (53 s gegen
-// 52 s), aber saubere Meldungen. Details:
-// _MediaForge-Beta\_claude_memory\messreihe-parallele-instanzen-2026-08-18.md
+// 52 s), aber saubere Meldungen.
 package main
 
 import (

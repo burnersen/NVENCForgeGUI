@@ -14,12 +14,12 @@ Same converter, same results, same settings file — just visible.
 [![NVIDIA NVENC](https://img.shields.io/badge/GPU-NVIDIA%20NVENC-76B900?logo=nvidia)](#-requirements)
 [![Built with Wails](https://img.shields.io/badge/Built%20with-Wails%20v2-DF0000)](#what-it-is-built-on)
 [![Written in Go](https://img.shields.io/badge/Made%20with-Go-00ADD8?logo=go)](#building-it-yourself)
-[![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial-blue)](#-license)
+[![License: GPLv3](https://img.shields.io/badge/License-GPLv3-blue)](#-license)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-Support%20me-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/burnersen)
 
 **[⬇️ Download the latest release](https://github.com/burnersen/NVENCForgeGUI/releases/latest)** · **[⌨️ Prefer the command line?](https://github.com/burnersen/NVENCForge)** · **[☕ Buy me a coffee](https://ko-fi.com/burnersen)**
 
-*Free for personal & noncommercial use — [source-available](#-license), never for resale.*
+*Free for everyone, at home or at work — open source under the [GPLv3](#-license).*
 
 <img src="docs/screenshot.png" alt="The NVENCForgeGUI window: videos queued for conversion, per-run options for codec, container, resolution and quality, live progress bars with speed and ETA, and the converter's own log at the bottom" width="840">
 
@@ -184,8 +184,12 @@ Everything above except the live tests runs on GitHub for every push, on a Windo
 
 ## 📜 License
 
-NVENCForgeGUI is source-available under the [PolyForm Noncommercial License 1.0.0](LICENSE.md).
-Free to use, study, modify and share for any **noncommercial** purpose: personal use, hobby, education, research. **Commercial use, resale or bundling into paid products is not permitted** without a separate license from the author. Want a commercial license? Open an issue or reach out.
+NVENCForgeGUI is free software under the [GNU General Public License, version 3](LICENSE) — that version only (`GPL-3.0-only`).
+
+- **Use it:** Anyone may use NVENCForgeGUI free of charge, at home or at work, and read, change and share its source code.
+- **The one condition:** Whoever passes on NVENCForgeGUI or parts of it — unchanged, changed or built into a program of their own — must include the complete source code and pass everything on under the same license. A closed, paid product with NVENCForgeGUI inside is therefore not possible.
+- **Free of charge:** NVENCForgeGUI is and stays free. The official source is [github.com/burnersen/NVENCForgeGUI](https://github.com/burnersen/NVENCForgeGUI) — anyone asking money for NVENCForgeGUI is selling you what you can get here for free.
+- **A separate license for companies:** Want to build NVENCForgeGUI into a product that is not meant to be under the GPLv3? You can ask the author for a separate license — just [open an issue](https://github.com/burnersen/NVENCForgeGUI/issues).
 
 <a id="what-it-is-built-on"></a>
 
@@ -193,7 +197,18 @@ Free to use, study, modify and share for any **noncommercial** purpose: personal
 
 The window is built with [Wails v2](https://wails.io/) (MIT-licensed), which pairs a Go program with the WebView2 runtime Windows already ships. Wails stays under its own license; the license above covers the code in this repository.
 
-The converter is a separate program: [NVENCForge](https://github.com/burnersen/NVENCForge), same author, same PolyForm Noncommercial license. The window looks for `NVENCForge.exe` in its `tools` folder and downloads it from GitHub if it is missing — it is not part of this repository. NVENCForge in turn fetches FFmpeg (GPL) on its own first run. Each step only handles what it knows about.
+The converter is a separate program: [NVENCForge](https://github.com/burnersen/NVENCForge), same author, also under the GPLv3. The window looks for `NVENCForge.exe` in its `tools` folder and downloads it from GitHub if it is missing — it is not part of this repository. NVENCForge in turn fetches FFmpeg (GPL) on its own first run. Each step only handles what it knows about.
+
+### Third-party components
+
+The exe is built with these Go libraries. Each keeps its own license, and all of them are compatible with the GPLv3:
+
+- **MIT License:** [Wails](https://github.com/wailsapp/wails) with [go-webview2](https://github.com/wailsapp/go-webview2) and [mimetype](https://github.com/wailsapp/mimetype), [go-toast](https://git.sr.ht/~jackmordaunt/go-toast), [bep/debounce](https://github.com/bep/debounce), [go-ole](https://github.com/go-ole/go-ole), [leaanthony/go-ansi-parser](https://github.com/leaanthony/go-ansi-parser), [leaanthony/slicer](https://github.com/leaanthony/slicer), [leaanthony/u](https://github.com/leaanthony/u), [rivo/uniseg](https://github.com/rivo/uniseg), [samber/lo](https://github.com/samber/lo)
+- **Apache License 2.0:** [tkrajina/go-reflector](https://github.com/tkrajina/go-reflector)
+- **BSD 3-Clause License:** the [Go standard library](https://go.dev/LICENSE), [golang.org/x/net](https://github.com/golang/net), [x/sys](https://github.com/golang/sys), [x/text](https://github.com/golang/text) and [google/uuid](https://github.com/google/uuid)
+- **BSD 2-Clause License:** [pkg/browser](https://github.com/pkg/browser), [pkg/errors](https://github.com/pkg/errors)
+
+Their copyright notices and full license texts are in the repositories linked above.
 
 ---
 
@@ -211,10 +226,10 @@ NVENCForgeGUI is free and made in my spare time, on my own hardware and electric
 
 ## ⚠️ Disclaimer
 
-NVENCForgeGUI is free hobby software, provided **"as is", without any warranty or condition of any kind**. It was built and tested with care, but you use it **at your own risk**. As far as the applicable law allows, the author is not liable for any damages or data loss arising from the use of this software. See the *No Liability* clause of the [license](LICENSE.md).
+NVENCForgeGUI is free hobby software, provided **"as is", without any warranty or condition of any kind**. It was built and tested with care, but you use it **at your own risk**. As far as the applicable law allows, the author is not liable for any damages or data loss arising from the use of this software. See sections 15 and 16 of the [license](LICENSE).
 
 ---
 
-Free for personal use. Built for my own media library, shared because it might save you the evening it saved me.
+Free for everyone. Built for my own media library, shared because it might save you the evening it saved me.
 
 <sub>NVIDIA, NVENC, DaVinci Resolve, FFmpeg and Wails are trademarks or projects of their respective owners. NVENCForgeGUI is an independent hobby project and is not affiliated with, endorsed by, or sponsored by any of them.</sub>

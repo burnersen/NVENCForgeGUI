@@ -1,6 +1,6 @@
-// NVENCForgeGUI — Required Notice: Copyright (c) 2026 burnersen — NVENCForgeGUI
-// Licensed under the PolyForm Noncommercial License 1.0.0 (non-commercial use only).
-// Full terms: LICENSE.md · https://polyformproject.org/licenses/noncommercial/1.0.0
+// NVENCForgeGUI (https://github.com/burnersen/NVENCForgeGUI)
+// Copyright (C) 2026 burnersen
+// SPDX-License-Identifier: GPL-3.0-only
 
 // about_check.js — checks the About page.
 //
@@ -45,7 +45,7 @@ element("btn-about-coffee").onclick();
 check("four addresses opened     ", calls.opened.length, 4);
 contains("the window's own repo     ", calls.opened[0], "github.com/burnersen/NVENCForgeGUI");
 contains("the converter's repo      ", calls.opened[1], "github.com/burnersen/NVENCForge");
-contains("the licence               ", calls.opened[2], "polyformproject.org");
+contains("the licence               ", calls.opened[2], "github.com/burnersen/NVENCForgeGUI/blob/main/LICENSE");
 // The donation link goes the same way as every other one. A plain <a href>
 // here would be the worst of the lot: the program would vanish behind a
 // payment page with no way back.
