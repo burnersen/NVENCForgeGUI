@@ -45,6 +45,25 @@ func TestParseConfigReadsTheValuesWeShow(t *testing.T) {
 	}
 }
 
+// Das Perzentil-Ziel von NVENCForge 2.2.0 hat Nachkommastellen (92.5); eine
+// ältere INI kennt beide Schlüssel nicht, dann bleibt alles 0 = "nur Mittelwert".
+func TestPercentileTargetIsRead(t *testing.T) {
+	entries := entriesOf("autoCQVMAFPercentile=5\r\nautoCQTargetVMAFPercentile=92.5\r\n")
+	if got := intEntry(entries, "autoCQVMAFPercentile"); got != 5 {
+		t.Errorf("autoCQVMAFPercentile = %d, want 5", got)
+	}
+	if got := floatEntry(entries, "autoCQTargetVMAFPercentile"); got != 92.5 {
+		t.Errorf("autoCQTargetVMAFPercentile = %v, want 92.5", got)
+	}
+	older := entriesOf(sampleConfig)
+	if intEntry(older, "autoCQVMAFPercentile") != 0 || floatEntry(older, "autoCQTargetVMAFPercentile") != 0 {
+		t.Error("an INI of an older NVENCForge must leave both at 0")
+	}
+	if got := floatEntry(entriesOf("autoCQTargetVMAFPercentile=hoch\r\n"), "autoCQTargetVMAFPercentile"); got != 0 {
+		t.Errorf("a broken value returned %v, want 0", got)
+	}
+}
+
 // Ein auskommentierter Schlüssel darf NICHT gelten. Die INI erklärt jeden Wert
 // in Kommentarzeilen darüber; würde eine davon mitgelesen, zeigte das Fenster
 // eine Einstellung an, die gar nicht aktiv ist.

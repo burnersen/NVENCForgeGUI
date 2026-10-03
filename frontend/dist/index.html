@@ -3443,6 +3443,17 @@ function iniNumber(key) {
   const value = config[key];
   return value > 0 ? value : null;
 }
+// What the INI aims for, as the end of one sentence. Since NVENCForge 2.2.0
+// the weakest frames have their own target and the average is the safety net;
+// an older INI has neither key and keeps the old sentence.
+function qualityAimText(target, percentile, lowTarget) {
+  if (!target) return ".";
+  if (percentile && lowTarget) {
+    return ", aiming for a quality score of " + lowTarget + " for the weakest " + percentile +
+      " % of the frames and " + target + " on average.";
+  }
+  return ", aiming for a quality score of " + target + ".";
+}
 function isAV1() { return $("opt-codec").value === "av1"; }
 function keepsOriginalSize() { return $("opt-resolution").value === "original"; }
 
@@ -3683,11 +3694,11 @@ const HELP = {
   }),
   quality: () => {
     const config = state.config;
-    const target = iniNumber("autoCQTargetVMAF");
     let now = "Your INI could not be read yet.";
     if (config && config.found && config.autoCQKnown) {
       now = "Your INI has Auto CQ " + (config.autoCQ ? "on" : "off") +
-        (target ? ", aiming for a quality score of " + target + "." : ".");
+        qualityAimText(iniNumber("autoCQTargetVMAF"), iniNumber("autoCQVMAFPercentile"),
+          iniNumber("autoCQTargetVMAFPercentile"));
     }
     return {
       title: "Quality",
@@ -3820,7 +3831,7 @@ const CPU_PRESETS = ["ultrafast", "superfast", "veryfast", "faster", "fast",
 
 // Values whose range looks like whole numbers but accepts decimals as well.
 // Everything else is decided by the default: 0.5 means decimal, 5 does not.
-const DECIMAL_KEYS = ["autoCQTargetVMAF"];
+const DECIMAL_KEYS = ["autoCQTargetVMAF", "autoCQTargetVMAFPercentile"];
 
 // The converter prints its own advice when a card refuses what the INI asks
 // for: "Set 'bFrames=4' in NVENCForge_Config.ini to make this permanent."

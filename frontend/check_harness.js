@@ -313,7 +313,7 @@ function loadGui() {
     "window", "document",
     scriptText + "\n;return { wire, onConverterEvent, state, applyConfig, refreshFromConfig, HELP," +
     " settingModel, looksInvalid, settingHelp, editSetting, revertSetting, restoreDefaults," +
-    " changedValues, defaultFor, noteGPUAdvice, renderSettings, showPage, log, note," +
+    " changedValues, defaultFor, noteGPUAdvice, renderSettings, showPage, log, note, qualityAimText," +
     " onQuestion, sendAnswer, askSelection, isExtraOption, isToolRun, collectRequest, resetProgress," +
     " readTrackLabel, trackFacts, buildTrackRule, applyTrackRule, describeTrackRule, setAllTicks," +
     " justTheName, joinJobs," +

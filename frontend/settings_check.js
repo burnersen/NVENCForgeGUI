@@ -33,6 +33,10 @@ const settings = [
     description: "Extra savings allowance for sources already compressed hard.", group: "expert", section: "Automatic quality" },
   { key: "autoCQTargetVMAF", value: "96", default: "96", allowed: "70 to 99",
     description: "Quality the automatic search aims for.", group: "expert", section: "Automatic quality" },
+  { key: "autoCQTargetVMAFPercentile", value: "92", default: "92", allowed: "50 to 99",
+    description: "Quality the weakest frames keep.", group: "common", section: "" },
+  { key: "autoCQVMAFPercentile", value: "5", default: "5", allowed: "0 to 50",
+    description: "Which frames the quality search judges.", group: "expert", section: "Automatic quality" },
   { key: "bFrames", value: "5", default: "5", allowed: "0 to 5",
     description: "Number of B-frames.", group: "expert", section: "Encoder internals" },
   { key: "nvencPreset", value: "p5", default: "p5", allowed: "p1 to p7",
@@ -78,6 +82,17 @@ check("bFrames counts in ones       ", model("bFrames").step, "1");
 check("plateau tolerance in tenths  ", model("autoCQPlateauTolerance").step, "0.1");
 check("casStrength in tenths        ", model("casStrength").step, "0.1");
 check("autoCQTargetVMAF in tenths   ", model("autoCQTargetVMAF").step, "0.1");
+check("percentile target in tenths  ", model("autoCQTargetVMAFPercentile").step, "0.1");
+check("percentile itself in ones    ", model("autoCQVMAFPercentile").step, "1");
+
+console.log("\n=== the quality help names both targets ===");
+check("older INI: the average only  ", gui.qualityAimText(96, null, null),
+  ", aiming for a quality score of 96.");
+check("2.2.0: weakest frames + mean ", gui.qualityAimText(95, 5, 92.5),
+  ", aiming for a quality score of 92.5 for the weakest 5 % of the frames and 95 on average.");
+check("percentile 0: average only   ", gui.qualityAimText(95, null, 92),
+  ", aiming for a quality score of 95.");
+check("no target at all             ", gui.qualityAimText(null, 5, 92), ".");
 
 console.log("\n=== impossible values are marked, never blocked ===");
 const targetCQ = settings.find((entry) => entry.key === "targetCQ");
@@ -162,7 +177,7 @@ filter("cq");
 check("a CQ setting stays          ", rowHidden("targetCQ"), false);
 check("and the other one too       ", rowHidden("autoCQPlateauTolerance"), false);
 check("something else goes         ", rowHidden("gpuDecode"), true);
-contains("and it says how many       ", element("settings-filter-note").textContent, "of 13 shown");
+contains("and it says how many       ", element("settings-filter-note").textContent, "5 of 15 shown");
 
 // The section a setting stands in counts as its name too: someone looking
 // for "encoder" means the whole group, not one line.

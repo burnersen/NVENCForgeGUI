@@ -43,6 +43,13 @@ type ConfigView struct {
 	AV1TargetCQ      int `json:"av1TargetCQ"`
 	AutoCQTargetVMAF int `json:"autoCQTargetVMAF"`
 
+	// Seit NVENCForge 2.2.0 misst Auto-CQ zusätzlich am 5-%-Perzentil der
+	// Bildwerte; der Mittelwert oben bleibt als Sicherheitsnetz. 0 heißt
+	// "aus" oder "diese NVENCForge-Fassung kennt es noch nicht" — beides
+	// bedeutet für die Anzeige dasselbe: es zählt nur der Mittelwert.
+	AutoCQVMAFPercentile       int     `json:"autoCQVMAFPercentile"`
+	AutoCQTargetVMAFPercentile float64 `json:"autoCQTargetVMAFPercentile"`
+
 	// AutoCQKnown trennt "steht auf false" von "steht gar nicht in der Datei".
 	// Ohne diese Unterscheidung würde eine fehlende Zeile wie ein bewusstes
 	// Abschalten aussehen.
@@ -135,6 +142,8 @@ func readConfigView() ConfigView {
 	view.TargetCQ = intEntry(entries, "targetCQ")
 	view.AV1TargetCQ = intEntry(entries, "av1TargetCQ")
 	view.AutoCQTargetVMAF = intEntry(entries, "autoCQTargetVMAF")
+	view.AutoCQVMAFPercentile = intEntry(entries, "autoCQVMAFPercentile")
+	view.AutoCQTargetVMAFPercentile = floatEntry(entries, "autoCQTargetVMAFPercentile")
 	view.AutoCQ, view.AutoCQKnown = boolEntry(entries, "autoCQ")
 	view.RetireMode = strings.ToLower(strings.TrimSpace(entries["retireMode"]))
 	view.Codec, view.CodecKnown = wordEntry(entries, "codec")
@@ -155,6 +164,16 @@ func readConfigView() ConfigView {
 // ein CQ darf null sein.
 func intEntry(entries map[string]string, key string) int {
 	number, err := strconv.Atoi(entries[key])
+	if err != nil {
+		return 0
+	}
+	return number
+}
+
+// floatEntry ist intEntry für Werte mit Nachkommastelle (92.5): eine Zahl oder
+// 0, wenn der Schlüssel fehlt oder keine ist.
+func floatEntry(entries map[string]string, key string) float64 {
+	number, err := strconv.ParseFloat(strings.TrimSpace(entries[key]), 64)
 	if err != nil {
 		return 0
 	}
