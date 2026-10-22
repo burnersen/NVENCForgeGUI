@@ -17,7 +17,9 @@ Same converter, same results, same settings file — just visible.
 [![License: GPLv3](https://img.shields.io/badge/License-GPLv3-blue)](#-license)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-Support%20me-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/burnersen)
 
-**[⬇️ Download the latest release](https://github.com/burnersen/NVENCForgeGUI/releases/latest)** · **[⌨️ Prefer the command line?](https://github.com/burnersen/NVENCForge)** · **[☕ Buy me a coffee](https://ko-fi.com/burnersen)**
+**[⬇️ Download the latest release](https://github.com/burnersen/NVENCForgeGUI/releases/latest)** · **[⌨️ Prefer the command line?](https://github.com/burnersen/NVENCForge)** · **[🌐 Website](https://tech.burnersen.de/en/tools/nvencforge-en/)** · **[☕ Buy me a coffee](https://ko-fi.com/burnersen)**
+
+<sub>🇩🇪 Auf Deutsch: [tech.burnersen.de/tools/nvencforge](https://tech.burnersen.de/tools/nvencforge/)</sub>
 
 *Free for everyone, at home or at work — open source under the [GPLv3](#-license).*
 
