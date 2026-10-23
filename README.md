@@ -15,9 +15,8 @@ Same converter, same results, same settings file — just visible.
 [![Built with Wails](https://img.shields.io/badge/Built%20with-Wails%20v2-DF0000)](#what-it-is-built-on)
 [![Written in Go](https://img.shields.io/badge/Made%20with-Go-00ADD8?logo=go)](#building-it-yourself)
 [![License: GPLv3](https://img.shields.io/badge/License-GPLv3-blue)](#-license)
-[![Ko-fi](https://img.shields.io/badge/Ko--fi-Support%20me-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/burnersen)
 
-**[⬇️ Download the latest release](https://github.com/burnersen/NVENCForgeGUI/releases/latest)** · **[⌨️ Prefer the command line?](https://github.com/burnersen/NVENCForge)** · **[🌐 Website](https://tech.burnersen.de/en/tools/nvencforge-en/)** · **[☕ Buy me a coffee](https://ko-fi.com/burnersen)**
+**[⬇️ Download the latest release](https://github.com/burnersen/NVENCForgeGUI/releases/latest)** · **[⌨️ Prefer the command line?](https://github.com/burnersen/NVENCForge)** · **[🌐 Website](https://tech.burnersen.de/en/tools/nvencforge-en/)**
 
 <sub>🇩🇪 Auf Deutsch: [tech.burnersen.de/tools/nvencforge](https://tech.burnersen.de/tools/nvencforge/)</sub>
 
@@ -39,7 +38,7 @@ Same converter, same results, same settings file — just visible.
 - [💻 Requirements](#-requirements)
 - [🛡️ SmartScreen warnings](#smartscreen)
 - [🔧 Building & tests](#building-it-yourself)
-- [📜 License](#-license) · [💬 Feedback](#-feedback) · [☕ Support](#-support)
+- [📜 License](#-license) · [💬 Feedback](#-feedback)
 
 ---
 
@@ -217,12 +216,6 @@ Their copyright notices and full license texts are in the repositories linked ab
 ## 💬 Feedback
 
 **This is where you come in.** Something unclear, something missing, something behaving oddly? [Open an issue](../../issues) — a short one is fine, and no question is too small. A quick "it just worked, thanks", a "this part confused me", a bug report, a wish for the next version: it is all welcome. Nobody has ever complained too much.
-
----
-
-## ☕ Support
-
-NVENCForgeGUI is free and made in my spare time, on my own hardware and electricity bill. If it saved you time or a pile of disk space and you'd like to say thanks, you can [drop a little something in the tip jar on Ko-fi](https://ko-fi.com/burnersen) — it keeps the forge hot. 🔥 Completely optional, and either way: thank you for using it!
 
 ---
 
