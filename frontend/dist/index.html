@@ -1145,6 +1145,20 @@ select:focus, input:focus { outline: 1px solid var(--accent-dim); }
         </p>
       </section>
 
+      <!-- Last panel on purpose: it is an offer, not a request, and it should
+           never be the first thing on the page. Same route as every other
+           link here, through BrowserOpenURL. -->
+      <section class="panel">
+        <h2>Buy the author a coffee</h2>
+        <p class="about-text">
+          Both programs are free and stay free. If they have saved you a weekend of waiting —
+          the bar along the bottom edge says how much — a coffee is a friendly way to say so.
+          Entirely optional: nothing in the program is locked, limited or nagging without it.
+        </p>
+        <div class="row">
+          <button class="btn" id="btn-about-coffee">Buy me a coffee on Ko-fi</button>
+        </div>
+      </section>
     </div>
     </main>
   </div>
@@ -4395,7 +4409,8 @@ function collectWatchRequest(files) {
 const LINKS = {
   gui: "https://github.com/burnersen/NVENCForgeGUI",
   converter: "https://github.com/burnersen/NVENCForge",
-  licence: "https://github.com/burnersen/NVENCForgeGUI/blob/main/LICENSE"
+  licence: "https://github.com/burnersen/NVENCForgeGUI/blob/main/LICENSE",
+  coffee: "https://ko-fi.com/burnersen"
 };
 
 function openLink(url) {
@@ -5080,6 +5095,7 @@ function wire() {
   $("btn-about-gui-repo").onclick = () => openLink(LINKS.gui);
   $("btn-about-converter-repo").onclick = () => openLink(LINKS.converter);
   $("btn-about-licence").onclick = () => openLink(LINKS.licence);
+  $("btn-about-coffee").onclick = () => openLink(LINKS.coffee);
 
   $("btn-update-check").onclick = checkUpdate;
   $("btn-update-install").onclick = installUpdate;
