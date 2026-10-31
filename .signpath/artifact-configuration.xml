@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SignPath artifact configuration for NVENCForgeGUI (see
+  ../.github/workflows/release.yml). Copy it into the SignPath project as
+  its default artifact configuration.
+
+  The workflow uploads NVENCForgeGUI.exe as a ZIP. Only this file is
+  signed, and only if its file properties name NVENCForgeGUI and the
+  version of the release (wails.json, written by the workflow).
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <parameters>
+    <!-- The version of the release, e.g. 2.1.0 (guiVersion in main.go). -->
+    <parameter name="version" required="true" />
+  </parameters>
+  <zip-file>
+    <pe-file path="NVENCForgeGUI.exe" product-name="NVENCForgeGUI" product-version="${version}">
+      <authenticode-sign />
+    </pe-file>
+  </zip-file>
+</artifact-configuration>

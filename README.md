@@ -17,7 +17,7 @@ Same converter, same results, same settings file — just visible.
 [![License: GPLv3](https://img.shields.io/badge/License-GPLv3-blue)](#-license)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-Support%20me-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/burnersen)
 
-**[⬇️ Download the latest release](https://github.com/burnersen/NVENCForgeGUI/releases/latest)** · **[⌨️ Prefer the command line?](https://github.com/burnersen/NVENCForge)** · **[🌐 Website](https://tech.burnersen.de/en/tools/nvencforge-en/)** · **[☕ Buy me a coffee](https://ko-fi.com/burnersen)**
+**[⬇️ Download the latest release](https://github.com/burnersen/NVENCForgeGUI/releases/latest)** · **[⌨️ Prefer the command line?](https://github.com/burnersen/NVENCForge)** · **[🌐 Website](https://tech.burnersen.de/en/tools/nvencforge-en/)** · **[🔏 Code signing policy](CODE_SIGNING.md)** · **[☕ Buy me a coffee](https://ko-fi.com/burnersen)**
 
 <sub>🇩🇪 Auf Deutsch: [tech.burnersen.de/tools/nvencforge](https://tech.burnersen.de/tools/nvencforge/)</sub>
 
@@ -141,7 +141,9 @@ The tool modes (Split, Join, DaVinci) always run one at a time. They copy instea
 
 ## 🛡️ Windows SmartScreen / antivirus warnings
 
-Windows or your antivirus may warn you the first time you run `NVENCForgeGUI.exe`. The honest reason: **the EXE is not code-signed.** Signing certificates cost several hundred euros *per year*, and this is a free hobby project with zero income. Unsigned Go binaries are frequent false-positive targets; there is nothing I can do about it except be transparent.
+Windows or your antivirus may warn you the first time you run `NVENCForgeGUI.exe`. The honest reason: **the EXE is not code-signed yet.** Signing certificates cost several hundred euros *per year*, and this is a free hobby project with zero income. Free code signing through the [SignPath Foundation](https://signpath.org) is applied for and already prepared; see the [code signing policy](CODE_SIGNING.md). Until then, unsigned Go binaries are frequent false-positive targets, and all I can do is be transparent.
+
+Every release is built by GitHub Actions from this repository ([release workflow](.github/workflows/release.yml)), never on a private PC.
 
 You don't have to trust me blindly: **scan it** on [VirusTotal](https://www.virustotal.com), **read it** — the complete source is in this repository — or **[build it yourself](#building-it-yourself)**.
 
@@ -161,6 +163,8 @@ wails build
 ```
 
 **Without `-clean`** — that would delete `build\bin\tools\` and with it the converter sitting next to the window.
+
+Releases are built by the [release workflow](.github/workflows/release.yml) on GitHub: push a tag `vX.Y.Z` equal to `guiVersion` in `main.go`. It runs the tests and the window checks, writes the version into the file properties and, once code signing is switched on, has the exe signed ([`.signpath/README.md`](.signpath/README.md)). "Run workflow" with "dry run" ticked builds and checks everything without publishing.
 
 The interface is a single HTML file with no build step: no npm, no bundler, no node_modules.
 
@@ -191,7 +195,10 @@ NVENCForgeGUI is free software under the [GNU General Public License, version 3]
 - **Use it:** Anyone may use NVENCForgeGUI free of charge, at home or at work, and read, change and share its source code.
 - **The one condition:** Whoever passes on NVENCForgeGUI or parts of it — unchanged, changed or built into a program of their own — must include the complete source code and pass everything on under the same license. A closed, paid product with NVENCForgeGUI inside is therefore not possible.
 - **Free of charge:** NVENCForgeGUI is and stays free. The official source is [github.com/burnersen/NVENCForgeGUI](https://github.com/burnersen/NVENCForgeGUI) — anyone asking money for NVENCForgeGUI is selling you what you can get here for free.
-- **A separate license for companies:** Want to build NVENCForgeGUI into a product that is not meant to be under the GPLv3? You can ask the author for a separate license — just [open an issue](https://github.com/burnersen/NVENCForgeGUI/issues).
+
+### Code signing and privacy
+
+What is signed, who approves it and what the window fetches from GitHub (only when you click for it): [code signing policy](CODE_SIGNING.md).
 
 <a id="what-it-is-built-on"></a>
 
