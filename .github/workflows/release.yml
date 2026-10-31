@@ -27,7 +27,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Existing tag to release (for example v2.2.0)'
+        description: 'Version to release, e.g. v2.2.0: an existing tag is built as it is, a new one is built from main and tagged'
         required: true
       dry_run:
         description: 'Dry run: build and check only, sign and publish nothing'
@@ -58,7 +58,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag || github.ref }}
           # The annotated tag message can be the release text, and it only
           # exists in a clone that carries the tag objects.
           fetch-depth: 0
@@ -67,6 +66,26 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+
+      # Started by hand: an existing tag is built exactly as tagged. A new
+      # version is built from main, and publishing the release creates its
+      # tag on the commit that was built.
+      - name: Commit to build
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          git rev-parse -q --verify "refs/tags/$env:RELEASE_TAG" *> $null
+          if ($LASTEXITCODE -eq 0) {
+            git checkout -q --detach "refs/tags/$env:RELEASE_TAG"
+            Write-Host "Building the existing tag $env:RELEASE_TAG."
+          } elseif ($env:GITHUB_REF_NAME -ne 'main' -and $env:DRY_RUN -ne 'true') {
+            Write-Host "::error::A new version is released from main only, not from $env:GITHUB_REF_NAME."
+            exit 1
+          } else {
+            Write-Host "Tag $env:RELEASE_TAG does not exist yet: building $env:GITHUB_REF_NAME, the release creates the tag."
+          }
+          $global:LASTEXITCODE = 0
 
       # Node only runs the window checks; the interface itself has no build step.
       - uses: actions/setup-node@v4
@@ -239,5 +258,5 @@ jobs:
             gh release edit $tag --title $title --notes-file release-notes.md --draft=false
             gh release upload $tag NVENCForgeGUI.exe --clobber
           } else {
-            gh release create $tag NVENCForgeGUI.exe --title $title --notes-file release-notes.md
+            gh release create $tag NVENCForgeGUI.exe --target (git rev-parse HEAD) --title $title --notes-file release-notes.md
           }
