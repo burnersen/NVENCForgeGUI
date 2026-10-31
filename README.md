@@ -195,7 +195,6 @@ NVENCForgeGUI is free software under the [GNU General Public License, version 3]
 - **Use it:** Anyone may use NVENCForgeGUI free of charge, at home or at work, and read, change and share its source code.
 - **The one condition:** Whoever passes on NVENCForgeGUI or parts of it — unchanged, changed or built into a program of their own — must include the complete source code and pass everything on under the same license. A closed, paid product with NVENCForgeGUI inside is therefore not possible.
 - **Free of charge:** NVENCForgeGUI is and stays free. The official source is [github.com/burnersen/NVENCForgeGUI](https://github.com/burnersen/NVENCForgeGUI) — anyone asking money for NVENCForgeGUI is selling you what you can get here for free.
-- **A separate license for companies:** Want to build NVENCForgeGUI into a product that is not meant to be under the GPLv3? You can ask the author for a separate license — just [open an issue](https://github.com/burnersen/NVENCForgeGUI/issues).
 
 ### Code signing and privacy
 
