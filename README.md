@@ -147,7 +147,7 @@ The tool modes (Split, Join, DaVinci) always run one at a time. They copy instea
 
 ## 🛡️ Windows SmartScreen / antivirus warnings
 
-Windows or your antivirus may warn you the first time you run `NVENCForgeGUI.exe`. The honest reason: **the EXE is not code-signed yet.** Signing certificates cost several hundred euros *per year*, and this is a free hobby project with zero income. Free code signing through the [SignPath Foundation](https://signpath.org) is applied for and already prepared; see the [code signing policy](CODE_SIGNING.md). Until then, unsigned Go binaries are frequent false-positive targets, and all I can do is be transparent.
+Windows or your antivirus may warn you the first time you run `NVENCForgeGUI.exe`. The honest reason: **the EXE is not code-signed yet.** Signing certificates cost several hundred euros *per year*, and this is a free hobby project with zero income. Free code signing through the [SignPath Foundation](https://signpath.org) is planned and already prepared, as soon as NVENCForgeGUI is known well enough to qualify; see the [code signing policy](CODE_SIGNING.md). Until then, unsigned Go binaries are frequent false-positive targets, and all I can do is be transparent.
 
 Every release is built by GitHub Actions from this repository ([release workflow](.github/workflows/release.yml)), never on a private PC.
 
