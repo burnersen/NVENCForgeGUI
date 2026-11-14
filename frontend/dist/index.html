@@ -3614,6 +3614,25 @@ function rememberOption(prefix, entry) {
   saveOneSetting(entry.key, entry.toIni(el));
 }
 
+// mirroredValues reads the Convert page's mirrored controls as lines for the
+// INI: key and value, for every key the file really has.
+//
+// Two places need the whole set at once rather than one control at a time —
+// saving a profile and loading one. Both are about the same promise: what the
+// boxes show and what the file says must never drift apart.
+function mirroredValues() {
+  const out = {};
+  const config = state.config;
+  if (!config || !config.found) return out;
+  INI_MIRROR.forEach((entry) => {
+    if (entry.fromConfig(config) === null) return;
+    const el = $("opt-" + entry.id);
+    if (!el) return;
+    out[entry.key] = entry.toIni(el);
+  });
+  return out;
+}
+
 // The CQ box needs its own handler: which key it belongs to depends on the
 // codec.
 function rememberCQ() {
@@ -4519,9 +4538,28 @@ function profileFromOptions(name) {
     fixedCQ: parseInt($("opt-cq").value, 10) || 0,
     keepSource: $("opt-keep").checked,
     crop: $("opt-crop").checked,
-    settings: settingsSnapshot(),
+    settings: profileSettings(),
     parallel: parallelSetting()
   };
+}
+
+// profileSettings is the INI copy a profile takes along, brought into line
+// with the controls it is saved from.
+//
+// The copy comes from the settings list as it was last read, and that can be
+// older than the boxes: with unsaved edits on the settings page the list is
+// not read again (refreshConfig). A profile saved in that moment said "keep
+// the source" in its tick and keepSource=false in its copy of the file — and
+// on loading, the file's word came out on top. Where the two overlap, the
+// controls on show are what was saved.
+function profileSettings() {
+  const snapshot = settingsSnapshot();
+  if (!snapshot) return null;
+  const shown = mirroredValues();
+  Object.keys(shown).forEach((key) => {
+    if (key in snapshot) snapshot[key] = shown[key];
+  });
+  return snapshot;
 }
 
 // applyProfile writes a saved set into the controls of one page. The prefix
@@ -4639,14 +4677,28 @@ async function loadProfiles() {
 // would change the six boxes on screen and leave everything else as it was.
 //
 // Older profiles have no copy; then the file stays untouched.
+//
+// Afterwards the controls are written into the file once more, and NOT the
+// other way round. Until 2.1.1 the page was filled from the file again here,
+// which went wrong in three ways:
+//   · the watched folder was filled along with it and lost its own options —
+//     a "keep the source" ticked there went out because a profile was loaded
+//     on another page;
+//   · a profile whose copy of the file disagreed with its own tick (see
+//     profileSettings) showed the tick for a moment and then took it back;
+//   · "shut down the PC when finished" came back from the copy, although it
+//     is deliberately not part of a profile.
+// applyProfile has just set the controls to what the profile says. They are
+// what the user sees, so they are what the file has to hold.
 async function applyProfileSettings(profile) {
   if (!profile || !profile.settings) return;
   try {
     const result = await api().ApplyProfile(profile.name);
     if (result && result.note) profileNote(result.note);
+    const shown = mirroredValues();
+    if (Object.keys(shown).length) await api().SaveSettings(shown);
     // Read back: the window must show the file, not what we meant to write.
     refreshConfig();
-    state.optionsSeeded = false;
   } catch (err) {
     profileNote("Settings not applied: " + err);
   }
@@ -4672,8 +4724,11 @@ async function saveProfile() {
   const name = ($("opt-profile-name").value || $("opt-profile").value || "").trim();
   if (!name) { profileNote("Type a name for these options first."); return; }
   // The INI copy goes into the profile, so it has to be at hand — the settings
-  // page may never have been opened in this session.
-  await ensureSettingsFile();
+  // page may never have been opened in this session. And it has to be fresh:
+  // the list is read again unless unsaved edits are waiting on the settings
+  // page, which reading would throw away.
+  if (Object.keys(changedValues()).length === 0) await loadSettings();
+  else await ensureSettingsFile();
   try {
     state.profiles = (await api().SaveProfile(profileFromOptions(name))) || [];
     $("opt-profile").value = name;

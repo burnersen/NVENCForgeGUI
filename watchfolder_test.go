@@ -125,6 +125,49 @@ func TestWatchSkipsWhatIsAlreadyDone(t *testing.T) {
 	}
 }
 
+// TestWatchKnowsResultsInTheOutputFolder: Der Konverter schreibt sein Ergebnis
+// in den Unterordner "output". Wer die Originale behält, hat nach einem
+// Neustart des Fensters Quelle und Ergebnis genau so liegen — und die Quelle
+// darf dann nicht noch einmal gemeldet werden. Auch nicht, wenn das Ergebnis
+// eine MP4 ist.
+func TestWatchKnowsResultsInTheOutputFolder(t *testing.T) {
+	folder := t.TempDir()
+	writeWatchFile(t, filepath.Join(folder, "film.mkv"), 1000)
+	writeWatchFile(t, filepath.Join(folder, "output", "film.h265.mkv"), 400)
+	writeWatchFile(t, filepath.Join(folder, "serie", "folge.mp4"), 1000)
+	writeWatchFile(t, filepath.Join(folder, "serie", "Output", "folge.av1.mp4"), 400)
+	// Gleicher Name, aber in einem anderen Ordner: das Ergebnis oben gehört
+	// nicht zu dieser Datei.
+	writeWatchFile(t, filepath.Join(folder, "andere", "film.mkv"), 1000)
+	writeWatchFile(t, filepath.Join(folder, "neu.mkv"), 1000)
+
+	watcher := newTestWatcher(folder)
+	start := time.Now()
+	watcher.scan(start)
+	found := names(watcher.scan(start.Add(watchQuietTime)))
+
+	if len(found) != 2 || !found["neu.mkv"] || !found["film.mkv"] {
+		t.Fatalf("erwartet neu.mkv und film.mkv aus \"andere\", bekommen %v", found)
+	}
+	for _, item := range watcher.scan(start.Add(2 * watchQuietTime)) {
+		t.Errorf("nichts darf zweimal gemeldet werden, bekommen %s", item.Path)
+	}
+}
+
+// TestWatchSourceKeyOfOutput prüft die Zuordnung selbst: nur was in einem
+// "output"-Ordner liegt, gehört zu einer Quelle im Ordner darüber.
+func TestWatchSourceKeyOfOutput(t *testing.T) {
+	root := filepath.Join("dl", "filme")
+
+	key, ok := watchSourceKeyOfOutput(filepath.Join(root, "output", "Film.h265.mkv"))
+	if !ok || key != watchStemKey(filepath.Join(root, "film.mkv")) {
+		t.Errorf("Ergebnis im output-Ordner: Schlüssel %q (ok=%v) passt nicht zur Quelle", key, ok)
+	}
+	if _, ok := watchSourceKeyOfOutput(filepath.Join(root, "Film.h265.mkv")); ok {
+		t.Error("eine Datei außerhalb von output hat keine Quelle im Ordner darüber")
+	}
+}
+
 // TestWatchIgnoresNonVideoFiles: In einem Download-Ordner liegt alles Mögliche.
 func TestWatchIgnoresNonVideoFiles(t *testing.T) {
 	folder := t.TempDir()

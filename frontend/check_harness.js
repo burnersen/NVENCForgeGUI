@@ -331,7 +331,8 @@ function loadGui() {
     " checkUpdate, installUpdate, download," +
     " INI_MIRROR, seedOptionsFromConfig, rememberOption, rememberCQ, saveOneSetting,"
     + " noteCodecReach, afterOptionsChanged," +
-    " settingsSnapshot, ensureSettingsFile, applyProfileSettings, noteShutdownFromConfig, refreshConfig };"
+    " settingsSnapshot, ensureSettingsFile, applyProfileSettings, noteShutdownFromConfig, refreshConfig," +
+    " loadSettings, mirroredValues, profileSettings };"
   )(windowStub, documentStub);
 
   return {
