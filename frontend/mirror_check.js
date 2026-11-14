@@ -16,7 +16,7 @@
 //   3. nothing is written for a key the file does not have.
 const { loadGui, createChecker } = require("./check_harness");
 
-const { gui, html, element, calls, setSettingsFileReply } = loadGui();
+const { gui, html, element, calls, setSettingsFileReply, setConfigReply } = loadGui();
 const { check, finish } = createChecker();
 
 // An INI that has everything, with values that differ from the window's own
@@ -152,5 +152,52 @@ gui.ensureSettingsFile().then(() => {
   return gui.applyProfileSettings({ name: "Alt" });
 }).then(() => {
   check("an old profile writes not ", calls.profileApplies.join(","), "Archiv");
+
+  console.log("\n=== a profile and its copy of the file agree ===");
+  // Loading a profile reads the file back; from here on the Go side has to
+  // answer with the full file, as it would in the real window.
+  setConfigReply(fullConfig);
+  gui.applyConfig(fullConfig);
+  // The list of settings can be older than the boxes: here it still says
+  // keepSource=false while the box is ticked. Saved like that, the profile
+  // contradicted itself, and on loading the file's word took the tick away —
+  // originals were moved although "keep" had been saved.
+  setSettingsFileReply({
+    found: true,
+    path: "X:\\tools\\NVENCForge_Config.ini",
+    note: "",
+    settings: [
+      { key: "keepSource", value: "false" },
+      { key: "autoCQTargetVMAF", value: "96" }
+    ]
+  });
+  return gui.loadSettings();
+}).then(() => {
+  element("opt-keep").checked = true;
+  const profile = gui.profileFromOptions("Behalten");
+  check("the tick is saved         ", profile.keepSource, true);
+  check("and the copy says the same", profile.settings.keepSource, "true");
+  check("other lines stay as read  ", profile.settings.autoCQTargetVMAF, "96");
+  // A key the list does not have is not invented on the way into a profile.
+  check("no line is invented       ", "codec" in profile.settings, false);
+
+  console.log("\n=== loading a profile leaves the watched folder alone ===");
+  // The watched folder has its own options. The file says keepSource=true
+  // (fullConfig); the folder's own box is deliberately the opposite, so a page
+  // filled from the file again would show.
+  element("wopt-keep").checked = false;
+  element("wopt-codec").value = "h265";
+  gui.applyProfile("opt", { name: "Wegräumen", keepSource: false, codec: "h265" });
+  calls.settingSaves.length = 0;
+  return gui.applyProfileSettings({ name: "Wegräumen", settings: { keepSource: "true" } });
+}).then(() => {
+  // What the refresh after loading brings back from the Go side.
+  gui.applyConfig(fullConfig);
+  const written = calls.settingSaves[calls.settingSaves.length - 1] || {};
+  check("the boxes go into the file", written.keepSource, "false");
+  check("  the codec with them     ", written.codec, "h265");
+  check("the tick stays as loaded  ", element("opt-keep").checked, false);
+  check("the folder keeps its tick ", element("wopt-keep").checked, false);
+  check("  and its codec           ", element("wopt-codec").value, "h265");
   finish();
 });

@@ -224,6 +224,12 @@ func collectWatchCandidates(folder string) ([]watchCandidate, map[string]bool) {
 		}
 		if looksConverted(path) {
 			finishedStems[watchStemKey(path)] = true
+			// Ein Ergebnis liegt in aller Regel nicht NEBEN seiner Quelle,
+			// sondern im Unterordner "output" — es zählt deshalb auch für den
+			// Ordner darüber.
+			if sourceKey, ok := watchSourceKeyOfOutput(path); ok {
+				finishedStems[sourceKey] = true
+			}
 			return nil
 		}
 		info, statErr := entry.Info()
@@ -251,6 +257,32 @@ func watchStemKey(path string) string {
 		}
 	}
 	return strings.ToLower(filepath.Dir(path)) + string(filepath.Separator) + lower
+}
+
+// watchOutputFolder ist der Unterordner, in den der Konverter seine Ergebnisse
+// schreibt (NVENCForge: Converter.go, processFile).
+const watchOutputFolder = "output"
+
+// watchSourceKeyOfOutput liefert für ein Ergebnis im Ordner "output" den
+// Schlüssel, unter dem seine Quelle zu finden wäre: derselbe Namensstamm, aber
+// im Ordner darüber. Liegt die Datei nicht in einem solchen Ordner, gibt es
+// keinen.
+//
+// Bis 2.1.1 wurde nur im selben Ordner verglichen. Dort liegt ein Ergebnis
+// aber nur, wenn der Konverter eine fertige Datei bloß umbenannt hat. Wer die
+// Originale behält, bekam deshalb nach jedem Neustart des Fensters den ganzen
+// Bestand noch einmal an den Konverter gereicht.
+//
+// Eine Grenze bleibt: Der Konverter räumt Dateinamen auf ("Film.WEB-DL.mkv"
+// wird zu "Film.h265.mkv"). Solche Paare finden hier nicht zueinander — dann
+// geht die Datei wie bisher an den Konverter, und der erkennt sein eigenes
+// Ergebnis selbst und überspringt sie.
+func watchSourceKeyOfOutput(path string) (string, bool) {
+	outputDir := filepath.Dir(path)
+	if !strings.EqualFold(filepath.Base(outputDir), watchOutputFolder) {
+		return "", false
+	}
+	return watchStemKey(filepath.Join(filepath.Dir(outputDir), filepath.Base(path))), true
 }
 
 // canBeOpened prüft, ob die Datei überhaupt lesbar ist. Hält ein Programm sie
