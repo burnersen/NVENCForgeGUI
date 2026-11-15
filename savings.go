@@ -170,7 +170,7 @@ func (l *savingsLedger) write() {
 		return
 	}
 	if raw, err := json.Marshal(l.book); err == nil {
-		_ = os.WriteFile(l.path, raw, 0o644)
+		_ = writeFileAtomic(l.path, raw, 0o644)
 	}
 }
 

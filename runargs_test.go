@@ -361,3 +361,31 @@ func TestCropCheckReachesEveryFile(t *testing.T) {
 		}
 	}
 }
+
+// TestEncoderForRun: Das Fenster wählt den Prozessor nur dann von sich aus,
+// wenn sicher kein NVIDIA-Treiber da ist. Der dritte Fall ist der wichtige —
+// eine Abfrage, die bloß gescheitert ist, darf eine vorhandene Karte nicht
+// übergehen.
+func TestEncoderForRun(t *testing.T) {
+	cases := []struct {
+		name         string
+		requested    string
+		gpu          GPUInfo
+		wantEncoder  string
+		wantSwitched bool
+	}{
+		{"card present, nothing chosen", "", GPUInfo{Detected: true}, "", false},
+		{"card present, card chosen", encoderNvidia, GPUInfo{Detected: true}, encoderNvidia, false},
+		{"query failed, driver may be there", encoderNvidia, GPUInfo{}, encoderNvidia, false},
+		{"no driver at all", encoderNvidia, GPUInfo{DriverMissing: true}, encoderCPU, true},
+		{"no driver, nothing chosen", "", GPUInfo{DriverMissing: true}, encoderCPU, true},
+		{"no driver, processor already chosen", encoderCPU, GPUInfo{DriverMissing: true}, encoderCPU, false},
+	}
+	for _, c := range cases {
+		encoder, switched := encoderForRun(c.requested, c.gpu)
+		if encoder != c.wantEncoder || switched != c.wantSwitched {
+			t.Errorf("%s: encoderForRun = %q, %v — erwartet %q, %v",
+				c.name, encoder, switched, c.wantEncoder, c.wantSwitched)
+		}
+	}
+}

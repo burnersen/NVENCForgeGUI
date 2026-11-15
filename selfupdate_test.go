@@ -11,6 +11,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"strings"
@@ -223,4 +225,40 @@ func readProbeFile(t *testing.T, path string) string {
 		t.Fatalf("Datei %s lesen: %v", path, err)
 	}
 	return string(raw)
+}
+
+// TestVerifyDownloadedDigest prüft den Vergleich mit der Prüfsumme von GitHub.
+// Entscheidend ist der dritte Fall: gleiche Länge, anderer Inhalt — genau das
+// lässt die Größenprüfung allein durch.
+func TestVerifyDownloadedDigest(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "NVENCForgeGUI.exe.part")
+	writeProbeFile(t, path, "neue Ausgabe")
+	actual := sha256Hex(t, "neue Ausgabe")
+
+	if err := verifyDownloadedDigest(path, "sha256:"+actual); err != nil {
+		t.Errorf("die passende Prüfsumme wurde abgelehnt: %v", err)
+	}
+	if err := verifyDownloadedDigest(path, "SHA256:"+strings.ToUpper(actual)); err != nil {
+		t.Errorf("Großschreibung darf keinen Unterschied machen: %v", err)
+	}
+	writeProbeFile(t, path, "neue Ausgabf") // gleich lang, anderer Inhalt
+	if err := verifyDownloadedDigest(path, "sha256:"+actual); err == nil {
+		t.Error("eine veränderte Datei gleicher Länge wurde angenommen")
+	}
+	// Keine oder eine unbekannte Angabe: nichts prüfen, nichts ablehnen.
+	// Die letzte Angabe ist eine Prüfsumme OHNE das Kennzeichen des Verfahrens:
+	// was sie bedeutet, ist dann nicht gesagt.
+	for _, digest := range []string{"", "  ", "md5:abc", actual} {
+		if err := verifyDownloadedDigest(path, digest); err != nil {
+			t.Errorf("Angabe %q darf das Update nicht aufhalten: %v", digest, err)
+		}
+	}
+}
+
+// sha256Hex rechnet die Prüfsumme eines Textes aus, unabhängig vom geprüften
+// Code — sonst prüfte die Funktion nur sich selbst.
+func sha256Hex(t *testing.T, text string) string {
+	t.Helper()
+	sum := sha256.Sum256([]byte(text))
+	return hex.EncodeToString(sum[:])
 }

@@ -205,6 +205,9 @@ func writeSRTCleaner(phrases []SRTPhrase) (SaveResult, error) {
 // Nebendatei, dann umbenennen. Bricht etwas ab, ist die alte Liste entweder
 // unversehrt oder als .bak vorhanden.
 func writeSRTCleanerTo(path string, phrases []SRTPhrase) (SaveResult, error) {
+	fileWriteMu.Lock()
+	defer fileWriteMu.Unlock()
+
 	original, err := os.ReadFile(path)
 	if err != nil {
 		return SaveResult{}, fmt.Errorf("srtcleaner.go: writeSRTCleaner (read): %w", err)

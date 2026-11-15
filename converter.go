@@ -256,6 +256,10 @@ type releaseAsset struct {
 	Name string `json:"name"`
 	Size int64  `json:"size"`
 	URL  string `json:"browser_download_url"`
+	// Digest ist die Prüfsumme, die GitHub zu einer Datei mitliefert
+	// ("sha256:…"). Ältere Veröffentlichungen haben keine; dann bleibt das
+	// Feld leer (siehe verifyDownloadedDigest).
+	Digest string `json:"digest"`
 }
 
 type releaseInfo struct {
@@ -445,6 +449,10 @@ func downloadConverter(ctx context.Context, force bool, report func(done, total 
 	partPath := targetPath + ".part"
 
 	if err := downloadToFile(ctx, asset, partPath, report); err != nil {
+		return result, err
+	}
+	if err := verifyDownloadedDigest(partPath, asset.Digest); err != nil {
+		_ = os.Remove(partPath)
 		return result, err
 	}
 

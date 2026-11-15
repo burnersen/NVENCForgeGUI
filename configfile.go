@@ -180,6 +180,13 @@ func settingsByKey(settings []SettingEntry) map[string]string {
 // eine Nebendatei schreiben, dann umbenennen. Bricht irgendetwas ab, ist die
 // alte INI entweder unversehrt oder als .bak vorhanden — halb geschriebene
 // Einstellungen kann es nicht geben.
+// fileWriteMu lässt immer nur EINEN Schreibvorgang an die Dateien des
+// Konverters (INI, Phrasenliste). Jeder liest die Datei, ändert Zeilen und
+// setzt sie neu ein — zwei gleichzeitig, und der zweite hätte die Änderung des
+// ersten nie gesehen und überschriebe sie. Die Oberfläche ruft für jedes
+// geänderte Feld einzeln, und jeder Aufruf läuft in seinem eigenen Ablauf.
+var fileWriteMu sync.Mutex
+
 func writeSettings(values map[string]string) (SaveResult, error) {
 	if len(values) == 0 {
 		return SaveResult{Note: "nothing to save"}, nil
@@ -197,6 +204,9 @@ func writeSettings(values map[string]string) (SaveResult, error) {
 // können: Ein Test, der die echte Einstellungsdatei des Nutzers beschreibt,
 // wäre selbst dann ein Fehler, wenn er funktioniert.
 func writeSettingsTo(path string, values map[string]string) (SaveResult, error) {
+	fileWriteMu.Lock()
+	defer fileWriteMu.Unlock()
+
 	original, err := os.ReadFile(path)
 	if err != nil {
 		return SaveResult{}, fmt.Errorf("configfile.go: writeSettings (read): %w", err)

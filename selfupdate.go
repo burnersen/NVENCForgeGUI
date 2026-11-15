@@ -28,7 +28,10 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -222,6 +225,10 @@ func installUpdate(ctx context.Context, report func(done, total int64)) (UpdateR
 		_ = os.Remove(partPath)
 		return result, err
 	}
+	if err := verifyDownloadedDigest(partPath, asset.Digest); err != nil {
+		_ = os.Remove(partPath)
+		return result, err
+	}
 
 	backupPath := backupPathFor(self, guiVersion)
 	if err := swapInNewExe(self, partPath, backupPath); err != nil {
@@ -250,6 +257,45 @@ func verifyDownloadedSize(path string, expected int64) error {
 		return fmt.Errorf(
 			"selfupdate.go: verifyDownloadedSize: the download is incomplete (%d of %d bytes)",
 			info.Size(), expected)
+	}
+	return nil
+}
+
+// sha256DigestPrefix steht vor der Prüfsumme, wie GitHub sie meldet.
+const sha256DigestPrefix = "sha256:"
+
+// verifyDownloadedDigest vergleicht die geladene Datei mit der Prüfsumme, die
+// GitHub für sie nennt.
+//
+// Die Größe allein (verifyDownloadedSize) fängt einen abgebrochenen Download,
+// aber keine Datei, die unterwegs verändert wurde und zufällig gleich lang
+// ist. Eine Programmdatei, die sich selbst ersetzt, soll das unterscheiden
+// können.
+//
+// Nennt GitHub keine Prüfsumme (ältere Veröffentlichungen) oder eine in einem
+// Verfahren, das dieses Fenster nicht kennt, wird nichts geprüft und nichts
+// abgelehnt: Das Update soll an einer fehlenden Angabe nicht scheitern.
+func verifyDownloadedDigest(path, digest string) error {
+	digest = strings.TrimSpace(digest)
+	if !strings.HasPrefix(strings.ToLower(digest), sha256DigestPrefix) {
+		return nil
+	}
+	expected := strings.ToLower(digest[len(sha256DigestPrefix):])
+
+	file, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("selfupdate.go: verifyDownloadedDigest (Open): %w", err)
+	}
+	defer file.Close()
+
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return fmt.Errorf("selfupdate.go: verifyDownloadedDigest (read): %w", err)
+	}
+	if actual := hex.EncodeToString(hash.Sum(nil)); actual != expected {
+		return fmt.Errorf(
+			"selfupdate.go: verifyDownloadedDigest: the download does not match the checksum " +
+				"GitHub lists for it — nothing was replaced, please try again")
 	}
 	return nil
 }
