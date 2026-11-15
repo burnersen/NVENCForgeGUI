@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -43,6 +44,13 @@ type App struct {
 
 	// profiles sind die gespeicherten Optionssätze der Konvertieren-Seite.
 	profiles *profileStore
+
+	// gpuInfo ist die einmal abgefragte Grafikkarte (gpu). noteProcessorOnce
+	// sorgt dafür, dass der Hinweis "es wird auf dem Prozessor gerechnet" nur
+	// einmal im Protokoll steht und nicht vor jeder Datei.
+	gpuOnce           sync.Once
+	gpuInfo           GPUInfo
+	noteProcessorOnce sync.Once
 
 	// shutdown hält den Wunsch "PC ausschalten, wenn alles fertig ist" und
 	// führt ihn aus, sobald wirklich nichts mehr zu tun ist (shutdown.go).
@@ -336,7 +344,7 @@ type StartupInfo struct {
 func (a *App) GetStartupInfo() StartupInfo {
 	return StartupInfo{
 		GUIVersion: guiVersion,
-		GPU:        queryGPU(),
+		GPU:        a.gpu(),
 		Converter:  converterStatus(),
 		Config:     readConfigView(),
 	}
@@ -679,6 +687,14 @@ func (a *App) DropPendingFile(area, path string) bool {
 	return a.dispatcher.DropPending(areaOf(area), path)
 }
 
+// gpu fragt die Grafikkarte einmal ab und merkt sich die Antwort. Die Abfrage
+// startet ein Hilfsprogramm; vor jedem einzelnen Lauf wäre das unnötig — und
+// eine Karte kommt im laufenden Betrieb nicht dazu.
+func (a *App) gpu() GPUInfo {
+	a.gpuOnce.Do(func() { a.gpuInfo = queryGPU() })
+	return a.gpuInfo
+}
+
 // StartRun reiht die Arbeit ein und startet, was auf die freien Plätze passt.
 func (a *App) StartRun(request RunRequest) error {
 	status := converterStatus()
@@ -706,6 +722,16 @@ func (a *App) StartRun(request RunRequest) error {
 	}
 	if request.Crop == "" && status.AutoCrop {
 		request.Crop = cropOff
+	}
+	// Nur das Umwandeln rechnet überhaupt; die Werkzeug-Modi kopieren.
+	if request.Mode == "" {
+		if encoder, switched := encoderForRun(request.Encoder, a.gpu()); switched {
+			request.Encoder = encoder
+			a.noteProcessorOnce.Do(func() {
+				a.note("No NVIDIA driver on this PC (nvidia-smi is missing): encoding on the processor. " +
+					"That works everywhere, but takes considerably longer than a graphics card.")
+			})
+		}
 	}
 
 	jobs, err := buildJobs(request, status.EventChannel)

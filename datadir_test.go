@@ -101,3 +101,39 @@ func TestUnwritableHomeFallsBackNextToTheExe(t *testing.T) {
 		t.Errorf("Ausweichort %q, erwartet neben der exe in %q", path, home)
 	}
 }
+
+// TestWriteFileAtomicReplacesInOneStep: Am Ziel steht danach die neue Fassung,
+// und es bleibt keine Nebendatei liegen — die würde sich sonst mit jedem
+// Speichern im tools-Ordner ansammeln.
+func TestWriteFileAtomicReplacesInOneStep(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "NVENCForgeGUI.profiles")
+	if err := os.WriteFile(path, []byte("alt"), 0o644); err != nil {
+		t.Fatalf("Ausgangsdatei: %v", err)
+	}
+
+	if err := writeFileAtomic(path, []byte("neu"), 0o644); err != nil {
+		t.Fatalf("writeFileAtomic: %v", err)
+	}
+
+	raw, err := os.ReadFile(path)
+	if err != nil || string(raw) != "neu" {
+		t.Errorf("am Ziel steht %q (Fehler: %v), erwartet \"neu\"", raw, err)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("Ordner lesen: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Errorf("im Ordner liegen %d Dateien, erwartet nur das Ziel", len(entries))
+	}
+}
+
+// TestWriteFileAtomicKeepsTheOldFileOnFailure: Lässt sich nicht schreiben,
+// bleibt die alte Fassung unversehrt. Genau dafür gibt es den Umweg.
+func TestWriteFileAtomicKeepsTheOldFileOnFailure(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "gibt-es-nicht", "NVENCForgeGUI.profiles")
+	if err := writeFileAtomic(missing, []byte("neu"), 0o644); err == nil {
+		t.Error("ein Ziel in einem fehlenden Ordner muss einen Fehler melden")
+	}
+}

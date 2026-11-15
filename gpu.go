@@ -12,6 +12,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -35,6 +36,12 @@ type GPUInfo struct {
 	Driver   string `json:"driver"`
 	MemoryMB int    `json:"memoryMB"`
 	Note     string `json:"note"`
+	// DriverMissing heißt: nvidia-smi gibt es auf diesem Rechner gar nicht.
+	// Das ist mehr als "keine Karte erkannt" — eine Abfrage, die nur zu lange
+	// brauchte oder mit einem Fehler endete, setzt es NICHT. Nur auf diese
+	// eindeutige Auskunft hin wählt das Fenster von sich aus den Prozessor
+	// (encoderForRun).
+	DriverMissing bool `json:"driverMissing"`
 }
 
 // queryGPU fragt nvidia-smi nach Name, Treiber und Speicher der ersten Karte.
@@ -54,9 +61,34 @@ func queryGPU() GPUInfo {
 
 	out, err := cmd.Output()
 	if err != nil {
-		return GPUInfo{Note: "No NVIDIA GPU detected (nvidia-smi not available)."}
+		return GPUInfo{
+			Note:          "No NVIDIA GPU detected (nvidia-smi not available).",
+			DriverMissing: errors.Is(err, exec.ErrNotFound),
+		}
 	}
 	return parseGPUQuery(string(out))
+}
+
+// encoderForRun entscheidet, womit ein Umwandel-Lauf rechnet. Zurück kommt
+// der Encoder für die Befehlszeile und ob das Fenster ihn gerade selbst
+// umgestellt hat.
+//
+// Ohne NVIDIA-Treiber kann der Konverter nur auf dem Prozessor rechnen. Er
+// findet das selbst heraus und fragt dann "Continue on the processor?" — mit
+// 15 Sekunden Bedenkzeit, weil er auf der Konsole niemanden übergehen will.
+// Dieses Fenster startet aber je Datei einen eigenen Konverter: Jede einzelne
+// Datei wartete diese 15 Sekunden ab, ohne dass irgendwo eine Frage zu sehen
+// war. Weiß das Fenster sicher, dass kein Treiber da ist, sagt es dem
+// Konverter deshalb gleich "-cpu".
+//
+// Bewusst eng: nur wenn nvidia-smi wirklich fehlt. Bei jeder unklaren Auskunft
+// bleibt die Entscheidung beim Konverter, der die Karte selbst ausprobiert —
+// ein Fenster, das eine vorhandene Karte übergeht, wäre der schlimmere Fehler.
+func encoderForRun(requested string, gpu GPUInfo) (encoder string, switched bool) {
+	if requested == encoderCPU || !gpu.DriverMissing {
+		return requested, false
+	}
+	return encoderCPU, true
 }
 
 // parseGPUQuery liest die erste Zeile der nvidia-smi-Ausgabe.

@@ -132,7 +132,7 @@ func saveWindowState(state windowState) error {
 	if err != nil {
 		return fmt.Errorf("windowstate.go: saveWindowState (Marshal): %w", err)
 	}
-	if err := os.WriteFile(path, raw, 0o644); err != nil {
+	if err := writeFileAtomic(path, raw, 0o644); err != nil {
 		return fmt.Errorf("windowstate.go: saveWindowState (WriteFile): %w", err)
 	}
 	return nil

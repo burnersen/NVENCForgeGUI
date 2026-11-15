@@ -268,7 +268,7 @@ func (s *profileStore) write() error {
 	if err != nil {
 		return fmt.Errorf("profiles.go: write (Marshal): %w", err)
 	}
-	if err := os.WriteFile(s.path, raw, 0o644); err != nil {
+	if err := writeFileAtomic(s.path, raw, 0o644); err != nil {
 		return fmt.Errorf("profiles.go: write (WriteFile): %w", err)
 	}
 	return nil

@@ -69,3 +69,36 @@ func dataFilePathIn(home, fileName string) string {
 	}
 	return inside
 }
+
+// writeFileAtomic schreibt data erst in eine Datei NEBEN dem Ziel und setzt
+// sie dann mit einem einzigen Umbenennen ein.
+//
+// Für alles, was dieses Fenster sich merkt (Profile, Sparbuch, Fensterplatz).
+// Bis 2.1.2 wurde direkt ins Ziel geschrieben: Ging dabei etwas schief —
+// Rechner aus, Platte voll —, blieb eine halbe Datei zurück, und beim
+// nächsten Start waren die Profile weg, weil sie sich nicht mehr lesen ließ.
+// Jetzt steht am Ziel entweder die alte Fassung oder die neue.
+func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
+	temp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return fmt.Errorf("datadir.go: writeFileAtomic (temp file): %w", err)
+	}
+	tempPath := temp.Name()
+	_, writeErr := temp.Write(data)
+	if writeErr == nil {
+		writeErr = temp.Sync()
+	}
+	if closeErr := temp.Close(); writeErr == nil {
+		writeErr = closeErr
+	}
+	if writeErr != nil {
+		_ = os.Remove(tempPath)
+		return fmt.Errorf("datadir.go: writeFileAtomic (write): %w", writeErr)
+	}
+	_ = os.Chmod(tempPath, perm)
+	if err := os.Rename(tempPath, path); err != nil {
+		_ = os.Remove(tempPath)
+		return fmt.Errorf("datadir.go: writeFileAtomic (replace): %w", err)
+	}
+	return nil
+}

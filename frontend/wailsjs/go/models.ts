@@ -122,6 +122,7 @@ export namespace main {
 	    driver: string;
 	    memoryMB: number;
 	    note: string;
+	    driverMissing: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new GPUInfo(source);
@@ -134,6 +135,7 @@ export namespace main {
 	        this.driver = source["driver"];
 	        this.memoryMB = source["memoryMB"];
 	        this.note = source["note"];
+	        this.driverMissing = source["driverMissing"];
 	    }
 	}
 	export class JoinFile {
