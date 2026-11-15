@@ -25,7 +25,7 @@ Same converter, same results, same settings file — just visible.
 
 <img src="docs/screenshot.png" alt="The NVENCForgeGUI window: four videos queued, two converting at once with Auto-CQ results in the list, per-run options for codec, container, resolution and quality, live progress bars with speed and ETA, and the converter's own log at the bottom" width="840">
 
-<sub>Night and day: the same window, as it looks after the switch at the bottom left. Real window, made-up sample files. <a href="docs/screenshot-light.png">Day version</a>.</sub>
+<sub>The window itself (its real page) with made-up sample files. The switch at the bottom left flips it to the <a href="docs/screenshot-light.png">day version</a>.</sub>
 
 </div>
 
