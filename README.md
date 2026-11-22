@@ -53,6 +53,8 @@ Same converter, same results, same settings file — just visible.
 
 <a id="-30-seconds-no-manual"></a>
 
+> ⚠️ **Before you start:** NVENCForgeGUI is free hobby software without any warranty, and you use it at your own risk. Re-encoding is lossy: keep independent backups of anything irreplaceable. Details in the disclaimer at the end.
+
 ## ⚡ 30 seconds, no manual
 
 1. Download `NVENCForgeGUI.exe` from the [releases](https://github.com/burnersen/NVENCForgeGUI/releases/latest) and put it wherever you like.
@@ -243,7 +245,9 @@ NVENCForgeGUI is free and made in my spare time, on my own hardware and electric
 
 ## ⚠️ Disclaimer
 
-NVENCForgeGUI is free hobby software, provided **"as is", without any warranty or condition of any kind**. It was built and tested with care, but you use it **at your own risk**. As far as the applicable law allows, the author is not liable for any damages or data loss arising from the use of this software. See sections 15 and 16 of the [license](LICENSE).
+NVENCForgeGUI is free hobby software, provided **"as is", without any warranty or condition of any kind**. It was built and tested with care, but you use it **at your own risk**. Keep independent backups of anything irreplaceable before you convert it: the `originals` folder is a safety net, not a backup.
+
+Where this README describes what NVENCForgeGUI does, checks or never does, that is how it is designed to work, not a promise or guarantee: software can have bugs, and systems, services and other programs do not always behave as expected. As far as the applicable law allows, the author is not liable for any damages or data loss arising from the use of this software. See sections 15 and 16 of the [license](LICENSE).
 
 ---
 
